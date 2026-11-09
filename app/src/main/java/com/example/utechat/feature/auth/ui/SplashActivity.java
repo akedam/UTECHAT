@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.utechat.R;
 import com.example.utechat.feature.main.ui.MainActivity;
+import com.example.utechat.data.auth.AuthRepositoryProvider;
 
 /**
  * Màn hình khởi động (Splash).
@@ -29,9 +30,8 @@ public class SplashActivity extends AppCompatActivity {
         setContentView(R.layout.activity_splash);
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            // TODO (G3): Thay bằng kiểm tra FirebaseAuth.getCurrentUser()
-            // Nếu đã đăng nhập → MainActivity, chưa đăng nhập → LoginActivity
-            navigateToLogin();
+            if (AuthRepositoryProvider.get(this).getCurrentUser() != null) navigateToMain();
+            else navigateToLogin();
         }, SPLASH_DELAY_MS);
     }
 
@@ -39,5 +39,10 @@ public class SplashActivity extends AppCompatActivity {
         Intent intent = new Intent(this, LoginActivity.class);
         startActivity(intent);
         finish(); // Không cho phép Back về Splash
+    }
+
+    private void navigateToMain() {
+        startActivity(new Intent(this, MainActivity.class));
+        finish();
     }
 }

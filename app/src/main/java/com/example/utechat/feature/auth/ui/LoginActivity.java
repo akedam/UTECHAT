@@ -8,6 +8,8 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.TextView;
+import android.util.Patterns;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
@@ -15,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.utechat.R;
 import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
 import com.example.utechat.feature.main.ui.MainActivity;
+import com.example.utechat.data.auth.AuthRepositoryProvider;
 
 /**
  * Màn hình đăng nhập.
@@ -36,6 +39,9 @@ public class LoginActivity extends AppCompatActivity {
         setContentView(R.layout.activity_login);
 
         bindViews();
+        TextView mockNotice = findViewById(R.id.tv_mock_notice);
+        mockNotice.setText(AuthRepositoryProvider.isMock(this)
+                ? R.string.auth_mode_mock : R.string.auth_mode_firebase);
         viewModel = new ViewModelProvider(this).get(AuthViewModel.class);
         observeViewModel();
         setupListeners();
@@ -85,14 +91,18 @@ public class LoginActivity extends AppCompatActivity {
             etEmail.requestFocus();
             return;
         }
-        if (password.isEmpty()) {
-            etPassword.setError(getString(R.string.error_password_required));
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            etEmail.setError(getString(R.string.error_email_invalid));
+            etEmail.requestFocus();
+            return;
+        }
+        if (password.length() < 6) {
+            etPassword.setError(getString(R.string.error_password_too_short));
             etPassword.requestFocus();
             return;
         }
 
-        // [MOCK] Chuyển vào Main để trình diễn luồng giao diện.
-        viewModel.mockLogin(email, password);
+        viewModel.signIn(email, password);
     }
 
     private void setLoading(boolean loading) {
@@ -100,6 +110,7 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin.setEnabled(!loading);
         etEmail.setEnabled(!loading);
         etPassword.setEnabled(!loading);
+        tvGoToRegister.setEnabled(!loading);
     }
 
     private void navigateToMain() {

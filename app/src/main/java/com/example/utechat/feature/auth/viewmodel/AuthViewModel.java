@@ -1,72 +1,47 @@
 package com.example.utechat.feature.auth.viewmodel;
 
+import android.app.Application;
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
-
 import com.example.utechat.core.common.Resource;
+import com.example.utechat.data.auth.AuthRepositoryProvider;
 import com.example.utechat.domain.model.User;
+import com.example.utechat.domain.repository.AuthRepository;
 
-/**
- * ViewModel cho màn hình xác thực (Login, Register).
- *
- * Hiện tại cung cấp mock methods để test UI mà không cần Firebase.
- * TODO (G3): Inject AuthRepository và gọi Firebase Auth thật.
- */
-public class AuthViewModel extends ViewModel {
-
+/** Owns auth form state; repository implementation is selected in one provider. */
+public class AuthViewModel extends AndroidViewModel {
+    private final AuthRepository repository;
     private final MutableLiveData<Resource<User>> authState = new MutableLiveData<>();
 
-    public LiveData<Resource<User>> getAuthState() {
-        return authState;
+    public AuthViewModel(@NonNull Application application) {
+        super(application);
+        repository = AuthRepositoryProvider.get(application);
     }
 
-    /**
-     * [MOCK] Giả lập đăng nhập thành công sau 800ms.
-     * Thay bằng repository.login(email, password) ở G3.
-     */
-    public void mockLogin(String email, String password) {
+    public LiveData<Resource<User>> getAuthState() { return authState; }
+    public User getCurrentUser() { return repository.getCurrentUser(); }
+
+    public void signIn(String email, String password) {
         authState.setValue(Resource.loading());
-
-        // Giả lập delay network
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            User mockUser = new User(
-                    "mock_uid_001",
-                    "Nguyễn Văn A",
-                    email,
-                    null,
-                    "Sinh viên UTE",
-                    true,
-                    System.currentTimeMillis()
-            );
-            authState.setValue(Resource.success(mockUser));
-        }, 800);
+        repository.signIn(email, password, callback());
     }
-
-    /**
-     * [MOCK] Giả lập đăng ký thành công sau 1000ms.
-     * Thay bằng repository.register(name, email, password) ở G3.
-     */
-    public void mockRegister(String name, String email, String password) {
+    public void register(String name, String email, String password) {
         authState.setValue(Resource.loading());
-
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            User mockUser = new User(
-                    "mock_uid_new",
-                    name,
-                    email,
-                    null,
-                    "",
-                    true,
-                    System.currentTimeMillis()
-            );
-            authState.setValue(Resource.success(mockUser));
-        }, 1000);
+        repository.register(name, email, password, callback());
     }
 
-    @Override
-    protected void onCleared() {
+    private AuthRepository.Callback<User> callback() {
+        return new AuthRepository.Callback<User>() {
+            @Override public void onSuccess(User user) { authState.postValue(Resource.success(user)); }
+            @Override public void onError(AuthRepository.AuthException error) {
+                authState.postValue(Resource.error(error.getMessage()));
+            }
+        };
+    }
+
+    @Override protected void onCleared() {
         super.onCleared();
-        // TODO (G3): Hủy Firestore listeners nếu có
     }
 }

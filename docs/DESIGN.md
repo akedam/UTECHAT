@@ -328,7 +328,7 @@ Firebase SDK (Auth / Firestore / Storage / FCM)
 
 | Rủi ro | Khả năng | Tác động | Giảm thiểu |
 |--------|---------|---------|-----------|
-| Chưa có `google-services.json` → build G2 thất bại | Cao | Chặn G2 | Tạo Firebase project trước G2 |
+| Chưa có `google-services.json` | Cao | Auth chạy mock, không xác thực thật | Thêm cấu hình Firebase trước khi demo tài khoản thật |
 | Firestore Security Rules sai → data leak | Trung bình | Cao | Viết rules theo giai đoạn, test console |
 | FCM token hết hạn | Trung bình | Trung bình | Refresh khi login, lưu Firestore |
 | Upload ảnh lớn chặn UI | Trung bình | Trung bình | Background thread + ProgressDialog |
@@ -342,9 +342,18 @@ Firebase SDK (Auth / Firestore / Storage / FCM)
 | Giai đoạn | Nội dung | Điều kiện |
 |-----------|---------|-----------|
 | **G1** ✅ | Kiểm kê, kiến trúc, đổi tên/package, theme UTEChat | Hiện tại |
-| **G2** | Firebase Auth, Splash/Login/Register | `google-services.json` đã có |
-| **G3** | Main screen, Bottom Nav, Chat 1-1, Danh sách hội thoại | G2 xong |
-| **G4** | Bạn bè, Hồ sơ, ảnh đại diện | G3 xong |
+| **G2** ✅ | Khung UI, Splash/Login/Register, điều hướng, màn hình chính và chat mock | Hoàn tất; chưa có backend |
+| **G3** | Firebase Auth, hồ sơ tên/bio, đăng xuất, session gate | Firebase app config + bật Email/Password và Firestore |
+| **G4** | Bạn bè, khám phá nhóm, ảnh đại diện | G3 xong; Firebase Storage cần cấu hình cho avatar |
 | **G5** | Chat nhóm, gửi ảnh/tệp | G4 xong |
 | **G6** | Push notification FCM | G5 xong |
 | **G7** | Gọi thoại/video (tùy chọn) | G6 xong |
+
+### 9.1 G3 account and profile setup
+
+- Firebase Authentication and Cloud Firestore are selected; Android uses the Firebase BoM.
+- Put the Firebase Android app configuration at `app/google-services.json`. The file is ignored by Git and is not created in this repository.
+- Register Android application ID `com.example.utechat` in the Firebase project, enable Email/Password under Authentication, and create the Firestore database.
+- Deploy the repository's `firestore.rules` before using Firestore (`firebase deploy --only firestore:rules --project YOUR_PROJECT_ID`). The rules only allow an authenticated user to read or update their own `users/{uid}` profile.
+- Without `google-services.json`, the app deliberately runs a local mock repository. Mock credentials are never persisted; the mock session stores only a demo identity and is not real authentication.
+- Avatar upload is not included: Firebase Storage and its rules remain for a later phase. This phase can retain/read a nullable `photoUrl` field only.

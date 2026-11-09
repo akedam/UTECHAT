@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -16,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.utechat.R;
 import com.example.utechat.feature.profile.viewmodel.ProfileViewModel;
 import com.example.utechat.feature.auth.ui.LoginActivity;
+import com.example.utechat.data.auth.AuthRepositoryProvider;
 
 /**
  * Fragment hiển thị hồ sơ cá nhân và cài đặt.
@@ -53,6 +55,12 @@ public class ProfileFragment extends Fragment {
         setupListeners();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (viewModel != null) viewModel.refresh();
+    }
+
     private void observeViewModel() {
         viewModel.getCurrentUser().observe(getViewLifecycleOwner(), user -> {
             if (user == null) return;
@@ -63,6 +71,11 @@ public class ProfileFragment extends Fragment {
                     : user.getBio());
             // TODO (G4): Load avatar với Glide từ user.getPhotoUrl()
         });
+        viewModel.getProfileError().observe(getViewLifecycleOwner(), message -> {
+            if (message != null && !message.isEmpty()) {
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void setupListeners() {
@@ -71,6 +84,7 @@ public class ProfileFragment extends Fragment {
         });
 
         btnLogout.setOnClickListener(v -> {
+            AuthRepositoryProvider.get(requireContext()).signOut();
             Intent intent = new Intent(requireContext(), LoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);

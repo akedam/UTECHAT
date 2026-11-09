@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.feature.conversations.ui.ConversationsFragment;
 import com.example.utechat.feature.friends.ui.FriendsFragment;
 import com.example.utechat.feature.profile.ui.ProfileFragment;
@@ -35,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (AuthGate.redirectIfSignedOut(this)) return;
         setContentView(R.layout.activity_main);
 
         bottomNav = findViewById(R.id.bottom_nav);

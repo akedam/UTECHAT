@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.core.common.Constants;
 import com.example.utechat.feature.chat.adapter.MessagesAdapter;
 import com.example.utechat.feature.chat.viewmodel.ChatViewModel;
@@ -38,6 +39,7 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (AuthGate.redirectIfSignedOut(this)) return;
         setContentView(R.layout.activity_chat);
 
         conversationId = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_ID);

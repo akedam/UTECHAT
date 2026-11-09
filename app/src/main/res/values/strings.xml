@@ -4,6 +4,7 @@
     <string name="brand_tagline">Kết nối cộng đồng UTE</string>
     <string name="sample_name">[Mock] Nguyễn Văn A</string>
     <string name="sample_bio">Sinh viên Đại học Sư phạm Kỹ thuật TP.HCM</string>
+    <string name="mock_student_name">Sinh viên UTE</string>
 
     <!-- Auth -->
     <string name="login_title">Đăng nhập</string>
@@ -21,6 +22,7 @@
 
     <!-- Validation errors -->
     <string name="error_email_required">Vui lòng nhập email</string>
+    <string name="error_email_invalid">Email chưa đúng định dạng</string>
     <string name="error_password_required">Vui lòng nhập mật khẩu</string>
     <string name="error_name_required">Vui lòng nhập họ tên</string>
     <string name="error_password_too_short">Mật khẩu tối thiểu 6 ký tự</string>
@@ -41,6 +43,27 @@
     <string name="btn_join_mock">Xem nhóm</string>
     <string name="mock_auth_notice">Bản trình diễn: thông tin chưa được gửi đến máy chủ.</string>
     <string name="mock_login_notice">Đăng nhập mô phỏng sẽ mở giao diện chính, không xác thực tài khoản.</string>
+    <string name="auth_mode_mock">CHẾ ĐỘ MOCK: biểu mẫu chưa xác thực tài khoản thật. Dùng email hợp lệ và mật khẩu từ 6 ký tự để xem giao diện.</string>
+    <string name="auth_mode_firebase">Đăng nhập được bảo vệ bởi Firebase Authentication.</string>
+    <string name="auth_generic_error">Không thể hoàn tất yêu cầu. Vui lòng thử lại.</string>
+    <string name="profile_saved_notice">Đã cập nhật hồ sơ.</string>
+    <string name="profile_loading_error">Không tải được hồ sơ. Kiểm tra kết nối rồi thử lại.</string>
+    <string name="profile_avatar_unavailable">Ảnh đại diện sẽ khả dụng khi cấu hình Firebase Storage.</string>
+    <string name="auth_session_expired">Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại.</string>
+    <string name="auth_not_signed_in">Chưa đăng nhập.</string>
+    <string name="auth_account_unavailable">Không thể đọc tài khoản. Vui lòng thử lại.</string>
+    <string name="auth_create_failed">Không thể tạo tài khoản. Vui lòng thử lại.</string>
+    <string name="auth_profile_write_after_register">Tài khoản đã tạo nhưng chưa lưu được hồ sơ. Hãy đăng nhập lại khi có kết nối.</string>
+    <string name="auth_name_write_after_register">Tài khoản đã tạo nhưng chưa cập nhật được tên. Hãy đăng nhập lại.</string>
+    <string name="auth_profile_save_failed">Không lưu được hồ sơ. Kiểm tra kết nối rồi thử lại.</string>
+    <string name="auth_name_save_failed">Không cập nhật được tên hiển thị. Kiểm tra kết nối rồi thử lại.</string>
+    <string name="auth_profile_load_failed">Không tải được hồ sơ. Kiểm tra kết nối rồi thử lại.</string>
+    <string name="auth_email_invalid_backend">Email không hợp lệ.</string>
+    <string name="auth_credential_invalid">Email hoặc mật khẩu chưa chính xác.</string>
+    <string name="auth_email_in_use">Email này đã được đăng ký.</string>
+    <string name="auth_password_weak">Mật khẩu quá yếu. Hãy dùng ít nhất 6 ký tự.</string>
+    <string name="auth_network_failed">Không có kết nối mạng. Kiểm tra mạng rồi thử lại.</string>
+    <string name="auth_rate_limited">Bạn thử quá nhiều lần. Vui lòng chờ rồi thử lại.</string>
     <string name="mock_message_notice">Bản trình diễn: tin nhắn chỉ lưu tạm trên thiết bị.</string>
 
     <!-- Conversations -->
