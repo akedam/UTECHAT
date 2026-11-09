@@ -1,0 +1,41 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme for UTEChat -->
+    <style name="Base.Theme.UTEChat" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Brand primary -->
+        <item name="colorPrimary">@color/utechat_primary</item>
+        <item name="colorPrimaryDark">@color/utechat_primary_dark</item>
+        <item name="colorPrimaryVariant">@color/utechat_primary_dark</item>
+        <item name="colorOnPrimary">@color/utechat_on_primary</item>
+
+        <!-- Brand secondary / accent -->
+        <item name="colorSecondary">@color/utechat_secondary</item>
+        <item name="colorOnSecondary">@color/utechat_on_secondary</item>
+
+        <!-- Surface & background -->
+        <item name="android:colorBackground">@color/utechat_background</item>
+        <item name="colorSurface">@color/utechat_surface</item>
+        <item name="colorOnSurface">@color/utechat_on_surface</item>
+        <item name="colorSurfaceVariant">@color/utechat_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/utechat_on_surface_variant</item>
+
+        <!-- Error -->
+        <item name="colorError">@color/utechat_error</item>
+    </style>
+
+    <style name="Theme.UTEChat" parent="Base.Theme.UTEChat" />
+
+    <!-- Splash screen theme (no action bar, branded background) -->
+    <style name="Theme.UTEChat.Splash" parent="Theme.UTEChat">
+        <item name="android:windowBackground">@color/utechat_primary</item>
+        <item name="android:statusBarColor">@color/utechat_primary</item>
+        <item name="android:navigationBarColor">@color/utechat_primary</item>
+    </style>
+
+    <!-- Action bar themed screens (Login, Register, Chat header) -->
+    <style name="Theme.UTEChat.ActionBar" parent="Theme.UTEChat">
+        <item name="windowActionBar">true</item>
+        <item name="windowNoTitle">false</item>
+    </style>
+
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="start" android:orientation="vertical" android:paddingHorizontal="@dimen/space_md" android:paddingVertical="@dimen/space_xs">
+    <TextView android:id="@+id/tv_sender_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/utechat_primary_dark" android:textSize="@dimen/text_xs" android:textStyle="bold" />
+    <TextView android:id="@+id/tv_message_content" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxWidth="280dp" android:background="@drawable/bg_bubble_received" android:paddingHorizontal="@dimen/bubble_padding_h" android:paddingVertical="@dimen/bubble_padding_v" android:textColor="@color/utechat_bubble_received_text" android:textSize="@dimen/text_md" />
+    <TextView android:id="@+id/tv_message_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_xs" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_xs" />
+</LinearLayout>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/utechat_background">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/list_item_padding_h" android:paddingTop="@dimen/space_lg" android:paddingBottom="@dimen/space_md" android:text="@string/conversations_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="@dimen/list_item_padding_h" android:paddingBottom="@dimen/space_sm" android:text="@string/mock_data_notice" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rv_conversations" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="@dimen/space_md" />
+        <LinearLayout android:id="@+id/empty_state" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="@dimen/space_xl" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/empty_conversations_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_lg" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_sm" android:gravity="center" android:text="@string/empty_conversations_message" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_md" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

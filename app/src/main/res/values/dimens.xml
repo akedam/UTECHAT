@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing scale -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">16dp</dimen>
+    <dimen name="space_lg">24dp</dimen>
+    <dimen name="space_xl">32dp</dimen>
+    <dimen name="space_xxl">48dp</dimen>
+
+    <!-- Avatar sizes -->
+    <dimen name="avatar_size_sm">36dp</dimen>
+    <dimen name="avatar_size_md">48dp</dimen>
+    <dimen name="avatar_size_lg">80dp</dimen>
+    <dimen name="avatar_size_xl">100dp</dimen>
+
+    <!-- Text sizes -->
+    <dimen name="text_xs">11sp</dimen>
+    <dimen name="text_sm">13sp</dimen>
+    <dimen name="text_md">15sp</dimen>
+    <dimen name="text_lg">17sp</dimen>
+    <dimen name="text_xl">20sp</dimen>
+    <dimen name="text_xxl">24sp</dimen>
+
+    <!-- Touch targets (minimum 48dp for accessibility) -->
+    <dimen name="touch_target_min">48dp</dimen>
+
+    <!-- Chat bubble -->
+    <dimen name="bubble_max_width_ratio">0.75</dimen> <!-- 75% màn hình -->
+    <dimen name="bubble_corner_radius">12dp</dimen>
+    <dimen name="bubble_padding_h">12dp</dimen>
+    <dimen name="bubble_padding_v">8dp</dimen>
+
+    <!-- Input bar -->
+    <dimen name="input_bar_min_height">56dp</dimen>
+    <dimen name="input_bar_padding">8dp</dimen>
+
+    <!-- Item list -->
+    <dimen name="list_item_padding_v">12dp</dimen>
+    <dimen name="list_item_padding_h">16dp</dimen>
+    <dimen name="online_indicator_size">10dp</dimen>
+    <dimen name="unread_badge_size">20dp</dimen>
+
+    <!-- Auth screen -->
+    <dimen name="auth_logo_size">80dp</dimen>
+    <dimen name="auth_card_margin">24dp</dimen>
+    <dimen name="input_corner_radius">8dp</dimen>
+</resources>

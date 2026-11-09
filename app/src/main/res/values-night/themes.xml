@@ -1,0 +1,18 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Dark mode overrides for UTEChat -->
+    <style name="Base.Theme.UTEChat" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Primary stays branded blue in dark mode -->
+        <item name="colorPrimary">@color/utechat_primary_light</item>
+        <item name="colorPrimaryDark">@color/utechat_primary</item>
+        <item name="colorOnPrimary">@color/white</item>
+
+        <!-- Darker surface for dark mode -->
+        <item name="android:colorBackground">#FF0D1117</item>
+        <item name="colorSurface">#FF161B22</item>
+        <item name="colorOnSurface">#FFE6EDF3</item>
+        <item name="colorSurfaceVariant">#FF21262D</item>
+        <item name="colorOnSurfaceVariant">#FF8B949E</item>
+    </style>
+
+</resources>

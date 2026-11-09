@@ -1,0 +1,89 @@
+<resources>
+    <string name="app_name">UTEChat</string>
+    <string name="brand_initial">U</string>
+    <string name="brand_tagline">Kết nối cộng đồng UTE</string>
+    <string name="sample_name">[Mock] Nguyễn Văn A</string>
+    <string name="sample_bio">Sinh viên Đại học Sư phạm Kỹ thuật TP.HCM</string>
+
+    <!-- Auth -->
+    <string name="login_title">Đăng nhập</string>
+    <string name="login_subtitle">Chào mừng trở lại UTEChat</string>
+    <string name="label_email">Email</string>
+    <string name="label_password">Mật khẩu</string>
+    <string name="label_display_name">Họ và tên</string>
+    <string name="label_confirm_password">Xác nhận mật khẩu</string>
+    <string name="btn_login">Đăng nhập</string>
+    <string name="btn_register">Đăng ký</string>
+    <string name="go_to_register">Chưa có tài khoản? <b>Đăng ký</b></string>
+    <string name="go_to_login">Đã có tài khoản? <b>Đăng nhập</b></string>
+    <string name="register_title">Tạo tài khoản</string>
+    <string name="register_subtitle">Tham gia UTEChat</string>
+
+    <!-- Validation errors -->
+    <string name="error_email_required">Vui lòng nhập email</string>
+    <string name="error_password_required">Vui lòng nhập mật khẩu</string>
+    <string name="error_name_required">Vui lòng nhập họ tên</string>
+    <string name="error_password_too_short">Mật khẩu tối thiểu 6 ký tự</string>
+    <string name="error_password_mismatch">Mật khẩu không khớp</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_conversations">Tin nhắn</string>
+    <string name="nav_friends">Bạn bè</string>
+    <string name="nav_profile">Hồ sơ</string>
+    <string name="nav_discover">Khám phá</string>
+    <string name="discover_title">Khám phá</string>
+    <string name="discover_subtitle">Cộng đồng dành cho sinh viên UTE</string>
+    <string name="mock_groups_title">Nhóm gợi ý · dữ liệu mẫu</string>
+    <string name="group_ltdt">Lập trình di động K22</string>
+    <string name="group_ltdt_desc">Trao đổi bài tập và tài liệu môn học</string>
+    <string name="group_ute">Cộng đồng sinh viên UTE</string>
+    <string name="group_ute_desc">Kết nối, chia sẻ hoạt động trong trường</string>
+    <string name="btn_join_mock">Xem nhóm</string>
+    <string name="mock_auth_notice">Bản trình diễn: thông tin chưa được gửi đến máy chủ.</string>
+    <string name="mock_login_notice">Đăng nhập mô phỏng sẽ mở giao diện chính, không xác thực tài khoản.</string>
+    <string name="mock_message_notice">Bản trình diễn: tin nhắn chỉ lưu tạm trên thiết bị.</string>
+
+    <!-- Conversations -->
+    <string name="conversations_title">Tin nhắn</string>
+    <string name="empty_conversations_title">Chưa có hội thoại</string>
+    <string name="empty_conversations_message">Hãy tìm bạn bè và bắt đầu trò chuyện!</string>
+
+    <!-- Friends -->
+    <string name="friends_title">Bạn bè</string>
+    <string name="empty_friends_title">Chưa có bạn bè</string>
+    <string name="empty_friends_message">Tìm kiếm và thêm bạn bè để bắt đầu trò chuyện</string>
+    <string name="status_online">Đang hoạt động</string>
+    <string name="status_offline">Ngoại tuyến</string>
+    <string name="btn_add_friend">Thêm bạn</string>
+
+    <!-- Profile -->
+    <string name="profile_title">Hồ sơ</string>
+    <string name="profile_no_bio">Chưa có giới thiệu</string>
+    <string name="btn_edit_profile">Chỉnh sửa hồ sơ</string>
+    <string name="btn_logout">Đăng xuất</string>
+    <string name="edit_profile_title">Chỉnh sửa hồ sơ</string>
+    <string name="label_bio">Giới thiệu bản thân</string>
+    <string name="btn_save">Lưu</string>
+    <string name="label_change_avatar">Đổi ảnh đại diện</string>
+
+    <!-- Chat -->
+    <string name="hint_message">Nhắn tin…</string>
+    <string name="btn_send">Gửi</string>
+    <string name="btn_attach">Đính kèm</string>
+    <string name="feature_coming_soon">Tính năng đang phát triển</string>
+
+    <!-- Mock notice -->
+    <string name="saved_mock_notice">[Mock] Lưu tạm thời — chưa kết nối server</string>
+    <string name="mock_data_notice">[Mock] Dữ liệu mẫu</string>
+
+    <!-- Content descriptions for accessibility -->
+    <string name="cd_avatar">Ảnh đại diện</string>
+    <string name="cd_send_message">Gửi tin nhắn</string>
+    <string name="cd_attach_file">Đính kèm tệp</string>
+    <string name="cd_online_indicator">Đang hoạt động</string>
+    <string name="cd_back">Quay lại</string>
+    <string name="cd_open_chat">Mở hội thoại</string>
+    <string name="cd_search">Tìm kiếm</string>
+    <string name="empty_groups_title">Chưa có nhóm</string>
+    <string name="empty_groups_message">Các nhóm gợi ý sẽ xuất hiện tại đây.</string>
+</resources>
