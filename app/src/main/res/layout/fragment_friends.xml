@@ -1,19 +1,122 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/utechat_background" android:fillViewport="true">
-  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="@dimen/list_item_padding_h">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="@dimen/space_md" android:text="@string/friends_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
-    <TextView android:id="@+id/tv_friends_source" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="@dimen/space_sm" android:text="@string/friends_mock_notice" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
-      <EditText android:id="@+id/et_friend_search" android:layout_width="0dp" android:layout_height="@dimen/touch_target_min" android:layout_weight="1" android:hint="@string/friends_search_hint" android:inputType="textPersonName" android:singleLine="true" android:importantForAutofill="no" />
-      <com.google.android.material.button.MaterialButton android:id="@+id/btn_friend_search" android:layout_width="wrap_content" android:layout_height="@dimen/touch_target_min" android:contentDescription="@string/friends_search_button" android:text="@string/friends_search_button" />
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/utechat_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/list_item_padding_h"
+        android:paddingTop="@dimen/space_md"
+        android:paddingBottom="@dimen/space_xl">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/friends_title"
+            android:textColor="@color/utechat_primary"
+            android:textSize="@dimen/text_xxl"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_friends_source"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="@dimen/space_xs"
+            android:paddingBottom="@dimen/space_sm"
+            android:text="@string/friends_mock_notice"
+            android:textColor="@color/utechat_on_surface_variant"
+            android:textSize="@dimen/text_sm" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_sm"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <EditText
+                android:id="@+id/et_friend_search"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/touch_target_min"
+                android:layout_weight="1"
+                android:background="@drawable/bg_search_field"
+                android:hint="@string/friends_search_hint"
+                android:inputType="textPersonName"
+                android:paddingHorizontal="@dimen/space_md"
+                android:singleLine="true"
+                android:importantForAutofill="no" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_friend_search"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/touch_target_min"
+                android:layout_marginStart="@dimen/space_sm"
+                android:contentDescription="@string/friends_search_button"
+                android:text="@string/friends_search_button" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progress_friends"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/tv_friends_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="@dimen/space_sm"
+            android:textColor="@color/utechat_error"
+            android:visibility="gone" />
+        <LinearLayout
+            android:id="@+id/layout_friend_results"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_sm"
+            android:orientation="vertical" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_lg"
+            android:paddingBottom="@dimen/space_sm"
+            android:text="@string/friend_requests_title"
+            android:textColor="@color/utechat_on_surface"
+            android:textSize="@dimen/text_lg"
+            android:textStyle="bold" />
+        <LinearLayout
+            android:id="@+id/layout_friend_requests"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_lg"
+            android:paddingBottom="@dimen/space_sm"
+            android:text="@string/friends_title"
+            android:textColor="@color/utechat_on_surface"
+            android:textSize="@dimen/text_lg"
+            android:textStyle="bold" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_friends"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:nestedScrollingEnabled="false"
+            android:paddingBottom="@dimen/space_md" />
+        <TextView
+            android:id="@+id/empty_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_list_item"
+            android:gravity="center"
+            android:padding="@dimen/space_lg"
+            android:text="@string/empty_friends_message"
+            android:textColor="@color/utechat_on_surface_variant"
+            android:visibility="gone" />
     </LinearLayout>
-    <ProgressBar android:id="@+id/progress_friends" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone" />
-    <TextView android:id="@+id/tv_friends_error" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/utechat_error" android:visibility="gone" />
-    <LinearLayout android:id="@+id/layout_friend_results" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:text="@string/friend_requests_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_lg" android:textStyle="bold" />
-    <LinearLayout android:id="@+id/layout_friend_requests" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:text="@string/friends_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_lg" android:textStyle="bold" />
-    <androidx.recyclerview.widget.RecyclerView android:id="@+id/rv_friends" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false" android:clipToPadding="false" android:paddingBottom="@dimen/space_md" />
-    <TextView android:id="@+id/empty_state" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:padding="@dimen/space_lg" android:text="@string/empty_friends_message" android:textColor="@color/utechat_on_surface_variant" android:visibility="gone" />
-  </LinearLayout>
 </ScrollView>

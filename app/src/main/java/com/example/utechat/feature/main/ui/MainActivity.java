@@ -2,6 +2,8 @@ package com.example.utechat.feature.main.ui;
 
 import android.os.Bundle;
 import android.content.Intent;
+import android.view.View;
+import android.widget.LinearLayout;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
@@ -22,7 +24,6 @@ import com.example.utechat.feature.conversations.ui.ConversationsFragment;
 import com.example.utechat.feature.friends.ui.FriendsFragment;
 import com.example.utechat.feature.profile.ui.ProfileFragment;
 import com.example.utechat.feature.discover.ui.DiscoverFragment;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 /**
  * Activity chứa Bottom Navigation và 3 Fragment chính:
@@ -39,7 +40,8 @@ public class MainActivity extends AppCompatActivity {
                 if (!granted) Toast.makeText(this, R.string.notifications_permission_denied, Toast.LENGTH_LONG).show();
             });
 
-    private BottomNavigationView bottomNav;
+    private LinearLayout bottomNav;
+    private int selectedTabId = R.id.nav_conversations;
 
     // Giữ instance fragment để không tạo lại khi switch tab
     private ConversationsFragment conversationsFragment;
@@ -131,38 +133,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupBottomNav() {
-        bottomNav.setOnItemSelectedListener(item -> {
-            int id = item.getItemId();
-            if (id == R.id.nav_conversations) {
-                showFragment(conversationsFragment);
-            } else if (id == R.id.nav_friends) {
-                showFragment(friendsFragment);
-            } else if (id == R.id.nav_profile) {
-                showFragment(profileFragment);
-            } else if (id == R.id.nav_discover) {
-                showFragment(discoverFragment);
-            }
-            return true;
-        });
+        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_discover, R.id.nav_profile};
+        for (int tabId : tabIds) {
+            View tab = bottomNav.findViewById(tabId);
+            tab.setOnClickListener(view -> showTab(tabId));
+        }
         int selected = activeFragment == friendsFragment ? R.id.nav_friends
                 : activeFragment == profileFragment ? R.id.nav_profile
                 : activeFragment == discoverFragment ? R.id.nav_discover : R.id.nav_conversations;
-        bottomNav.setSelectedItemId(selected);
+        showTab(selected);
     }
 
-    private void showFragment(Fragment fragment) {
-        if (activeFragment == fragment) return;
-        getSupportFragmentManager().beginTransaction()
-                .hide(activeFragment)
-                .show(fragment)
-                .commit();
-        activeFragment = fragment;
+    private void showTab(int tabId) {
+        Fragment target = tabId == R.id.nav_friends ? friendsFragment
+                : tabId == R.id.nav_discover ? discoverFragment
+                : tabId == R.id.nav_profile ? profileFragment : conversationsFragment;
+        if (activeFragment != target) {
+            getSupportFragmentManager().beginTransaction()
+                    .hide(activeFragment)
+                    .show(target)
+                    .commit();
+            activeFragment = target;
+        }
+        selectedTabId = tabId;
+        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_discover, R.id.nav_profile};
+        for (int id : tabIds) bottomNav.findViewById(id).setSelected(id == tabId);
     }
 
     @Override
     public void onBackPressed() {
-        if (bottomNav.getSelectedItemId() != R.id.nav_conversations) {
-            bottomNav.setSelectedItemId(R.id.nav_conversations);
+        if (selectedTabId != R.id.nav_conversations) {
+            showTab(R.id.nav_conversations);
         } else {
             super.onBackPressed();
         }

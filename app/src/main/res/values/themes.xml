@@ -25,6 +25,39 @@
 
     <style name="Theme.UTEChat" parent="Base.Theme.UTEChat" />
 
+    <style name="BottomNavigationItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minHeight">@dimen/touch_target_min</item>
+        <item name="android:paddingTop">@dimen/space_xs</item>
+        <item name="android:background">@drawable/bg_bottom_nav_item</item>
+        <item name="android:foreground">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="BottomNavigationIcon">
+        <item name="android:layout_width">@dimen/bottom_nav_icon_size</item>
+        <item name="android:layout_height">@dimen/bottom_nav_icon_size</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:duplicateParentState">true</item>
+        <item name="android:tint">@color/bottom_nav_item_color</item>
+    </style>
+
+    <style name="BottomNavigationLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/space_xs</item>
+        <item name="android:textSize">@dimen/text_xs</item>
+        <item name="android:textColor">@color/bottom_nav_item_color</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:duplicateParentState">true</item>
+    </style>
+
     <!-- Splash screen theme (no action bar, branded background) -->
     <style name="Theme.UTEChat.Splash" parent="Theme.UTEChat">
         <item name="android:windowBackground">@color/utechat_primary</item>

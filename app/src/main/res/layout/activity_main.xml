@@ -15,16 +15,62 @@
         android:layout_weight="1" />
 
     <!-- Bottom Navigation -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
+    <LinearLayout
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="@dimen/bottom_nav_height"
         android:layout_gravity="bottom"
-        android:minHeight="@dimen/touch_target_min"
         android:background="@color/utechat_surface"
-        app:menu="@menu/bottom_nav_menu"
-        app:labelVisibilityMode="labeled"
-        app:itemIconTint="@color/bottom_nav_item_color"
-        app:itemTextColor="@color/bottom_nav_item_color" />
+        android:elevation="8dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/nav_conversations"
+            style="@style/BottomNavigationItem"
+            android:contentDescription="@string/nav_conversations">
+            <ImageView
+                style="@style/BottomNavigationIcon"
+                android:src="@drawable/ic_nav_messages" />
+            <TextView
+                style="@style/BottomNavigationLabel"
+                android:text="@string/nav_conversations" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_friends"
+            style="@style/BottomNavigationItem"
+            android:contentDescription="@string/nav_friends">
+            <ImageView
+                style="@style/BottomNavigationIcon"
+                android:src="@drawable/ic_nav_friends" />
+            <TextView
+                style="@style/BottomNavigationLabel"
+                android:text="@string/nav_friends" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_discover"
+            style="@style/BottomNavigationItem"
+            android:contentDescription="@string/nav_discover">
+            <ImageView
+                style="@style/BottomNavigationIcon"
+                android:src="@drawable/ic_nav_discover" />
+            <TextView
+                style="@style/BottomNavigationLabel"
+                android:text="@string/nav_discover" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_profile"
+            style="@style/BottomNavigationItem"
+            android:contentDescription="@string/nav_profile">
+            <ImageView
+                style="@style/BottomNavigationIcon"
+                android:src="@drawable/ic_nav_profile" />
+            <TextView
+                style="@style/BottomNavigationLabel"
+                android:text="@string/nav_profile" />
+        </LinearLayout>
+    </LinearLayout>
 
 </LinearLayout>

@@ -12,6 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/utechat_surface"
+        android:elevation="2dp"
         app:navigationContentDescription="@string/cd_back"
         app:titleTextColor="@color/utechat_on_surface" />
 
@@ -32,6 +33,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/utechat_surface"
+        android:elevation="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="@dimen/list_item_padding_h"

@@ -24,6 +24,8 @@
 
     <!-- Touch targets (minimum 48dp for accessibility) -->
     <dimen name="touch_target_min">48dp</dimen>
+    <dimen name="bottom_nav_height">68dp</dimen>
+    <dimen name="bottom_nav_icon_size">22dp</dimen>
 
     <!-- Chat bubble -->
     <dimen name="bubble_max_width_ratio">0.75</dimen> <!-- 75% màn hình -->
@@ -40,6 +42,8 @@
     <!-- Item list -->
     <dimen name="list_item_padding_v">12dp</dimen>
     <dimen name="list_item_padding_h">16dp</dimen>
+    <dimen name="list_card_radius">14dp</dimen>
+    <dimen name="list_item_gap">4dp</dimen>
     <dimen name="online_indicator_size">10dp</dimen>
     <dimen name="unread_badge_size">20dp</dimen>
     <dimen name="conversation_footer_space">104dp</dimen>

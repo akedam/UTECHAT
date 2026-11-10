@@ -20,6 +20,8 @@
     <color name="utechat_background">#FFF5F7FA</color>
     <color name="utechat_surface">#FFFFFFFF</color>
     <color name="utechat_surface_variant">#FFE8EDF5</color>
+    <color name="utechat_nav_selected">#FFE8F0FE</color>
+    <color name="utechat_nav_active">#FF0057B8</color>
     <color name="utechat_on_surface">#FF1A1A2E</color>
     <color name="utechat_on_surface_variant">#FF4A5568</color>
 

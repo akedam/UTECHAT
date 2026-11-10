@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/utechat_background" android:fillViewport="true">
- <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="@dimen/list_item_padding_h">
-  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="@dimen/space_md" android:text="@string/discover_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="@dimen/list_item_padding_h" android:paddingTop="@dimen/space_md" android:paddingBottom="@dimen/space_xl">
+  <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/discover_title" android:textColor="@color/utechat_primary" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
   <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_xs" android:text="@string/discover_subtitle" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_md" />
   <TextView android:id="@+id/tv_groups_error" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/utechat_error" android:visibility="gone" />
   <ProgressBar android:id="@+id/progress_groups" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:visibility="gone" />
-  <EditText android:id="@+id/et_group_name" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_md" android:hint="@string/groups_name_hint" android:inputType="textCapSentences" android:maxLength="80" android:singleLine="true" />
-  <com.google.android.material.button.MaterialButton android:id="@+id/btn_create_group" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:text="@string/groups_create_button" />
-  <TextView android:id="@+id/tv_group_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:padding="@dimen/space_lg" android:text="@string/groups_empty" android:textColor="@color/utechat_on_surface_variant" />
-  <LinearLayout android:id="@+id/layout_groups" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_lg" android:orientation="vertical" android:padding="@dimen/space_md" android:background="@drawable/bg_list_item">
+   <EditText android:id="@+id/et_group_name" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:background="@drawable/bg_search_field" android:hint="@string/groups_name_hint" android:inputType="textCapSentences" android:maxLength="80" android:paddingHorizontal="@dimen/space_md" android:singleLine="true" />
+   <com.google.android.material.button.MaterialButton android:id="@+id/btn_create_group" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_sm" android:text="@string/groups_create_button" />
+  </LinearLayout>
+  <TextView android:id="@+id/tv_group_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:background="@drawable/bg_list_item" android:gravity="center" android:padding="@dimen/space_lg" android:text="@string/groups_empty" android:textColor="@color/utechat_on_surface_variant" />
+  <LinearLayout android:id="@+id/layout_groups" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_sm" android:orientation="vertical" />
  </LinearLayout>
 </ScrollView>
