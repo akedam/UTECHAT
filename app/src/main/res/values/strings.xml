@@ -178,6 +178,17 @@
     <string name="friends_permission_error">Firebase từ chối lời mời. Hãy kiểm tra Rules Firestore đã được triển khai.</string>
     <string name="friends_firebase_required">Cần cấu hình Firebase và đăng nhập để tìm bạn.</string>
     <string name="friends_unknown_user">Người dùng không còn khả dụng</string>
+    <string name="poll_create_title">Tạo bình chọn</string>
+    <string name="poll_question_hint">Câu hỏi</string>
+    <string name="poll_option_hint">Lựa chọn %1$d</string>
+    <string name="poll_create_button">Tạo</string>
+    <string name="poll_invalid">Nhập câu hỏi và ít nhất 2 lựa chọn khác nhau (tối đa 6).</string>
+    <string name="poll_vote_error">Không ghi nhận được bình chọn. Kiểm tra quyền truy cập rồi thử lại.</string>
+    <string name="poll_option_vote_count">%1$s · %2$d phiếu</string>
+    <string name="poll_option_accessibility">Bình chọn %1$s, %2$d phiếu</string>
+    <string name="poll_option_accessibility_selected">Đã chọn %1$s, %2$d phiếu</string>
+    <string name="poll_accessibility">Bình chọn từ %1$s. %2$s. Có %3$d lựa chọn.</string>
+    <string name="chat_create_poll">Tạo bình chọn</string>
     <string name="friend_requests_title">Lời mời kết bạn</string>
     <string name="groups_name_invalid">Tên nhóm cần có từ 1 đến 80 ký tự.</string>
     <string name="groups_create_error">Không tạo được nhóm. Kiểm tra quyền thành viên rồi thử lại.</string>

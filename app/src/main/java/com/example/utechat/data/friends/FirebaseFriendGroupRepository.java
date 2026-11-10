@@ -129,8 +129,20 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
                     if (!me.exists() || !peer.exists()) { cb.error(context.getString(R.string.friends_load_error)); return; }
                     Map<String,Object> summaries = new HashMap<>(); summaries.put(from, summary(readUser(me))); summaries.put(to, summary(readUser(peer)));
                     long now=System.currentTimeMillis(); Map<String,Object> data=new HashMap<>();data.put("type","direct");data.put("participantIds",Arrays.asList(from,to));data.put("participantSummaries",summaries);data.put("lastMessage","");data.put("lastMessageType","text");data.put("lastMessageAt",now);data.put("createdBy",from);data.put("createdAt",now);data.put("updatedAt",now);
-                    db.runTransaction(t->{DocumentSnapshot existing=t.get(ref);if(!existing.exists())t.set(ref,data);else if(!"direct".equals(existing.getString("type"))||!((List<?>)existing.get("participantIds")).contains(from)||!((List<?>)existing.get("participantIds")).contains(to))throw new IllegalStateException();return ref.getId();})
-                        .addOnSuccessListener(cb::success).addOnFailureListener(e->cb.error(context.getString(R.string.friends_request_error)));
+                    ref.set(data).addOnSuccessListener(unused -> cb.success(ref.getId()))
+                            .addOnFailureListener(writeError -> ref.get()
+                                    .addOnSuccessListener(existing -> {
+                                        Object participants = existing.get("participantIds");
+                                        if (existing.exists() && "direct".equals(existing.getString("type"))
+                                                && participants instanceof List
+                                                && ((List<?>) participants).contains(from)
+                                                && ((List<?>) participants).contains(to)) {
+                                            cb.success(ref.getId());
+                                        } else {
+                                            cb.error(context.getString(R.string.friends_request_error));
+                                        }
+                                    })
+                                    .addOnFailureListener(readError -> cb.error(context.getString(R.string.friends_request_error))));
                 }).addOnFailureListener(e->cb.error(context.getString(R.string.friends_load_error))))
                 .addOnFailureListener(e->cb.error(context.getString(R.string.friends_load_error)));
         }).addOnFailureListener(e->cb.error(context.getString(R.string.friends_request_error)));
@@ -168,10 +180,10 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
 
     @Override public void addMember(String id,User user,Result<Void> cb){if(user==null||user.getUid()==null){cb.error(context.getString(R.string.groups_member_error));return;}
         var root=db.collection("conversations").document(id);var mem=root.collection("members").document(user.getUid());
-        db.runTransaction(t->{DocumentSnapshot r=t.get(root),m=t.get(mem);if(!r.exists()||!"group".equals(r.getString("type")))throw new IllegalStateException();
+        db.runTransaction(t->{DocumentSnapshot r=t.get(root);if(!r.exists()||!"group".equals(r.getString("type")))throw new IllegalStateException();
             List<String> ids=(List<String>)r.get("participantIds");ArrayList<String> updated=ids==null?new ArrayList<>():new ArrayList<>(ids);long now=System.currentTimeMillis();
-            if(updated.contains(user.getUid())){if(m.exists())return null;throw new IllegalStateException("member_record_missing");}
-            updated.add(user.getUid());if(m.exists()){t.update(mem,"role","member","joinedAt",now,"lastReadAt",now,"unreadCount",0);}else t.set(mem,memberData(user.getUid(),"member",now));
+            if(updated.contains(user.getUid())){DocumentSnapshot existingMember=t.get(mem);if(existingMember.exists())return null;throw new IllegalStateException("member_record_missing");}
+            updated.add(user.getUid());t.set(mem,memberData(user.getUid(),"member",now));
             t.update(root,"participantIds",updated,"participantSummaries."+user.getUid(),summary(user),"updatedAt",now,
                     "membershipChangeAction","add","membershipChangeUid",user.getUid());return null;
         }).addOnSuccessListener(v->cb.success(null)).addOnFailureListener(e->cb.error("transfer_owner_first".equals(e.getMessage())?context.getString(R.string.groups_owner_transfer_first):context.getString(R.string.groups_member_error)));
@@ -184,7 +196,7 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
             .addOnSuccessListener(v->cb.success(null)).addOnFailureListener(e->cb.error(context.getString(R.string.groups_member_error)));
     }
     private void updateMembership(String id,String uid,Result<Void> cb){var root=db.collection("conversations").document(id);var mem=root.collection("members").document(uid);
-        db.runTransaction(t->{DocumentSnapshot r=t.get(root),m=t.get(mem);if(!r.exists())return null;if(m.exists()&&"owner".equals(m.getString("role")))throw new IllegalStateException("transfer_owner_first");List<String> ids=(List<String>)r.get("participantIds");ArrayList<String> next=ids==null?new ArrayList<>():new ArrayList<>(ids);boolean listed=next.remove(uid);if(!listed){if(m.exists())t.delete(mem);return null;}long now=System.currentTimeMillis();if(m.exists())t.delete(mem);t.update(root,"participantIds",next,"updatedAt",now,"membershipChangeAction","remove","membershipChangeUid",uid);return null;
+        db.runTransaction(t->{DocumentSnapshot r=t.get(root);if(!r.exists()||!"group".equals(r.getString("type")))throw new IllegalStateException("group_missing");List<String> ids=(List<String>)r.get("participantIds");ArrayList<String> next=ids==null?new ArrayList<>():new ArrayList<>(ids);if(!next.contains(uid))return null;DocumentSnapshot m=t.get(mem);if(!m.exists())throw new IllegalStateException("member_record_missing");if("owner".equals(m.getString("role")))throw new IllegalStateException("transfer_owner_first");next.remove(uid);long now=System.currentTimeMillis();t.delete(mem);t.update(root,"participantIds",next,"participantSummaries."+uid,FieldValue.delete(),"updatedAt",now,"membershipChangeAction","remove","membershipChangeUid",uid);return null;
         }).addOnSuccessListener(v->cb.success(null)).addOnFailureListener(e->cb.error(context.getString(R.string.groups_member_error)));
     }
     private String pairId(String a,String b){String left=a.compareTo(b)<0?a:b,right=a.compareTo(b)<0?b:a;return left+"_"+right;}

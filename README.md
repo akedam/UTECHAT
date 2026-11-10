@@ -7,6 +7,7 @@
 - Đăng ký, đăng nhập, đăng xuất và chỉnh sửa hồ sơ.
 - Danh sách hội thoại, nhắn tin văn bản theo thời gian thực.
 - Tìm người dùng, lời mời kết bạn và quản lý nhóm theo vai trò.
+- Tạo bình chọn trong chat với 2–6 lựa chọn; thành viên có thể đổi lựa chọn của mình.
 - Gửi ảnh trong chat qua Firebase Storage; giới hạn 8 MiB và hỗ trợ JPEG, PNG, WebP.
 - Thông báo tin nhắn nhận qua Firebase Cloud Messaging; mặc định ẩn nội dung xem trước.
 - Trạng thái hiện diện qua Firebase Realtime Database khi người dùng bật.

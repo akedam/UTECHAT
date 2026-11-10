@@ -2,7 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 import { get as getDatabaseValue, ref as databaseRef, set as setDatabaseValue } from 'firebase/database';
 
@@ -43,12 +43,20 @@ before(async () => {
       type: 'direct', participantIds: ['alice', 'bob'],
     });
     await setDoc(doc(db, 'conversations', 'group-alice'), {
-      type: 'group', participantIds: ['alice'],
+      type: 'group', participantIds: ['alice', 'bob'],
     });
     await setDoc(doc(db, 'conversations', 'group-alice', 'members', 'alice'), {
       userId: 'alice', role: 'owner', joinedAt: 1, lastReadAt: 1, unreadCount: 0,
     });
     await setDoc(doc(db, 'publicProfiles', 'alice'), { uid: 'alice', displayName: 'Alice' });
+    await setDoc(doc(db, 'publicProfiles', 'bob'), { uid: 'bob', displayName: 'Bob' });
+    await setDoc(doc(db, 'publicProfiles', 'charlie'), { uid: 'charlie', displayName: 'Charlie' });
+    await setDoc(doc(db, 'friendships/alice_charlie'), {
+      fromUid: 'alice', toUid: 'charlie', status: 'accepted', createdAt: 1, updatedAt: 1,
+    });
+    await setDoc(doc(db, 'conversations', 'group-alice', 'members', 'bob'), {
+      userId: 'bob', role: 'member', joinedAt: 2, lastReadAt: 2, unreadCount: 0,
+    });
   });
 });
 
@@ -83,6 +91,61 @@ test('FCM routing tokens are owner-writable but never client-readable', async ()
   await assertFails(getDoc(doc(bob, 'users/alice/deviceTokens/device-hash')));
   await assertFails(setDoc(doc(bob, 'users/alice/deviceTokens/attacker'), {
     token: 'another-valid-length-fcm-registration-token-value', platform: 'android', updatedAt: 1234,
+  }));
+});
+
+test('an authenticated user can create a canonical friendship request', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const request = doc(alice, 'friendships/alice_bob');
+  await assertSucceeds(setDoc(request, {
+    fromUid: 'alice', toUid: 'bob', status: 'pending', createdAt: 1000, updatedAt: 1000,
+  }));
+  await assertFails(getDoc(doc(testEnv.authenticatedContext('mallory').firestore(), 'friendships/alice_bob')));
+});
+
+test('accepted friends can create a direct conversation without reading a missing document first', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  await assertSucceeds(setDoc(doc(alice, 'conversations/direct-alice-charlie'), {
+    type: 'direct', participantIds: ['alice', 'charlie'], createdBy: 'alice',
+    createdAt: 1000, updatedAt: 1000, lastMessageAt: 1000,
+  }));
+});
+
+test('a current group member can list the roster but an outsider cannot', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const mallory = testEnv.authenticatedContext('mallory').firestore();
+  const roster = await assertSucceeds(getDocs(collection(alice, 'conversations/group-alice/members')));
+  assert.equal(roster.size, 2);
+  await assertFails(getDocs(collection(mallory, 'conversations/group-alice/members')));
+});
+
+test('poll votes are limited to the authenticated member’s own choice', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+  const poll = doc(alice, 'conversations/direct-alice-bob/messages/poll-one');
+  const batch = writeBatch(alice);
+  batch.set(poll, {
+    senderId: 'alice', senderName: 'Alice', type: 'poll', content: 'Lunch?', sentAt: 2000,
+    createdAt: 2000, readBy: ['alice'], pollQuestion: 'Lunch?',
+    pollOptions: ['Pizza', 'Noodles'], pollVotes: {},
+  });
+  batch.update(doc(alice, 'conversations/direct-alice-bob'), {
+    lastMessage: 'Lunch?', lastMessageType: 'poll', lastMessageAt: 2000,
+    lastMessageSenderId: 'alice', lastMessageId: 'poll-one', updatedAt: 2000,
+  });
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(updateDoc(doc(bob, 'conversations/direct-alice-bob/messages/poll-one'), {
+    'pollVotes.bob': 1,
+  }));
+  await assertFails(updateDoc(doc(bob, 'conversations/direct-alice-bob/messages/poll-one'), {
+    'pollVotes.alice': 0,
+  }));
+  await assertFails(updateDoc(doc(testEnv.authenticatedContext('mallory').firestore(),
+    'conversations/direct-alice-bob/messages/poll-one'), { 'pollVotes.mallory': 0 }));
+  await assertFails(setDoc(doc(alice, 'conversations/direct-alice-bob/messages/poll-bad'), {
+    senderId: 'alice', senderName: 'Alice', type: 'poll', content: 'Lunch?', sentAt: 3000,
+    createdAt: 3000, readBy: ['alice'], pollQuestion: 'Lunch?',
+    pollOptions: ['Pizza'], pollVotes: {},
   }));
 });
 

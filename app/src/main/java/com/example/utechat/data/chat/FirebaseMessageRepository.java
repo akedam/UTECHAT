@@ -89,19 +89,24 @@ public final class FirebaseMessageRepository implements MessageRepository {
 
     @Override
     public void sendText(String conversationId, Message message, SendCallback callback) {
-        sendMessage(conversationId, message, false, callback);
+        sendMessage(conversationId, message, false, false, callback);
     }
 
     @Override
     public void sendImage(String conversationId, Message message, SendCallback callback) {
-        sendMessage(conversationId, message, true, callback);
+        sendMessage(conversationId, message, true, false, callback);
     }
 
-    private void sendMessage(String conversationId, Message message, boolean image, SendCallback callback) {
+    @Override public void sendPoll(String conversationId, Message message, SendCallback callback) {
+        sendMessage(conversationId, message, false, true, callback);
+    }
+
+    private void sendMessage(String conversationId, Message message, boolean image, boolean poll, SendCallback callback) {
         if (conversationId == null || conversationId.isEmpty() || message.getId() == null
                 || message.getId().isEmpty() || message.getSenderId() == null
                 || message.getContent() == null
                 || (!image && message.getContent().trim().isEmpty())
+                || (poll && !validPoll(message))
                 || (image && (message.getMediaUrl() == null || message.getContentType() == null
                     || message.getFileSize() <= 0 || message.getFileSize() > 8L * 1024L * 1024L))) {
             callback.onError(context.getString(R.string.chat_send_error));
@@ -114,7 +119,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         Map<String, Object> payload = new HashMap<>();
         payload.put("senderId", message.getSenderId());
         payload.put("senderName", message.getSenderName() == null ? "" : message.getSenderName());
-        payload.put("type", image ? "image" : "text");
+        payload.put("type", image ? "image" : poll ? "poll" : "text");
         payload.put("content", message.getContent());
         payload.put("sentAt", sentAt);
         payload.put("createdAt", sentAt);
@@ -123,6 +128,10 @@ public final class FirebaseMessageRepository implements MessageRepository {
             payload.put("mediaPath", message.getMediaUrl());
             payload.put("contentType", message.getContentType());
             payload.put("fileSize", message.getFileSize());
+        } else if (poll) {
+            payload.put("pollQuestion", message.getContent());
+            payload.put("pollOptions", new ArrayList<>(message.getPollOptions()));
+            payload.put("pollVotes", new HashMap<String, Integer>());
         }
 
         String collectionId = "conversations";
@@ -130,7 +139,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         var messageRef = conversationRef.collection("messages").document(message.getId());
         Map<String, Object> summary = new HashMap<>();
         summary.put("lastMessage", image ? "image" : message.getContent());
-        summary.put("lastMessageType", image ? "image" : "text");
+        summary.put("lastMessageType", image ? "image" : poll ? "poll" : "text");
         summary.put("lastMessageAt", sentAt);
         summary.put("lastMessageSenderId", message.getSenderId());
         summary.put("lastMessageId", message.getId());
@@ -140,16 +149,54 @@ public final class FirebaseMessageRepository implements MessageRepository {
         batch.set(messageRef, payload);
         batch.set(conversationRef, summary, SetOptions.merge());
         batch.commit().addOnSuccessListener(ignored -> callback.onSuccess())
-                .addOnFailureListener(error -> verifyIdempotentWrite(messageRef, message, image, callback));
+                .addOnFailureListener(error -> verifyIdempotentWrite(messageRef, message, image, poll, callback));
+    }
+
+    private boolean validPoll(Message message) {
+        List<String> options = message.getPollOptions();
+        if (message.getContent().trim().isEmpty() || message.getContent().trim().length() > 200
+                || options == null || options.size() < 2 || options.size() > 6) return false;
+        java.util.Set<String> unique = new java.util.HashSet<>();
+        for (String option : options) {
+            if (option == null || option.trim().isEmpty() || option.trim().length() > 80
+                    || !unique.add(option.trim())) return false;
+        }
+        return true;
+    }
+
+    @Override public void votePoll(String conversationId, String messageId, String voterUid,
+                                   int optionIndex, SendCallback callback) {
+        if (conversationId == null || messageId == null || voterUid == null || optionIndex < 0) {
+            callback.onError(context.getString(R.string.poll_vote_error)); return;
+        }
+        var reference = messages(conversationId).document(messageId);
+        firestore.runTransaction(transaction -> {
+            DocumentSnapshot snapshot = transaction.get(reference);
+            Object rawOptions = snapshot.get("pollOptions");
+            if (!snapshot.exists() || !"poll".equals(snapshot.getString("type"))
+                    || !(rawOptions instanceof List) || optionIndex >= ((List<?>) rawOptions).size()) {
+                throw new IllegalStateException("invalid_poll");
+            }
+            Object rawVotes = snapshot.get("pollVotes");
+            Map<String, Object> votes = new HashMap<>();
+            if (rawVotes instanceof Map) votes.putAll((Map<String, Object>) rawVotes);
+            votes.put(voterUid, optionIndex);
+            transaction.update(reference, "pollVotes", votes);
+            return null;
+        }).addOnSuccessListener(unused -> callback.onSuccess())
+                .addOnFailureListener(error -> callback.onError(context.getString(R.string.poll_vote_error)));
     }
 
     private void verifyIdempotentWrite(com.google.firebase.firestore.DocumentReference reference,
-                                       Message message, boolean image, SendCallback callback) {
+                                       Message message, boolean image, boolean poll, SendCallback callback) {
         reference.get(Source.SERVER).addOnSuccessListener(snapshot -> {
             if (snapshot.exists()
                     && message.getSenderId().equals(snapshot.getString("senderId"))
                     && (image ? "image".equals(snapshot.getString("type"))
                                 && message.getMediaUrl().equals(snapshot.getString("mediaPath"))
+                                : poll ? "poll".equals(snapshot.getString("type"))
+                                    && message.getContent().equals(snapshot.getString("pollQuestion"))
+                                    && message.getPollOptions().equals(snapshot.get("pollOptions"))
                                 : "text".equals(snapshot.getString("type"))
                                     && message.getContent().equals(snapshot.getString("content")))) {
                 callback.onSuccess();
@@ -183,7 +230,14 @@ public final class FirebaseMessageRepository implements MessageRepository {
         message.setSenderId(document.getString("senderId"));
         message.setType(Message.Type.fromSchemaValue(document.getString("type")));
         String content = document.getString("content");
-        message.setContent(content == null ? "" : content);
+        if (message.getType() == Message.Type.POLL) {
+            String question = document.getString("pollQuestion");
+            message.setContent(question == null ? (content == null ? "" : content) : question);
+            message.setPollOptions(stringList(document.get("pollOptions")));
+            message.setPollVotes(intMap(document.get("pollVotes")));
+        } else {
+            message.setContent(content == null ? "" : content);
+        }
         message.setMediaUrl(document.getString("mediaPath"));
         message.setContentType(document.getString("contentType"));
         Object size = document.get("fileSize");
@@ -213,6 +267,17 @@ public final class FirebaseMessageRepository implements MessageRepository {
         if (!(value instanceof List)) return null;
         List<String> result = new ArrayList<>();
         for (Object entry : (List<?>) value) if (entry instanceof String) result.add((String) entry);
+        return result;
+    }
+
+    private Map<String, Integer> intMap(Object value) {
+        if (!(value instanceof Map)) return new HashMap<>();
+        Map<String, Integer> result = new HashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            if (entry.getKey() instanceof String && entry.getValue() instanceof Number) {
+                result.put((String) entry.getKey(), ((Number) entry.getValue()).intValue());
+            }
+        }
         return result;
     }
 

@@ -71,6 +71,37 @@ public final class MockMessageRepository implements MessageRepository {
         mainHandler.post(() -> callback.onError(context.getString(R.string.image_storage_setup_error)));
     }
 
+    @Override public synchronized void sendPoll(String conversationId, Message message, SendCallback callback) {
+        ensureSamples(conversationId, message.getSenderId(), message.getSenderName(),
+                context.getString(R.string.mock_peer_name));
+        List<Message> list = conversations.get(conversationId);
+        for (Message existing : list) if (existing.getId().equals(message.getId())) {
+            mainHandler.post(callback::onSuccess); return;
+        }
+        message.setType(Message.Type.POLL);
+        message.setPollVotes(new HashMap<>());
+        message.setDeliveryStatus(Message.DeliveryStatus.SENT);
+        list.add(message);
+        notifyListeners(conversationId);
+        mainHandler.post(callback::onSuccess);
+    }
+
+    @Override public synchronized void votePoll(String conversationId, String messageId, String voterUid,
+                                                int optionIndex, SendCallback callback) {
+        List<Message> list = conversations.get(conversationId);
+        if (list != null) for (Message message : list) {
+            List<String> options = message.getPollOptions();
+            if (messageId.equals(message.getId()) && message.getType() == Message.Type.POLL
+                    && options != null && optionIndex >= 0 && optionIndex < options.size()) {
+                Map<String, Integer> votes = message.getPollVotes() == null
+                        ? new HashMap<>() : new HashMap<>(message.getPollVotes());
+                votes.put(voterUid, optionIndex); message.setPollVotes(votes);
+                notifyListeners(conversationId); mainHandler.post(callback::onSuccess); return;
+            }
+        }
+        mainHandler.post(() -> callback.onError(context.getString(R.string.poll_vote_error)));
+    }
+
     @Override
     public boolean isMock() { return true; }
 

@@ -14,6 +14,8 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.PickVisualMediaRequest;
@@ -35,6 +37,7 @@ import com.example.utechat.domain.model.Message;
 import com.example.utechat.feature.chat.adapter.MessagesAdapter;
 import com.example.utechat.feature.chat.viewmodel.ChatViewModel;
 import com.example.utechat.feature.calls.ui.CallActivity;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,7 +100,8 @@ public class ChatActivity extends AppCompatActivity {
         viewModel = new ViewModelProvider(this).get(ChatViewModel.class);
         viewModel.init(conversationId, conversationTitle);
         adapter = new MessagesAdapter(viewModel.getCurrentUserId(), viewModel.getCurrentUserName(),
-                message -> viewModel.retryMessage(message.getId()), MediaRepositoryProvider.get(this));
+                message -> viewModel.retryMessage(message.getId()), viewModel::votePoll,
+                MediaRepositoryProvider.get(this));
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         rvMessages.setLayoutManager(layoutManager);
@@ -221,6 +225,59 @@ public class ChatActivity extends AppCompatActivity {
         return -1;
     }
 
+    private void showCreatePollDialog() {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        int horizontal = getResources().getDimensionPixelSize(R.dimen.space_lg);
+        int vertical = getResources().getDimensionPixelSize(R.dimen.space_xs);
+        fields.setPadding(horizontal, vertical, horizontal, vertical);
+        EditText question = new EditText(this);
+        question.setSingleLine(true);
+        question.setHint(R.string.poll_question_hint);
+        fields.addView(question, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        List<EditText> optionInputs = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            EditText option = new EditText(this);
+            option.setSingleLine(true);
+            option.setHint(getString(R.string.poll_option_hint, i + 1));
+            option.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
+            fields.addView(option, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            optionInputs.add(option);
+        }
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(fields);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.poll_create_title)
+                .setView(scroll)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.poll_create_button, null);
+        androidx.appcompat.app.AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    String title = question.getText() == null ? "" : question.getText().toString().trim();
+                    List<String> choices = new ArrayList<>();
+                    for (EditText input : optionInputs) {
+                        String text = input.getText() == null ? "" : input.getText().toString().trim();
+                        if (!text.isEmpty()) choices.add(text);
+                    }
+                    java.util.Set<String> unique = new java.util.HashSet<>(choices);
+                    if (title.isEmpty() || title.length() > 200 || choices.size() < 2
+                            || unique.size() != choices.size()) {
+                        question.setError(title.isEmpty() || title.length() > 200
+                                ? getString(R.string.poll_invalid) : null);
+                        Toast.makeText(this, R.string.poll_invalid, Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    if (viewModel.createPoll(title, choices)) {
+                        forceScrollToBottom = true;
+                        dialog.dismiss();
+                    }
+                }));
+        dialog.show();
+    }
+
     private void showInitialLoading() {
         loadingState.setVisibility(View.VISIBLE);
         errorState.setVisibility(View.GONE);
@@ -249,6 +306,10 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.action_create_poll) {
+            showCreatePollDialog();
+            return true;
+        }
         if (item.getItemId() == R.id.action_voice_call || item.getItemId() == R.id.action_video_call) {
             if (!"direct".equalsIgnoreCase(conversationType)) {
                 Toast.makeText(this, R.string.call_invalid_conversation, Toast.LENGTH_SHORT).show();

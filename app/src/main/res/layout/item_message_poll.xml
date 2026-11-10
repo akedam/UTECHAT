@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="@dimen/space_md"
+    android:layout_marginVertical="@dimen/space_xs"
+    android:background="@drawable/bg_bubble_received"
+    android:orientation="vertical"
+    android:padding="@dimen/space_md">
+
+    <TextView
+        android:id="@+id/tv_poll_sender"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/utechat_primary"
+        android:textSize="@dimen/text_xs"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_poll_question"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_md"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:id="@+id/layout_poll_options"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_sm"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tv_poll_time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/utechat_on_surface_variant"
+            android:textSize="@dimen/text_xs" />
+
+        <TextView
+            android:id="@+id/tv_poll_status"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/touch_target_min"
+            android:gravity="center_vertical"
+            android:paddingStart="@dimen/space_sm"
+            android:textColor="@color/utechat_on_surface_variant"
+            android:textSize="@dimen/text_xs"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

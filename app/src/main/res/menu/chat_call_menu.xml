@@ -11,4 +11,9 @@
         android:title="@string/call_video_menu"
         android:icon="@android:drawable/ic_menu_camera"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_create_poll"
+        android:title="@string/chat_create_poll"
+        android:icon="@android:drawable/ic_menu_agenda"
+        app:showAsAction="never" />
 </menu>

@@ -135,7 +135,7 @@
     "uid1": { "displayName": "string", "photoUrl": "string | null" },
     "uid2": { "displayName": "string", "photoUrl": "string | null" }
   },
-  "lastMessageType": "text | image | file",
+  "lastMessageType": "text | image | poll",
   "lastMessageAt": "epochMillis",
   "lastMessageSenderId": "string",
   "createdBy": "string",
@@ -164,7 +164,7 @@ Member document ID là UID ổn định. `unreadCount` và `lastReadAt` thuộc 
 ```json
 {
   "senderId": "string",
-  "type": "text | image | file",
+  "type": "text | image | poll",
   "content": "string",
   "mediaUrl": "string | null",
   "fileName": "string | null",
@@ -172,9 +172,14 @@ Member document ID là UID ổn định. `unreadCount` và `lastReadAt` thuộc 
   "sentAt": "epochMillis",
   "createdAt": "epochMillis (optional; defaults to sentAt for old messages)",
   "updatedAt": "epochMillis (optional)",
-  "readBy": ["uid1"]
+  "readBy": ["uid1"],
+  "pollQuestion": "string (poll only)",
+  "pollOptions": ["string (2–6 choices; poll only)"],
+  "pollVotes": { "uid1": 0 }
 }
 ```
+
+Tin nhắn `poll` dùng `pollQuestion` và `pollOptions` bất biến sau khi tạo. `pollVotes` ánh xạ mỗi UID thành chỉ số một lựa chọn; thành viên có thể đổi lựa chọn của chính mình, không thể sửa phiếu người khác. Firestore Rules kiểm tra thành viên, số lựa chọn, độ dài và chỉ cho sửa key ứng với UID đang đăng nhập.
 
 ### `friendships/{friendshipId}`
 ```json
@@ -387,6 +392,7 @@ Firebase SDK (Auth / Firestore / Storage / FCM)
 | **G7** ✅ | Gửi ảnh trong chat | Cần bật Firebase Storage, deploy `storage.rules` và `firestore.rules`; bucket Storage yêu cầu gói Blaze |
 | **G8** ✅ (client/presence) | Nhận FCM, mở chat từ notification, RTDB presence opt-in | Cần tạo RTDB + deploy rules; cần trusted FCM sender để gửi push thật |
 | **G9** 🚧 | Gọi thoại/video 1–1 | Agora RTC Android 4.7.0; Firestore signaling; cần Agora App ID, App Certificate chỉ trên token server, và endpoint HTTPS. Nhận lời gọi khi app nền/đã đóng cần trusted push sender. |
+| **G10** ✅ | Rà backend kết bạn, chat, nhóm; bình chọn trong hội thoại | Firestore Rules và bộ kiểm tra emulator; cần cài lại APK mới. Cuộc gọi vẫn cần Agora token server đã cấu hình. |
 
 ### 9.1 G3 account and profile setup
 

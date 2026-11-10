@@ -6,11 +6,12 @@ package com.example.utechat.domain.model;
 public class Message {
 
     public enum Type {
-        TEXT, IMAGE, FILE;
+        TEXT, IMAGE, FILE, POLL;
 
         public static Type fromSchemaValue(String value) {
             if ("image".equalsIgnoreCase(value)) return IMAGE;
             if ("file".equalsIgnoreCase(value)) return FILE;
+            if ("poll".equalsIgnoreCase(value)) return POLL;
             return TEXT;
         }
     }
@@ -34,6 +35,8 @@ public class Message {
     private long updatedAt;         // epoch millis; 0 when field is absent
     private boolean isRead;
     private java.util.List<String> readBy;
+    private java.util.List<String> pollOptions;
+    private java.util.Map<String, Integer> pollVotes;
     private DeliveryStatus deliveryStatus = DeliveryStatus.SENT;
     // isFromMe được tính tại UI layer dựa trên currentUserId
 
@@ -91,6 +94,12 @@ public class Message {
 
     public java.util.List<String> getReadBy() { return readBy; }
     public void setReadBy(java.util.List<String> readBy) { this.readBy = readBy; }
+
+    public java.util.List<String> getPollOptions() { return pollOptions; }
+    public void setPollOptions(java.util.List<String> pollOptions) { this.pollOptions = pollOptions; }
+
+    public java.util.Map<String, Integer> getPollVotes() { return pollVotes; }
+    public void setPollVotes(java.util.Map<String, Integer> pollVotes) { this.pollVotes = pollVotes; }
 
     public DeliveryStatus getDeliveryStatus() { return deliveryStatus; }
     public void setDeliveryStatus(DeliveryStatus deliveryStatus) {

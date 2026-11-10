@@ -173,7 +173,7 @@ service cloud.firestore {
           && request.resource.data.lastMessage is string
           && request.resource.data.lastMessage.size() > 0
           && request.resource.data.lastMessage.size() <= 5000
-          && request.resource.data.lastMessageType in ['text', 'image']
+          && request.resource.data.lastMessageType in ['text', 'image', 'poll']
           && (resource.data.type == 'direct' || resource.data.type == 'group')
           && (resource.data.type != 'direct' || resource.data.participantIds.size() == 2)
           && (resource.data.type != 'group' || groupParticipant(resource.data))
@@ -191,7 +191,10 @@ service cloud.firestore {
               || (request.resource.data.lastMessageType == 'image'
                 && request.resource.data.lastMessage == 'image'
                 && getAfter(messagePath).data.type == 'image'
-                && getAfter(messagePath).data.mediaPath == 'conversations/' + conversationId + '/' + request.auth.uid + '/' + request.resource.data.lastMessageId))
+                && getAfter(messagePath).data.mediaPath == 'conversations/' + conversationId + '/' + request.auth.uid + '/' + request.resource.data.lastMessageId)
+              || (request.resource.data.lastMessageType == 'poll'
+                && getAfter(messagePath).data.type == 'poll'
+                && getAfter(messagePath).data.pollQuestion == request.resource.data.lastMessage))
           && getAfter(messagePath).data.sentAt == request.resource.data.lastMessageAt;
       }
       function validGroupDetailsChange() {
@@ -291,7 +294,11 @@ service cloud.firestore {
             || (signedIn() && request.auth.uid == memberUid && resource.data.role != 'owner'
                 && removedFromConversationAfter());
         }
-        allow get, list: if isMember(conversationId) && memberUid in parent().data.participantIds;
+        // A group member may load the member roster as a collection query. Keep
+        // individual get restricted to listed members; the list itself is safe
+        // because only current conversation members can access this subcollection.
+        allow get: if isMember(conversationId) && memberUid in parent().data.participantIds;
+        allow list: if isMember(conversationId);
         allow create: if signedIn() && request.resource.data.userId == memberUid
           && request.resource.data.keys().hasOnly(['userId','role','joinedAt','lastReadAt','unreadCount'])
           && request.resource.data.role in ['owner','admin','member']
@@ -359,10 +366,50 @@ service cloud.firestore {
             && request.resource.data.createdAt == request.resource.data.sentAt
             && request.resource.data.readBy == [request.auth.uid];
         }
+        function validPollOption(options, index) {
+          return index >= options.size()
+            || (options[index] is string && options[index].size() > 0 && options[index].size() <= 80);
+        }
+        function validPollMessage() {
+          let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);
+          let options = request.resource.data.pollOptions;
+          return request.resource.data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy','pollQuestion','pollOptions','pollVotes'])
+            && request.resource.data.keys().hasAll(['senderId','senderName','type','content','sentAt','createdAt','readBy','pollQuestion','pollOptions','pollVotes'])
+            && request.resource.data.senderId == request.auth.uid
+            && exists(profile) && request.resource.data.senderName == get(profile).data.displayName
+            && request.resource.data.type == 'poll'
+            && request.resource.data.pollQuestion is string
+            && request.resource.data.pollQuestion.size() > 0
+            && request.resource.data.pollQuestion.size() <= 200
+            && request.resource.data.content == request.resource.data.pollQuestion
+            && options is list && options.size() >= 2 && options.size() <= 6
+            && options.toSet().size() == options.size()
+            && validPollOption(options, 0) && validPollOption(options, 1)
+            && validPollOption(options, 2) && validPollOption(options, 3)
+            && validPollOption(options, 4) && validPollOption(options, 5)
+            && request.resource.data.pollVotes is map
+            && request.resource.data.pollVotes.size() == 0
+            && request.resource.data.sentAt is int
+            && request.resource.data.createdAt == request.resource.data.sentAt
+            && request.resource.data.readBy == [request.auth.uid];
+        }
+        function validPollVote() {
+          let changed = request.resource.data.diff(resource.data).affectedKeys();
+          let votes = request.resource.data.pollVotes;
+          let oldVotes = resource.data.pollVotes;
+          let choice = votes[request.auth.uid];
+          return isConversationParticipant()
+            && resource.data.type == 'poll'
+            && changed.hasOnly(['pollVotes'])
+            && votes is map && oldVotes is map
+            && votes.diff(oldVotes).affectedKeys().hasOnly([request.auth.uid])
+            && request.auth.uid in votes.keys()
+            && choice is int && choice >= 0 && choice < resource.data.pollOptions.size();
+        }
         allow get, list: if isConversationParticipant();
-        allow create: if isConversationParticipant() && (validTextMessage() || validImageMessage());
-        allow update: if isConversationParticipant() && resource.data.senderId == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([]);
+        allow create: if isConversationParticipant() && (validTextMessage() || validImageMessage() || validPollMessage());
+        allow update: if (isConversationParticipant() && resource.data.senderId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([])) || validPollVote();
         allow delete: if false;
       }
     }

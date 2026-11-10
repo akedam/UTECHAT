@@ -34,5 +34,10 @@ public interface MessageRepository {
 
     void sendImage(String conversationId, Message message, SendCallback callback);
 
+    void sendPoll(String conversationId, Message message, SendCallback callback);
+
+    void votePoll(String conversationId, String messageId, String voterUid, int optionIndex,
+                  SendCallback callback);
+
     boolean isMock();
 }

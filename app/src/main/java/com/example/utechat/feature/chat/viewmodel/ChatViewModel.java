@@ -218,6 +218,49 @@ public class ChatViewModel extends AndroidViewModel {
         return true;
     }
 
+    public boolean createPoll(String question, List<String> values) {
+        String normalizedQuestion = question == null ? "" : question.trim();
+        List<String> options = new ArrayList<>();
+        if (values != null) for (String value : values) {
+            String option = value == null ? "" : value.trim();
+            if (!option.isEmpty() && !options.contains(option)) options.add(option);
+        }
+        if (normalizedQuestion.isEmpty() || normalizedQuestion.length() > 200
+                || options.size() < 2 || options.size() > 6
+                || currentUserId == null || conversationId == null) {
+            sendError.setValue(getApplication().getString(R.string.poll_invalid));
+            return false;
+        }
+        for (String option : options) if (option.length() > 80) {
+            sendError.setValue(getApplication().getString(R.string.poll_invalid));
+            return false;
+        }
+        sendError.setValue(null);
+        Message message = new Message();
+        message.setId(UUID.randomUUID().toString()); message.setConversationId(conversationId);
+        message.setSenderId(currentUserId); message.setSenderName(currentUserName);
+        message.setType(Message.Type.POLL); message.setContent(normalizedQuestion);
+        message.setPollOptions(options); message.setPollVotes(new LinkedHashMap<>());
+        message.setSentAt(System.currentTimeMillis()); message.setCreatedAt(message.getSentAt());
+        message.setDeliveryStatus(Message.DeliveryStatus.SENDING);
+        localOutgoing.put(message.getId(), message); addOrReplace(latestMessages, message);
+        publishMessages(); submit(message); return true;
+    }
+
+    public void votePoll(Message message, int optionIndex) {
+        if (message == null || message.getType() != Message.Type.POLL || currentUserId == null
+                || message.getPollOptions() == null || optionIndex < 0
+                || optionIndex >= message.getPollOptions().size()) return;
+        repository.votePoll(conversationId, message.getId(), currentUserId, optionIndex,
+                new MessageRepository.SendCallback() {
+                    @Override public void onSuccess() { if (!cleared) sendError.setValue(null); }
+                    @Override public void onError(String error) {
+                        if (!cleared) sendError.setValue(error == null || error.trim().isEmpty()
+                                ? getApplication().getString(R.string.poll_vote_error) : error);
+                    }
+                });
+    }
+
     public void retryMessage(String messageId) {
         if (messageId == null || sendingIds.contains(messageId)) return;
         for (Message message : currentList()) {
@@ -259,6 +302,7 @@ public class ChatViewModel extends AndroidViewModel {
             }
         };
         if (message.getType() == Message.Type.IMAGE) repository.sendImage(conversationId, message, callback);
+        else if (message.getType() == Message.Type.POLL) repository.sendPoll(conversationId, message, callback);
         else repository.sendText(conversationId, message, callback);
     }
 
@@ -360,6 +404,8 @@ public class ChatViewModel extends AndroidViewModel {
         copy.setFileName(source.getFileName()); copy.setFileSize(source.getFileSize());
         copy.setSentAt(source.getSentAt()); copy.setCreatedAt(source.getCreatedAt()); copy.setUpdatedAt(source.getUpdatedAt());
         copy.setReadBy(source.getReadBy()); copy.setDeliveryStatus(source.getDeliveryStatus());
+        copy.setPollOptions(source.getPollOptions() == null ? null : new ArrayList<>(source.getPollOptions()));
+        copy.setPollVotes(source.getPollVotes() == null ? null : new LinkedHashMap<>(source.getPollVotes()));
         copy.setUploadProgress(source.getUploadProgress());
         return copy;
     }

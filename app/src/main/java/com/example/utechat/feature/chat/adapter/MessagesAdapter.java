@@ -23,26 +23,28 @@ import java.util.Objects;
 
 public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolder> {
     private static final int VIEW_TYPE_SENT = 1, VIEW_TYPE_RECEIVED = 2,
-            VIEW_TYPE_SENT_IMAGE = 3, VIEW_TYPE_RECEIVED_IMAGE = 4;
+            VIEW_TYPE_SENT_IMAGE = 3, VIEW_TYPE_RECEIVED_IMAGE = 4, VIEW_TYPE_POLL = 5;
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm", Locale.getDefault());
     public interface RetryListener { void onRetry(Message message); }
+    public interface VoteListener { void onVote(Message message, int optionIndex); }
     private final String currentUserId, currentUserName;
     private final RetryListener retryListener;
+    private final VoteListener voteListener;
     private final MediaRepository media;
 
     public MessagesAdapter(String currentUserId, String currentUserName, RetryListener retryListener,
-                           MediaRepository media) {
+                           VoteListener voteListener, MediaRepository media) {
         super(DIFF_CALLBACK); this.currentUserId=currentUserId;this.currentUserName=currentUserName;
-        this.retryListener=retryListener;this.media=media;
+        this.retryListener=retryListener;this.voteListener=voteListener;this.media=media;
     }
     public Message getMessageAt(int position){return super.getItem(position);}
     private static final DiffUtil.ItemCallback<Message> DIFF_CALLBACK=new DiffUtil.ItemCallback<Message>(){
         @Override public boolean areItemsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getId(),b.getId());}
-        @Override public boolean areContentsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getSenderId(),b.getSenderId())&&Objects.equals(a.getSenderName(),b.getSenderName())&&Objects.equals(a.getContent(),b.getContent())&&Objects.equals(a.getMediaUrl(),b.getMediaUrl())&&Objects.equals(a.getLocalMediaUri(),b.getLocalMediaUri())&&a.getSentAt()==b.getSentAt()&&a.getUploadProgress()==b.getUploadProgress()&&a.getDeliveryStatus()==b.getDeliveryStatus();}
+        @Override public boolean areContentsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getSenderId(),b.getSenderId())&&Objects.equals(a.getSenderName(),b.getSenderName())&&Objects.equals(a.getType(),b.getType())&&Objects.equals(a.getContent(),b.getContent())&&Objects.equals(a.getMediaUrl(),b.getMediaUrl())&&Objects.equals(a.getLocalMediaUri(),b.getLocalMediaUri())&&Objects.equals(a.getPollOptions(),b.getPollOptions())&&Objects.equals(a.getPollVotes(),b.getPollVotes())&&a.getSentAt()==b.getSentAt()&&a.getUploadProgress()==b.getUploadProgress()&&a.getDeliveryStatus()==b.getDeliveryStatus();}
     };
-    @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
-    @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
-    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
+    @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.POLL)return VIEW_TYPE_POLL;if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
+    @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_POLL:return new PollHolder(inflater.inflate(R.layout.item_message_poll,parent,false));case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
+    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else if(holder instanceof PollHolder)((PollHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
     @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder){if(holder instanceof ImageHolder)((ImageHolder)holder).clear();super.onViewRecycled(holder);}
     private String formattedTime(Message m){return m.getSentAt()>0?TIME_FORMAT.format(new Date(m.getSentAt())):"";}
 
@@ -52,6 +54,62 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         void bind(Message m){sender.setText(sent?(currentUserName==null?"":currentUserName):(m.getSenderName()==null?"":m.getSenderName()));content.setText(m.getContent()==null?"":m.getContent());time.setText(formattedTime(m));
             if(sent){status.setVisibility(View.VISIBLE);status.setOnClickListener(null);status.setMinHeight(0);if(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED){status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));status.setText(R.string.message_send_failed_retry);status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));status.setOnClickListener(v->retryListener.onRetry(m));}else if(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING){status.setText(R.string.message_sending);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}else{status.setText(R.string.message_sent);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}}
             itemView.setContentDescription(sent?content.getText():itemView.getContext().getString(R.string.message_accessibility_received,sender.getText(),content.getText(),time.getText()));}
+    }
+
+    private final class PollHolder extends RecyclerView.ViewHolder {
+        final TextView sender, question, time, status;
+        final android.widget.LinearLayout options;
+        PollHolder(View view) {
+            super(view); sender=view.findViewById(R.id.tv_poll_sender); question=view.findViewById(R.id.tv_poll_question);
+            time=view.findViewById(R.id.tv_poll_time); status=view.findViewById(R.id.tv_poll_status);
+            options=view.findViewById(R.id.layout_poll_options);
+        }
+        void bind(Message message) {
+            sender.setText(currentUserId != null && currentUserId.equals(message.getSenderId())
+                    ? (currentUserName == null ? "" : currentUserName)
+                    : (message.getSenderName() == null ? "" : message.getSenderName()));
+            question.setText(message.getContent() == null ? "" : message.getContent());
+            time.setText(formattedTime(message)); options.removeAllViews();
+            java.util.List<String> choices = message.getPollOptions();
+            java.util.Map<String, Integer> votes = message.getPollVotes();
+            int[] counts = new int[choices == null ? 0 : choices.size()];
+            int selected = -1;
+            if (votes != null) for (java.util.Map.Entry<String, Integer> vote : votes.entrySet()) {
+                Integer index = vote.getValue();
+                if (index != null && index >= 0 && index < counts.length) counts[index]++;
+                if (currentUserId != null && currentUserId.equals(vote.getKey()) && index != null) selected=index;
+            }
+            if (choices != null) for (int i=0; i<choices.size(); i++) {
+                final int choiceIndex=i;
+                com.google.android.material.button.MaterialButton button =
+                        new com.google.android.material.button.MaterialButton(itemView.getContext());
+                button.setText(itemView.getContext().getString(R.string.poll_option_vote_count,
+                        choices.get(i), counts[i]));
+                button.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));
+                button.setInsetTop(0); button.setInsetBottom(0); button.setSelected(i == selected);
+                button.setContentDescription(itemView.getContext().getString(
+                        i == selected ? R.string.poll_option_accessibility_selected
+                                : R.string.poll_option_accessibility, choices.get(i), counts[i]));
+                button.setEnabled(message.getDeliveryStatus() != Message.DeliveryStatus.SENDING);
+                button.setOnClickListener(v -> voteListener.onVote(message, choiceIndex));
+                options.addView(button);
+            }
+            boolean sent=currentUserId != null && currentUserId.equals(message.getSenderId());
+            status.setVisibility(sent ? View.VISIBLE : View.GONE);
+            status.setOnClickListener(null); status.setMinHeight(0);
+            if (sent) {
+                status.setText(message.getDeliveryStatus()==Message.DeliveryStatus.FAILED
+                        ? R.string.message_send_failed_retry : message.getDeliveryStatus()==Message.DeliveryStatus.SENDING
+                        ? R.string.message_sending : R.string.message_sent);
+                if (message.getDeliveryStatus() == Message.DeliveryStatus.FAILED) {
+                    status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));
+                    status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));
+                    status.setOnClickListener(v -> retryListener.onRetry(message));
+                } else status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));
+            }
+            itemView.setContentDescription(itemView.getContext().getString(R.string.poll_accessibility,
+                    sender.getText(), question.getText(), counts.length));
+        }
     }
 
     private final class ImageHolder extends RecyclerView.ViewHolder{
