@@ -175,6 +175,7 @@
     <string name="friends_load_error">Không tải được dữ liệu bạn bè. Kiểm tra kết nối rồi thử lại.</string>
     <string name="friends_invalid_request">Không thể gửi lời mời kết bạn này.</string>
     <string name="friends_request_error">Lời mời không còn hợp lệ hoặc đã được xử lý.</string>
+    <string name="friends_permission_error">Firebase từ chối lời mời. Hãy kiểm tra Rules Firestore đã được triển khai.</string>
     <string name="friends_firebase_required">Cần cấu hình Firebase và đăng nhập để tìm bạn.</string>
     <string name="friends_unknown_user">Người dùng không còn khả dụng</string>
     <string name="friend_requests_title">Lời mời kết bạn</string>

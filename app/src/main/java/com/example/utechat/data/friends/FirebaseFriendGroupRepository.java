@@ -59,11 +59,56 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
     @Override public void requestFriend(String from, String to, Result<Void> cb) {
         if (from == null || to == null || from.equals(to)) { cb.error(context.getString(R.string.friends_invalid_request)); return; }
         String id = pairId(from,to); var ref = db.collection("friendships").document(id);
-        db.runTransaction(t -> { DocumentSnapshot d=t.get(ref); if(d.exists()) {
-                if ("pending".equals(d.getString("status")) && from.equals(d.getString("fromUid"))) return null;
-                throw new IllegalStateException("friendship_exists"); }
-            long now=System.currentTimeMillis(); Map<String,Object> data=new HashMap<>();data.put("fromUid",from);data.put("toUid",to);data.put("status","pending");data.put("createdAt",now);data.put("updatedAt",now);t.set(ref,data);return null;
-        }).addOnSuccessListener(v->cb.success(null)).addOnFailureListener(e->cb.error(context.getString(R.string.friends_request_error)));
+        long now = System.currentTimeMillis();
+        Map<String,Object> data = new HashMap<>();
+        data.put("fromUid", from); data.put("toUid", to); data.put("status", "pending");
+        data.put("createdAt", now); data.put("updatedAt", now);
+
+        // Create directly so Firestore Rules only need to authorize the create.
+        // A transaction read of a missing friendship is denied by participant-only get rules.
+        ref.set(data).addOnSuccessListener(unused -> cb.success(null))
+                .addOnFailureListener(writeError -> ref.get()
+                        .addOnSuccessListener(existing -> resolveExistingFriendship(existing, from, to, cb, writeError))
+                        .addOnFailureListener(readError -> cb.error(friendRequestError(readError))));
+    }
+
+    private void resolveExistingFriendship(DocumentSnapshot existing, String from, String to,
+                                           Result<Void> cb, Exception writeError) {
+        if (!existing.exists()) { cb.error(friendRequestError(writeError)); return; }
+        String existingFrom = existing.getString("fromUid");
+        String existingTo = existing.getString("toUid");
+        boolean samePair = (from.equals(existingFrom) && to.equals(existingTo))
+                || (from.equals(existingTo) && to.equals(existingFrom));
+        if (!samePair) { cb.error(context.getString(R.string.friends_request_error)); return; }
+        String status = existing.getString("status");
+        if ("accepted".equals(status)
+                || ("pending".equals(status) && from.equals(existingFrom) && to.equals(existingTo))) {
+            cb.success(null);
+            return;
+        }
+        if ("pending".equals(status) && from.equals(existingTo) && to.equals(existingFrom)) {
+            db.collection("friendships").document(existing.getId())
+                    .update("status", "accepted", "updatedAt", System.currentTimeMillis())
+                    .addOnSuccessListener(unused -> cb.success(null))
+                    .addOnFailureListener(error -> cb.error(friendRequestError(error)));
+            return;
+        }
+        cb.error(context.getString(R.string.friends_request_error));
+    }
+
+    private String friendRequestError(Exception error) {
+        if (error instanceof com.google.firebase.firestore.FirebaseFirestoreException) {
+            com.google.firebase.firestore.FirebaseFirestoreException.Code code =
+                    ((com.google.firebase.firestore.FirebaseFirestoreException) error).getCode();
+            if (code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                return context.getString(R.string.friends_permission_error);
+            }
+            if (code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE
+                    || code == com.google.firebase.firestore.FirebaseFirestoreException.Code.DEADLINE_EXCEEDED) {
+                return context.getString(R.string.friends_load_error);
+            }
+        }
+        return context.getString(R.string.friends_request_error);
     }
     @Override public void respondFriend(String id, boolean accept, Result<Void> cb) {
         var ref=db.collection("friendships").document(id);
