@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="start" android:orientation="vertical" android:paddingHorizontal="@dimen/space_md" android:paddingVertical="@dimen/space_xs">
+    <TextView android:id="@+id/tv_sender_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/utechat_primary_dark" android:textSize="@dimen/text_xs" android:textStyle="bold" />
+    <FrameLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/bg_bubble_received" android:padding="@dimen/space_xs">
+        <ImageView android:id="@+id/iv_message_image" android:layout_width="@dimen/chat_bubble_max_width" android:layout_height="wrap_content" android:adjustViewBounds="true" android:maxHeight="@dimen/image_message_max_height" android:scaleType="centerCrop" android:contentDescription="@string/message_image_description" />
+        <ProgressBar android:id="@+id/progress_message_image" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:visibility="gone" />
+        <TextView android:id="@+id/tv_image_error" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:background="@color/utechat_surface" android:padding="@dimen/space_sm" android:text="@string/image_download_error" android:textColor="@color/utechat_error" android:visibility="gone" />
+    </FrameLayout>
+    <TextView android:id="@+id/tv_message_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_xs" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_xs" />
+</LinearLayout>

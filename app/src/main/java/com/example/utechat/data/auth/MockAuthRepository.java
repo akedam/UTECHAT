@@ -72,8 +72,9 @@ public final class MockAuthRepository implements AuthRepository {
         new Handler(Looper.getMainLooper()).postDelayed(() -> callback.onSuccess(user), 450);
     }
 
-    @Override public void signOut() {
+    @Override public void signOut(Runnable onComplete) {
         preferences.edit().clear().apply();
+        if (onComplete != null) onComplete.run();
     }
 
     private User saveUser(User user) {

@@ -115,8 +115,9 @@
   "email": "string",
   "photoUrl": "string | null",
   "bio": "string",
-  "createdAt": "timestamp",
-  "lastSeen": "timestamp",
+  "createdAt": "epochMillis (optional for legacy profiles)",
+  "updatedAt": "epochMillis",
+  "lastSeen": "epochMillis",
   "fcmToken": "string"
 }
 ```
@@ -129,12 +130,35 @@
   "groupName": "string | null",
   "groupPhotoUrl": "string | null",
   "lastMessage": "string",
-  "lastMessageAt": "timestamp",
+  "lastMessageId": "message document ID | null",
+  "participantSummaries": {
+    "uid1": { "displayName": "string", "photoUrl": "string | null" },
+    "uid2": { "displayName": "string", "photoUrl": "string | null" }
+  },
+  "lastMessageType": "text | image | file",
+  "lastMessageAt": "epochMillis",
   "lastMessageSenderId": "string",
   "createdBy": "string",
-  "createdAt": "timestamp"
+  "createdAt": "epochMillis",
+  "updatedAt": "epochMillis"
 }
 ```
+
+- `conversationId` là document ID ổn định. Chat riêng dùng `direct_` + SHA-256 của hai UID đã sắp xếp; nhóm dùng ID sinh một lần và không đổi. `Group.id` trùng conversation ID.
+- `participantSummaries` lưu snapshot tên/ảnh để danh sách chat riêng hiển thị được đối phương mà không cần đọc hồ sơ người khác. Khi hồ sơ đổi, snapshot liên quan cần được đồng bộ ở giai đoạn backend.
+
+### `conversations/{conversationId}/members/{uid}`
+```json
+{
+  "userId": "uid",
+  "role": "owner | admin | member",
+  "joinedAt": "epochMillis",
+  "lastReadAt": "epochMillis",
+  "unreadCount": 0
+}
+```
+
+Member document ID là UID ổn định. `unreadCount` và `lastReadAt` thuộc từng thành viên, không ghi chung vào conversation.
 
 ### `conversations/{conversationId}/messages/{messageId}`
 ```json
@@ -145,7 +169,9 @@
   "mediaUrl": "string | null",
   "fileName": "string | null",
   "fileSize": "number | null",
-  "sentAt": "timestamp",
+  "sentAt": "epochMillis",
+  "createdAt": "epochMillis (optional; defaults to sentAt for old messages)",
+  "updatedAt": "epochMillis (optional)",
   "readBy": ["uid1"]
 }
 ```
@@ -156,10 +182,20 @@
   "fromUid": "string",
   "toUid": "string",
   "status": "pending | accepted | blocked",
-  "createdAt": "timestamp",
-  "updatedAt": "timestamp"
+  "createdAt": "epochMillis",
+  "updatedAt": "epochMillis"
 }
 ```
+
+G6 dùng ID canonical `{smallerUid}_{largerUid}` để một cặp chỉ có một quan hệ/lời mời, kể cả khi hai bên gửi gần như đồng thời. `publicProfiles/{uid}` là danh bạ tối thiểu chỉ gồm `uid`, `displayName`, `searchName`, `photoUrl`, `updatedAt`; email và bio vẫn nằm trong `users/{uid}` chỉ chủ tài khoản đọc. Tìm kiếm theo tiền tố tên hiển thị, tối đa 20 kết quả. Tài khoản cũ được backfill public profile khi đăng nhập sau khi rules G6 được deploy.
+
+G6 tạo nhóm trong `conversations/{groupId}` với `type: group`, `createdBy`, `groupName`, `participantIds`, `participantSummaries`, thời gian và preview; mỗi thành viên có document ID bằng UID tại `members/{uid}` với vai trò `owner`, `admin` hoặc `member`. Tạo/thêm thành viên yêu cầu quan hệ bạn bè đã được chấp nhận. Thao tác thêm/xóa thành viên cập nhật danh sách participant và member document trong một transaction. Chủ nhóm có thể chuyển quyền; phải chuyển quyền trước khi rời nhóm. Rules kiểm tra quyền thành viên và cho phép chat nhóm qua collection messages như chat riêng.
+
+**Tương thích G3:** hồ sơ hiện ghi `updatedAt` dạng epoch milliseconds và chưa ghi `createdAt`; G4 giữ nguyên `updatedAt` và coi `createdAt` thiếu là `0`. Mapper cũng chấp nhận Number, Firestore `Timestamp` và `Date` để đọc bản ghi cũ. Tất cả thời gian mới trong schema dùng epoch milliseconds.
+
+**Trạng thái G4:** danh sách Firestore truy vấn `participantIds array-contains uid`, sắp `lastMessageAt desc`, lô 20 và cursor document. Khi không có Firebase config, app mới dùng `MockConversationRepository` được gắn nhãn; dữ liệu mẫu không trộn với dữ liệu thật.
+
+**G5:** tin nhắn văn bản nằm ở `conversations/{conversationId}/messages/{messageId}`. `messageId` UUID được tạo một lần và dùng lại khi thử gửi lại. Batch ghi tin nhắn và cập nhật bản xem trước hội thoại cùng lúc; rules kiểm tra hai thay đổi khớp nhau. `sentAt`/`createdAt` giữ epoch milliseconds như G4. Trạng thái `SENDING`/`FAILED` là trạng thái UI; `hasPendingWrites` của Firestore phân biệt đang đồng bộ với đã gửi. Không có trạng thái delivered/read từ server trong G5.
 
 ---
 
@@ -201,8 +237,9 @@
 | `fragment` | Fragment support | G2 |
 | `glide` | Load ảnh | G3 |
 | `recyclerview`, `swiperefreshlayout` | Danh sách | G3 |
-| `firebase-storage` | Lưu ảnh/tệp | G5 |
-| `firebase-messaging` | Push notification | G6 |
+| `firebase-storage` | Lưu ảnh/tệp/avatar | G6 |
+| `firebase-messaging` | Push notification | G8 |
+| `firebase-database` | Presence với onDisconnect | G8 |
 
 ---
 
@@ -343,11 +380,13 @@ Firebase SDK (Auth / Firestore / Storage / FCM)
 |-----------|---------|-----------|
 | **G1** ✅ | Kiểm kê, kiến trúc, đổi tên/package, theme UTEChat | Hiện tại |
 | **G2** ✅ | Khung UI, Splash/Login/Register, điều hướng, màn hình chính và chat mock | Hoàn tất; chưa có backend |
-| **G3** | Firebase Auth, hồ sơ tên/bio, đăng xuất, session gate | Firebase app config + bật Email/Password và Firestore |
-| **G4** | Bạn bè, khám phá nhóm, ảnh đại diện | G3 xong; Firebase Storage cần cấu hình cho avatar |
-| **G5** | Chat nhóm, gửi ảnh/tệp | G4 xong |
-| **G6** | Push notification FCM | G5 xong |
-| **G7** | Gọi thoại/video (tùy chọn) | G6 xong |
+| **G3** ✅ | Firebase Auth, hồ sơ tên/bio, đăng xuất, session gate | Firebase app config + bật Email/Password và Firestore |
+| **G4** ✅ | Model dữ liệu chat và danh sách hội thoại có cursor | Firestore query theo participant, composite index |
+| **G5** | Chat riêng văn bản thời gian thực, lịch sử phân trang, retry cùng ID | Mã đã build; publish `firestore.rules` và `firestore.indexes.json` phiên bản hiện tại để dùng Firebase thật |
+| **G6** ✅ | Tìm bạn, lời mời, danh sách bạn, tạo/quản lý nhóm, chat văn bản nhóm | Cần deploy rules G6; dữ liệu bạn bè/nhóm thật dùng Firestore |
+| **G7** ✅ | Gửi ảnh trong chat | Cần bật Firebase Storage, deploy `storage.rules` và `firestore.rules`; bucket Storage yêu cầu gói Blaze |
+| **G8** ✅ (client/presence) | Nhận FCM, mở chat từ notification, RTDB presence opt-in | Cần tạo RTDB + deploy rules; cần trusted FCM sender để gửi push thật |
+| **G9** 🚧 | Gọi thoại/video 1–1 | Agora RTC Android 4.7.0; Firestore signaling; cần Agora App ID, App Certificate chỉ trên token server, và endpoint HTTPS. Nhận lời gọi khi app nền/đã đóng cần trusted push sender. |
 
 ### 9.1 G3 account and profile setup
 
@@ -356,4 +395,38 @@ Firebase SDK (Auth / Firestore / Storage / FCM)
 - Register Android application ID `com.example.utechat` in the Firebase project, enable Email/Password under Authentication, and create the Firestore database.
 - Deploy the repository's `firestore.rules` before using Firestore (`firebase deploy --only firestore:rules --project YOUR_PROJECT_ID`). The rules only allow an authenticated user to read or update their own `users/{uid}` profile.
 - Without `google-services.json`, the app deliberately runs a local mock repository. Mock credentials are never persisted; the mock session stores only a demo identity and is not real authentication.
-- Avatar upload is not included: Firebase Storage and its rules remain for a later phase. This phase can retain/read a nullable `photoUrl` field only.
+- Avatar upload is not included. This phase can retain/read a nullable `photoUrl` field only.
+
+### 9.2 G6 friend and group behavior
+
+- Friend search returns public display-name cards only; it does not search email or reveal `users/{uid}` documents.
+- Friendship requests are pending/accepted; reject and cancel remove the pending record. Accepted friendship removal deletes the relationship, while prior direct conversation access remains limited to its two participants.
+- Group membership is stored in both `participantIds` and `members/{uid}`. Member reads and group messages require both records to authorize the signed-in UID. Owners can transfer ownership; admins can add/remove ordinary members; owners cannot be removed by admins or leave before transferring ownership.
+- The Android client offers initial selection of up to eight friends per new group to stay within Firestore transaction/rules document-access limits. More members can be added after creation.
+- No Cloud Function/Admin SDK cleanup exists. Deleting an Auth account does not cascade Firestore documents; stale public profiles/member rows may remain until a trusted cleanup process removes them. The UI skips missing friend profiles and can show a UID for unresolved group members.
+
+### 9.3 G7 image messages
+
+- Android uses the system Photo Picker (`PickVisualMedia`) and requests no broad media/storage permission. Only JPEG, PNG, and WebP are accepted; client, Firestore and Storage limits now agree at 8 MiB. Images are also limited to 12,000 pixels on either dimension and 40 megapixels total to reduce decompression-memory risks.
+- The client stages selected content in app-private cache, checks its byte signature, and uploads to `conversations/{conversationId}/{uid}/{messageId}`. Firestore stores this protected Storage path, MIME type, and byte size; it does not store a public download-token URL. Storage read rules require conversation membership. Objects are immutable after creation.
+- Image uploads are sent before the Firestore message batch. Reusing the same message ID makes retries idempotent if the object already uploaded. A Firestore failure after a successful upload can leave an orphaned Storage object; no trusted cleanup function is included.
+- Images download to app-private cache with `getFile`; Glide loads a 560×560 downsampled preview. Download tasks and image requests are canceled when rows are recycled. Upload/download failures can be retried while the message/source remains available.
+- Rules validate metadata, declared MIME type, size, path, and membership, but do not inspect image bytes or scan for malicious payloads. No end-to-end encryption is implemented.
+- Firebase Storage is not yet provisioned by this repository. The project owner must create/enable the bucket, deploy `storage.rules` and the updated `firestore.rules`, and enable Blaze billing before real Storage operations; no service configuration or billing change is performed by the app.
+- Emulator Rules tests use the isolated `demo-utechat` project and alternate ports so they do not modify production data or collide with the normal emulator ports: run `npm install`, then `firebase emulators:exec --config firebase.rules-test.json --project demo-utechat --only database,firestore,storage "node --test tests/firebase-rules.test.mjs"` from the repository root.
+
+### 9.4 G8 notifications and presence
+
+- Client receives FCM data-only payloads, requests Android 13+ notification permission, creates a channel, deduplicates by conversation/message ID, hides preview by default and opens the correct chat from a notification. FCM tokens are stored in a private per-user subcollection; clients can write/delete only their own token documents and cannot read tokens.
+- This repository has no Cloud Functions/server sender. It cannot send a push when a Firestore message is created until a trusted sender is deployed. Production Cloud Functions deployment requires Blaze; no server key is included in the APK.
+- Presence uses Realtime Database `/presence/{uid}` with one `connections/{pushId}` for the app process. `onDisconnect` removes connection entries and writes server `lastSeen`; visibility is opt-in and defaults off. When enabled, current rules let any signed-in UTEChat user read presence, not only friends.
+- Realtime Database must be created in Firebase Console and its URL included in the Android Firebase config. The profile toggle is disabled if the URL is missing. Rules are in `database.rules.json`; Auth/Firestore schema remains unchanged.
+- Presence updates with app foreground/connection lifecycle and has no periodic heartbeat. Notification preview preference is local to each device. A future sender must send data-only payloads with the target UID and message/conversation IDs.
+
+### 9.5 G9 one-to-one calls
+
+- Android uses Agora RTC `full-sdk` 4.7.0. Agora's current Android quickstart documents Java, Android API 21+, and the Agora Maven repository; this app uses minSdk 26. The app build has compiled against the selected artifact.
+- Firestore `calls/{callId}` is signaling only. It references an existing direct conversation, two participant UIDs, an opaque Agora channel equal to the call document ID, media type, state, and timestamps. Rules permit participant reads and only caller/callee state transitions; clients cannot delete records.
+- States include ringing, accepted, rejected, busy, ended, failed, and missed. Ringing calls expire after 45 seconds. Permission checks precede microphone/camera startup; the in-call foreground service keeps an accepted session alive when its Activity is backgrounded. Video is selected when starting a call; mid-call voice-to-video upgrade is not implemented because it needs a consent/signaling handshake.
+- `server/call-token` verifies Firebase ID tokens and accepted-call membership, then issues a short-lived Agora token. The App Certificate and Firebase Admin credentials must remain on the server; Android obtains the Firebase ID token from the authenticated SDK session. The endpoint is not deployed by this repository. Use HTTPS outside local Android Emulator debug.
+- Incoming call UI and busy/reject handling work while the app is foregrounded. This repository still has no trusted FCM sender for calls, so the app cannot promise incoming calls while backgrounded or killed. A process kill/crash can also leave an `accepted` signaling record stale; add trusted cleanup/heartbeat before production use. No group calling or screen sharing is included.

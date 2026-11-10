@@ -32,7 +32,7 @@
     <!-- Utility -->
     <color name="utechat_divider">#FFE2E8F0</color>
     <color name="utechat_error">#FFDC2626</color>
-    <color name="utechat_success">#FF16A34A</color>
+    <color name="utechat_success">#FF15803D</color>
     <color name="utechat_warning">#FFD97706</color>
     <color name="utechat_online_indicator">#FF22C55E</color>
     <color name="utechat_splash_muted">#CCFFFFFF</color>

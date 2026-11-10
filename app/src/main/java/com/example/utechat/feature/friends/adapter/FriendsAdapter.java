@@ -38,7 +38,8 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
                 @Override
                 public boolean areContentsTheSame(@NonNull User a, @NonNull User b) {
                     return a.getDisplayName().equals(b.getDisplayName())
-                            && a.isOnline() == b.isOnline();
+                            && a.isOnline() == b.isOnline()
+                            && a.getLastSeen() == b.getLastSeen();
                 }
             };
 
@@ -73,9 +74,16 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
 
             boolean online = user.isOnline();
             onlineIndicator.setVisibility(online ? View.VISIBLE : View.INVISIBLE);
-            tvStatus.setText(online
-                    ? itemView.getContext().getString(R.string.status_online)
-                    : itemView.getContext().getString(R.string.status_offline));
+            if (online) {
+                tvStatus.setText(R.string.status_online);
+            } else if (user.getLastSeen() > 0) {
+                CharSequence relative = android.text.format.DateUtils.getRelativeTimeSpanString(
+                        Math.min(user.getLastSeen(), System.currentTimeMillis()),
+                        System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS);
+                tvStatus.setText(itemView.getContext().getString(R.string.status_last_seen, relative));
+            } else {
+                tvStatus.setText(R.string.status_last_seen_unknown);
+            }
 
             itemView.setOnClickListener(v -> listener.onFriendClick(user));
         }

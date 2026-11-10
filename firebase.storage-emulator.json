@@ -1,0 +1,19 @@
+{
+  "storage": {
+    "rules": "storage.emulator.rules"
+  },
+  "emulators": {
+    "singleProjectMode": true,
+    "auth": {
+      "host": "0.0.0.0",
+      "port": 19099
+    },
+    "storage": {
+      "host": "0.0.0.0",
+      "port": 19199
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}

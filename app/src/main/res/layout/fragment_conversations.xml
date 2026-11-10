@@ -1,12 +1,152 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/utechat_background">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="@dimen/list_item_padding_h" android:paddingTop="@dimen/space_lg" android:paddingBottom="@dimen/space_md" android:text="@string/conversations_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="@dimen/list_item_padding_h" android:paddingBottom="@dimen/space_sm" android:text="@string/mock_data_notice" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" />
-    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rv_conversations" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="@dimen/space_md" />
-        <LinearLayout android:id="@+id/empty_state" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:padding="@dimen/space_xl" android:visibility="gone">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/empty_conversations_title" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_lg" android:textStyle="bold" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_sm" android:gravity="center" android:text="@string/empty_conversations_message" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_md" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/utechat_background"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="@dimen/list_item_padding_h"
+        android:paddingTop="@dimen/space_lg"
+        android:paddingBottom="@dimen/space_md"
+        android:text="@string/conversations_title"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_xxl"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_conversations_source"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/list_item_padding_h"
+        android:layout_marginBottom="@dimen/space_sm"
+        android:background="@color/utechat_surface_variant"
+        android:paddingHorizontal="@dimen/space_md"
+        android:paddingVertical="@dimen/space_sm"
+        android:text="@string/conversations_mock_notice"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_sm"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_conversations"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="@dimen/conversation_footer_space"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/progress_conversations"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:contentDescription="@string/conversations_loading"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/empty_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/space_xl"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/empty_conversations_title"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="@dimen/text_lg"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:gravity="center"
+                android:text="@string/empty_conversations_message"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="@dimen/text_md" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/error_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/space_xl"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/conversations_error_title"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="@dimen/text_lg"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_conversations_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:gravity="center"
+                android:text="@string/conversations_load_error"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="@dimen/text_md" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_retry_conversations"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/touch_target_min"
+                android:layout_marginTop="@dimen/space_md"
+                android:text="@string/btn_retry" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/load_more_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:background="@color/utechat_surface"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingVertical="@dimen/space_xs"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/progress_load_more"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/conversations_loading_more"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_paging_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="@color/utechat_error"
+                android:textSize="@dimen/text_sm"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_retry_page"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/touch_target_min"
+                android:text="@string/btn_retry"
+                android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

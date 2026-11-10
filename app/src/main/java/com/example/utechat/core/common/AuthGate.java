@@ -12,6 +12,12 @@ public final class AuthGate {
     public static boolean redirectIfSignedOut(Activity activity) {
         if (AuthRepositoryProvider.get(activity).getCurrentUser() != null) return false;
         Intent intent = new Intent(activity, LoginActivity.class);
+        Intent original = activity.getIntent();
+        if (original != null && original.hasExtra(Constants.EXTRA_CONVERSATION_ID)) {
+            intent.putExtra(Constants.EXTRA_CONVERSATION_ID, original.getStringExtra(Constants.EXTRA_CONVERSATION_ID));
+            intent.putExtra(Constants.EXTRA_CONVERSATION_TITLE, original.getStringExtra(Constants.EXTRA_CONVERSATION_TITLE));
+            intent.putExtra(Constants.EXTRA_CONVERSATION_TYPE, original.getStringExtra(Constants.EXTRA_CONVERSATION_TYPE));
+        }
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         activity.startActivity(intent);
         activity.finish();

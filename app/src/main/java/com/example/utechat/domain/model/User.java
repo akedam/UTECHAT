@@ -11,6 +11,8 @@ public class User {
     private String photoUrl;
     private String bio;
     private boolean online;
+    private long createdAt; // epoch millis; 0 when absent in legacy profiles
+    private long updatedAt; // epoch millis
     private long lastSeen; // epoch millis
 
     public User() {}
@@ -46,6 +48,12 @@ public class User {
 
     public long getLastSeen() { return lastSeen; }
     public void setLastSeen(long lastSeen) { this.lastSeen = lastSeen; }
+
+    public long getCreatedAt() { return createdAt; }
+    public void setCreatedAt(long createdAt) { this.createdAt = createdAt; }
+
+    public long getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(long updatedAt) { this.updatedAt = updatedAt; }
 
     /** Trả về chữ cái đầu tên hiển thị, dùng cho avatar placeholder */
     public String getInitials() {

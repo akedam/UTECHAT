@@ -10,3 +10,6 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+# Agora RTC JNI callbacks and native entry points.
+-keep class io.agora.** { *; }
+-dontwarn io.agora.**

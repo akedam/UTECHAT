@@ -128,6 +128,14 @@ public class RegisterActivity extends AppCompatActivity {
 
     private void navigateToMain() {
         Intent intent = new Intent(this, MainActivity.class);
+        if (getIntent() != null && getIntent().hasExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID)) {
+            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID,
+                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID));
+            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE,
+                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE));
+            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE,
+                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE));
+        }
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
     }

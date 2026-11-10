@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/utechat_background"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/space_md"
+    android:paddingTop="@dimen/space_lg"
+    android:paddingBottom="@dimen/space_lg">
+
+    <TextView
+        android:id="@+id/tv_call_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/call_screen_title"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_lg"
+        android:textStyle="bold" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="@dimen/space_md"
+        android:background="@color/utechat_surface_variant">
+
+        <FrameLayout
+            android:id="@+id/remote_video_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/call_remote_video_description"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/audio_peer_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite"
+                android:text="@string/call_generic_peer"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="@dimen/text_xl"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/local_video_container"
+            android:layout_width="112dp"
+            android:layout_height="156dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="@dimen/space_sm"
+            android:background="@color/utechat_surface"
+            android:contentDescription="@string/call_local_video_description"
+            android:elevation="4dp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tv_call_peer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:gravity="center"
+        android:text="@string/call_generic_peer"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_lg"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_call_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:accessibilityLiveRegion="polite"
+        android:gravity="center"
+        android:text="@string/call_state_preparing"
+        android:textColor="@color/utechat_on_surface_variant"
+        android:textSize="@dimen/text_md" />
+
+    <TextView
+        android:id="@+id/tv_call_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:gravity="center"
+        android:textColor="@color/utechat_error"
+        android:textSize="@dimen/text_sm"
+        android:visibility="gone" />
+
+    <ProgressBar
+        android:id="@+id/progress_call"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/space_sm"
+        android:contentDescription="@string/call_state_connecting"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/incoming_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_lg"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_reject_call"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginEnd="@dimen/space_sm"
+            android:layout_weight="1"
+            android:text="@string/call_reject"
+            android:textColor="@color/utechat_on_primary"
+            app:backgroundTint="@color/utechat_error" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_accept_call"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginStart="@dimen/space_sm"
+            android:layout_weight="1"
+            android:text="@string/call_accept"
+            app:backgroundTint="@color/utechat_success" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/in_call_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_lg"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_mic"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/call_mic_toggle"
+            android:text="@string/call_mic_toggle" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_camera"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginHorizontal="4dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/call_camera_toggle"
+            android:text="@string/call_camera_toggle"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_toggle_speaker"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginHorizontal="4dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/call_speaker_toggle"
+            android:text="@string/call_speaker_toggle" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_switch_camera"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/call_switch_camera"
+            android:text="@string/call_switch_camera"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_end_call"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/touch_target_min"
+        android:layout_marginTop="@dimen/space_sm"
+        android:text="@string/call_end"
+        android:visibility="gone"
+        app:backgroundTint="@color/utechat_error" />
+</LinearLayout>

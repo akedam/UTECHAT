@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,6 +19,8 @@ import com.example.utechat.R;
 import com.example.utechat.feature.profile.viewmodel.ProfileViewModel;
 import com.example.utechat.feature.auth.ui.LoginActivity;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
+import com.example.utechat.app.DevicePresenceManager;
+import com.example.utechat.feature.notifications.NotificationPreferences;
 
 /**
  * Fragment hiển thị hồ sơ cá nhân và cài đặt.
@@ -29,6 +32,8 @@ public class ProfileFragment extends Fragment {
     private ImageView ivAvatar;
     private TextView tvName, tvEmail, tvBio;
     private View btnEditProfile, btnLogout;
+    private SwitchMaterial switchPresence, switchMessagePreview;
+    private TextView tvPresenceSummary;
 
     @Nullable
     @Override
@@ -48,6 +53,9 @@ public class ProfileFragment extends Fragment {
         tvBio = view.findViewById(R.id.tv_bio);
         btnEditProfile = view.findViewById(R.id.btn_edit_profile);
         btnLogout = view.findViewById(R.id.btn_logout);
+        switchPresence = view.findViewById(R.id.switch_share_presence);
+        switchMessagePreview = view.findViewById(R.id.switch_message_previews);
+        tvPresenceSummary = view.findViewById(R.id.tv_presence_summary);
 
         viewModel = new ViewModelProvider(this).get(ProfileViewModel.class);
 
@@ -79,15 +87,27 @@ public class ProfileFragment extends Fragment {
     }
 
     private void setupListeners() {
+        switchPresence.setChecked(DevicePresenceManager.isVisible(requireContext()));
+        boolean presenceAvailable = DevicePresenceManager.isAvailable(requireContext());
+        switchPresence.setEnabled(presenceAvailable);
+        tvPresenceSummary.setText(presenceAvailable ? R.string.presence_summary : R.string.presence_setup_needed);
+        switchPresence.setOnCheckedChangeListener((button, checked) ->
+                DevicePresenceManager.setVisible(requireContext(), checked));
+        switchMessagePreview.setChecked(NotificationPreferences.showPreview(requireContext()));
+        switchMessagePreview.setOnCheckedChangeListener((button, checked) ->
+                NotificationPreferences.setShowPreview(requireContext(), checked));
         btnEditProfile.setOnClickListener(v -> {
             startActivity(new Intent(requireContext(), ProfileEditActivity.class));
         });
 
         btnLogout.setOnClickListener(v -> {
-            AuthRepositoryProvider.get(requireContext()).signOut();
-            Intent intent = new Intent(requireContext(), LoginActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
+            btnLogout.setEnabled(false);
+            AuthRepositoryProvider.get(requireContext()).signOut(() -> {
+                if (!isAdded()) return;
+                Intent intent = new Intent(requireContext(), LoginActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(intent);
+            });
         });
     }
 }

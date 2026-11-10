@@ -1,11 +1,198 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/utechat_background">
-    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@color/utechat_surface" app:navigationContentDescription="@string/cd_back" app:titleTextColor="@color/utechat_on_surface" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="@dimen/list_item_padding_h" android:paddingVertical="@dimen/space_xs" android:text="@string/mock_message_notice" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_xs" />
-    <androidx.recyclerview.widget.RecyclerView android:id="@+id/rv_messages" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingVertical="@dimen/space_sm" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:padding="@dimen/input_bar_padding" android:background="@color/utechat_surface">
-        <ImageButton android:id="@+id/btn_attach" android:layout_width="@dimen/touch_target_min" android:layout_height="@dimen/touch_target_min" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/cd_attach_file" android:src="@android:drawable/ic_menu_add" android:tint="@color/utechat_primary" />
-        <EditText android:id="@+id/et_message" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:background="@drawable/bg_input_bar" android:hint="@string/hint_message" android:imeOptions="actionSend" android:inputType="textCapSentences|textMultiLine" android:maxLines="4" android:paddingHorizontal="@dimen/space_md" android:paddingVertical="@dimen/space_sm" android:textColor="@color/utechat_on_surface" android:textColorHint="@color/utechat_on_surface_variant" android:textSize="@dimen/text_md" />
-        <ImageButton android:id="@+id/btn_send" android:layout_width="@dimen/touch_target_min" android:layout_height="@dimen/touch_target_min" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/cd_send_message" android:src="@android:drawable/ic_menu_send" android:tint="@color/utechat_primary" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/utechat_background"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/utechat_surface"
+        app:navigationContentDescription="@string/cd_back"
+        app:titleTextColor="@color/utechat_on_surface" />
+
+    <TextView
+        android:id="@+id/tv_chat_source"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/utechat_surface_variant"
+        android:paddingHorizontal="@dimen/list_item_padding_h"
+        android:paddingVertical="@dimen/space_sm"
+        android:text="@string/mock_message_notice"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="@dimen/text_sm"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/tv_chat_send_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/utechat_surface"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/list_item_padding_h"
+        android:paddingEnd="@dimen/space_xs"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_chat_send_error_message"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:paddingVertical="@dimen/space_xs"
+            android:textColor="@color/utechat_error"
+            android:textSize="@dimen/text_sm" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_retry_stream"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/touch_target_min"
+            android:minWidth="@dimen/touch_target_min"
+            android:text="@string/btn_retry"
+            android:textSize="@dimen/text_xs" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_messages"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingTop="@dimen/space_sm"
+            android:paddingBottom="@dimen/space_sm"
+            android:scrollbars="vertical"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/progress_chat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:contentDescription="@string/chat_loading"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/chat_error_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/space_xl"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/chat_error_title"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="@dimen/text_lg"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_chat_error"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:gravity="center"
+                android:text="@string/chat_load_error"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="@dimen/text_md" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_retry_chat"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/touch_target_min"
+                android:layout_marginTop="@dimen/space_md"
+                android:text="@string/btn_retry" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/empty_chat_state"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="@dimen/space_xl"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/empty_chat_title"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="@dimen/text_lg"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                android:gravity="center"
+                android:text="@string/empty_chat_message"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="@dimen/text_md" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progress_history"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:indeterminate="true"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/utechat_surface"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/input_bar_padding">
+
+        <EditText
+            android:id="@+id/et_message"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/bg_input_bar"
+            android:hint="@string/hint_message"
+            android:imeOptions="actionSend"
+            android:inputType="textCapSentences|textMultiLine"
+            android:maxLines="4"
+            android:minHeight="@dimen/touch_target_min"
+            android:paddingHorizontal="@dimen/space_md"
+            android:paddingVertical="@dimen/space_sm"
+            android:textColor="@color/utechat_on_surface"
+            android:textColorHint="@color/utechat_on_surface_variant"
+            android:textSize="@dimen/text_md" />
+
+        <ImageButton
+            android:id="@+id/btn_attach_image"
+            android:layout_width="@dimen/touch_target_min"
+            android:layout_height="@dimen/touch_target_min"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cd_attach_image"
+            android:src="@android:drawable/ic_menu_gallery"
+            android:tint="@color/utechat_primary" />
+
+        <ImageButton
+            android:id="@+id/btn_send"
+            android:layout_width="@dimen/touch_target_min"
+            android:layout_height="@dimen/touch_target_min"
+            android:layout_marginStart="@dimen/space_xs"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cd_send_message"
+            android:src="@android:drawable/ic_menu_send"
+            android:tint="@color/utechat_primary" />
     </LinearLayout>
 </LinearLayout>

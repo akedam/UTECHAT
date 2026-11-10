@@ -1,73 +1,114 @@
 package com.example.utechat.feature.conversations.viewmodel;
 
+import android.app.Application;
+
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.ViewModel;
 
+import com.example.utechat.R;
+import com.example.utechat.app.ConversationRepositoryProvider;
+import com.example.utechat.core.common.Resource;
+import com.example.utechat.data.auth.AuthRepositoryProvider;
 import com.example.utechat.domain.model.Conversation;
+import com.example.utechat.domain.model.ConversationPage;
+import com.example.utechat.domain.model.User;
+import com.example.utechat.domain.repository.ConversationRepository;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
-/**
- * ViewModel cho ConversationsFragment.
- * [MOCK] Trả về danh sách hội thoại mẫu.
- * TODO (G3): Inject ConversationRepository và observe Firestore real-time.
- */
-public class ConversationsViewModel extends ViewModel {
+public class ConversationsViewModel extends AndroidViewModel {
+    public static final int PAGE_SIZE = 20;
 
-    private final MutableLiveData<List<Conversation>> conversations = new MutableLiveData<>();
+    private final ConversationRepository repository;
+    private final String userId;
+    private final MutableLiveData<Resource<List<Conversation>>> conversations = new MutableLiveData<>();
+    private final MutableLiveData<Boolean> loadingMore = new MutableLiveData<>(false);
+    private final MutableLiveData<String> pagingError = new MutableLiveData<>();
+    private String nextCursor;
+    private boolean requestInFlight;
 
-    public ConversationsViewModel() {
-        loadMockConversations();
+    public ConversationsViewModel(@NonNull Application application) {
+        super(application);
+        repository = ConversationRepositoryProvider.get(application);
+        User currentUser = AuthRepositoryProvider.get(application).getCurrentUser();
+        userId = currentUser == null ? null : currentUser.getUid();
+        refresh();
     }
 
-    public LiveData<List<Conversation>> getConversations() {
-        return conversations;
+    public LiveData<Resource<List<Conversation>>> getConversations() { return conversations; }
+    public LiveData<Boolean> getLoadingMore() { return loadingMore; }
+    public LiveData<String> getPagingError() { return pagingError; }
+    public boolean isMock() { return repository.isMock(); }
+
+    public void refresh() {
+        if (requestInFlight) return;
+        requestInFlight = true;
+        nextCursor = null;
+        pagingError.setValue(null);
+        loadingMore.setValue(false);
+        conversations.setValue(Resource.loading());
+        requestPage(null, false);
     }
 
-    /** [MOCK] Dữ liệu mẫu có nhãn rõ ràng — sẽ được xóa ở G3. */
-    private void loadMockConversations() {
-        List<Conversation> list = new ArrayList<>();
+    public void loadNextPage() {
+        if (requestInFlight || nextCursor == null || nextCursor.isEmpty()) return;
+        pagingError.setValue(null);
+        loadingMore.setValue(true);
+        requestPage(nextCursor, true);
+    }
 
-        long now = System.currentTimeMillis();
+    public void retry() {
+        Resource<List<Conversation>> current = conversations.getValue();
+        if (current == null || !current.isSuccess() || current.getData() == null) {
+            refresh();
+        } else if (nextCursor != null) {
+            loadNextPage();
+        } else {
+            refresh();
+        }
+    }
 
-        Conversation c1 = new Conversation();
-        c1.setId("mock_conv_1");
-        c1.setType(Conversation.Type.DIRECT);
-        c1.setTitle("[Mock] Trần Thị B");
-        c1.setLastMessage("Hẹn chiều nhé!");
-        c1.setLastMessageAt(now - 5 * 60 * 1000L);  // 5 phút trước
-        c1.setUnreadCount(3);
-        list.add(c1);
+    private void requestPage(String cursor, boolean append) {
+        requestInFlight = true;
+        repository.loadPage(userId, cursor, PAGE_SIZE, new ConversationRepository.Callback() {
+            @Override
+            public void onSuccess(ConversationPage page) {
+                requestInFlight = false;
+                loadingMore.setValue(false);
+                List<Conversation> merged = append && conversations.getValue() != null
+                        && conversations.getValue().getData() != null
+                        ? new ArrayList<>(conversations.getValue().getData())
+                        : new ArrayList<>();
+                Set<String> ids = new HashSet<>();
+                for (Conversation item : merged) if (item.getId() != null) ids.add(item.getId());
+                for (Conversation item : page.getItems()) {
+                    if (item != null && item.getId() != null && ids.add(item.getId())) merged.add(item);
+                }
+                merged.sort((left, right) -> Long.compare(right.getLastMessageAt(), left.getLastMessageAt()));
+                nextCursor = page.getNextCursor();
+                conversations.setValue(Resource.success(merged));
+            }
 
-        Conversation c2 = new Conversation();
-        c2.setId("mock_conv_2");
-        c2.setType(Conversation.Type.GROUP);
-        c2.setTitle("[Mock] Nhóm LTDT K22");
-        c2.setLastMessage("Lê: Nộp bài trước 23h nha mọi người");
-        c2.setLastMessageAt(now - 30 * 60 * 1000L); // 30 phút trước
-        c2.setUnreadCount(12);
-        list.add(c2);
-
-        Conversation c3 = new Conversation();
-        c3.setId("mock_conv_3");
-        c3.setType(Conversation.Type.DIRECT);
-        c3.setTitle("[Mock] Phạm Văn C");
-        c3.setLastMessage("OK bạn ơi 👍");
-        c3.setLastMessageAt(now - 2 * 60 * 60 * 1000L); // 2 giờ trước
-        c3.setUnreadCount(0);
-        list.add(c3);
-
-        Conversation c4 = new Conversation();
-        c4.setId("mock_conv_4");
-        c4.setType(Conversation.Type.GROUP);
-        c4.setTitle("[Mock] Dự án Capstone");
-        c4.setLastMessage("Bạn: Mình đã push code lên rồi");
-        c4.setLastMessageAt(now - 24 * 60 * 60 * 1000L); // hôm qua
-        c4.setUnreadCount(0);
-        list.add(c4);
-
-        conversations.setValue(list);
+            @Override
+            public void onError(String message) {
+                requestInFlight = false;
+                loadingMore.setValue(false);
+                if (append && conversations.getValue() != null
+                        && conversations.getValue().getData() != null) {
+                    pagingError.setValue(message == null || message.trim().isEmpty()
+                            ? getApplication().getString(R.string.conversations_load_error)
+                            : message);
+                } else {
+                    conversations.setValue(Resource.error(message == null || message.trim().isEmpty()
+                            ? getApplication().getString(R.string.conversations_load_error)
+                            : message));
+                }
+            }
+        });
     }
 }

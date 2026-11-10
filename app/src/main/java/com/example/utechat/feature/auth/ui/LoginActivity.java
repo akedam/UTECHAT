@@ -78,7 +78,9 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin.setOnClickListener(v -> attemptLogin());
 
         tvGoToRegister.setOnClickListener(v -> {
-            startActivity(new Intent(this, RegisterActivity.class));
+            Intent register = new Intent(this, RegisterActivity.class);
+            copyNotificationTarget(getIntent(), register);
+            startActivity(register);
         });
     }
 
@@ -115,7 +117,18 @@ public class LoginActivity extends AppCompatActivity {
 
     private void navigateToMain() {
         Intent intent = new Intent(this, MainActivity.class);
+        copyNotificationTarget(getIntent(), intent);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
+    }
+
+    private void copyNotificationTarget(Intent source, Intent target) {
+        if (source == null || !source.hasExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID)) return;
+        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID,
+                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID));
+        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE,
+                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE));
+        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE,
+                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE));
     }
 }

@@ -19,9 +19,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://download.agora.io/maven/") }
     }
 }
 
 rootProject.name = "UTEChat"
 include(":app")
- 

@@ -1,0 +1,14 @@
+{
+  "database": { "rules": "database.rules.json" },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" },
+  "emulators": {
+    "singleProjectMode": true,
+    "hub": { "port": 14400 },
+    "logging": { "port": 14500 },
+    "firestore": { "port": 18080, "websocketPort": 18150 },
+    "storage": { "port": 19199 },
+    "database": { "port": 19000 },
+    "ui": { "enabled": true, "port": 14000 }
+  }
+}

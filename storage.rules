@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function conversationPath(conversationId) {
+      return /databases/(default)/documents/conversations/$(conversationId);
+    }
+    function memberPath(conversationId, uid) {
+      return /databases/(default)/documents/conversations/$(conversationId)/members/$(uid);
+    }
+    function isParticipant(conversationId) {
+      return request.auth != null
+        && firestore.exists(conversationPath(conversationId))
+        && request.auth.uid in firestore.get(conversationPath(conversationId)).data.participantIds
+        && ((firestore.get(conversationPath(conversationId)).data.type == 'direct'
+             && firestore.get(conversationPath(conversationId)).data.participantIds.size() == 2)
+            || (firestore.get(conversationPath(conversationId)).data.type == 'group'
+                && firestore.exists(memberPath(conversationId, request.auth.uid))));
+    }
+
+    match /conversations/{conversationId}/{ownerUid}/{messageId} {
+      allow read: if isParticipant(conversationId);
+      allow create: if request.auth != null
+        && request.auth.uid == ownerUid
+        && isParticipant(conversationId)
+        && resource == null
+        && request.resource.size > 0
+        && request.resource.size <= 8388608
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && request.resource.metadata.ownerUid == ownerUid
+        && request.resource.metadata.conversationId == conversationId
+        && request.resource.metadata.messageId == messageId;
+      // Media objects are immutable; a retry reuses the existing object and never overwrites it.
+      allow update, delete: if false;
+    }
+  }
+}

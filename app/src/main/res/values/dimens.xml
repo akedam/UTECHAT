@@ -28,6 +28,8 @@
     <!-- Chat bubble -->
     <dimen name="bubble_max_width_ratio">0.75</dimen> <!-- 75% màn hình -->
     <dimen name="bubble_corner_radius">12dp</dimen>
+    <dimen name="chat_bubble_max_width">280dp</dimen>
+    <dimen name="image_message_max_height">280dp</dimen>
     <dimen name="bubble_padding_h">12dp</dimen>
     <dimen name="bubble_padding_v">8dp</dimen>
 
@@ -40,6 +42,7 @@
     <dimen name="list_item_padding_h">16dp</dimen>
     <dimen name="online_indicator_size">10dp</dimen>
     <dimen name="unread_badge_size">20dp</dimen>
+    <dimen name="conversation_footer_space">104dp</dimen>
 
     <!-- Auth screen -->
     <dimen name="auth_logo_size">80dp</dimen>
