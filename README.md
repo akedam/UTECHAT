@@ -89,3 +89,4 @@ Lệnh trên dành cho kiểm thử cục bộ và dùng project ID giả `demo-
 - [Thông báo và presence](docs/NOTIFICATIONS_PRESENCE_G8.md)
 - [Firebase Storage Emulator](docs/STORAGE_EMULATOR.md)
 - [Agora token server](server/call-token/README.md)
+- [Nhận cuộc gọi và lịch sử cuộc gọi](docs/CALLS_FIX.md)

@@ -25,6 +25,7 @@ public final class FirebaseCallRepository implements CallRepository {
     private final FirebaseFirestore db;
     private final Map<String, ListenerRegistration> callListeners = new ConcurrentHashMap<>();
     private ListenerRegistration incomingRegistration;
+    private long incomingGeneration;
 
     public FirebaseCallRepository(Context context) {
         this.context = context.getApplicationContext();
@@ -85,17 +86,47 @@ public final class FirebaseCallRepository implements CallRepository {
 
     @Override public synchronized void listenIncoming(String uid, IncomingListener listener) {
         stopIncomingListener();
+        long generation = incomingGeneration;
         incomingRegistration = db.collection("calls").whereArrayContains("participants", uid)
                 .whereEqualTo("calleeUid", uid).whereEqualTo("status", "ringing")
                 .orderBy("createdAt", Query.Direction.ASCENDING).limit(10)
                 .addSnapshotListener((snapshot, error) -> {
-                    if (error != null || snapshot == null) return;
-                    for (DocumentSnapshot document : snapshot.getDocuments()) {
-                        CallSession call = map(document);
-                        if (call != null && call.expiresAt > System.currentTimeMillis()) listener.onIncoming(call);
-                        else if (call != null) updateStatus(call.id, "missed", new SilentCallback());
+                    if (generation != incomingGeneration) return;
+                    if (error != null) {
+                        android.util.Log.w("UTEChatCalls", "Incoming query failed: " + error.getCode());
+                        if (error.getCode() == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION)
+                            listenIncomingWithoutIndex(uid, listener, generation);
+                        return;
                     }
+                    deliverIncoming(snapshot, uid, listener);
                 });
+    }
+
+    // Single-field array queries are also covered by the existing participant read rule.
+    // Use this only while the production composite index is absent/building; never
+    // limit before filtering, since older finished calls could hide a ringing call.
+    private synchronized void listenIncomingWithoutIndex(String uid, IncomingListener listener, long generation) {
+        if (generation != incomingGeneration) return;
+        if (incomingRegistration != null) incomingRegistration.remove();
+        incomingRegistration = db.collection("calls").whereArrayContains("participants", uid)
+                .addSnapshotListener((snapshot, error) -> {
+                    if (generation != incomingGeneration) return;
+                    if (error != null) {
+                        android.util.Log.e("UTEChatCalls", "Incoming fallback failed: " + error.getCode());
+                        return;
+                    }
+                    deliverIncoming(snapshot, uid, listener);
+                });
+    }
+
+    private void deliverIncoming(com.google.firebase.firestore.QuerySnapshot snapshot, String uid, IncomingListener listener) {
+        if (snapshot == null) return;
+        for (DocumentSnapshot document : snapshot.getDocuments()) {
+            CallSession call = map(document);
+            if (call == null || !uid.equals(call.calleeUid) || !"ringing".equals(call.status)) continue;
+            if (call.expiresAt > System.currentTimeMillis()) listener.onIncoming(call);
+            else updateStatus(call.id, "missed", new SilentCallback());
+        }
     }
 
     @Override public void updateStatus(String callId, String status, Callback callback) {
@@ -110,13 +141,63 @@ public final class FirebaseCallRepository implements CallRepository {
             String uid = FirebaseAuth.getInstance().getUid();
             String caller = doc.getString("callerUid");
             String callee = doc.getString("calleeUid");
-            if (!doc.exists() || uid == null || !(uid.equals(caller) || uid.equals(callee)) || !allowed(old, status, uid, caller, callee))
+            if (!doc.exists() || uid == null || !(uid.equals(caller) || uid.equals(callee)))
+                throw new IllegalStateException("participant");
+            // Both peers may finish at once, or retry after an acknowledgement is lost.
+            // The first terminal transaction owns the single deterministic history row.
+            if (CallHistory.isTerminal(old)) return null;
+            if (!allowed(old, status, uid, caller, callee))
                 throw new IllegalStateException("transition");
+            String conversationId = doc.getString("conversationId");
+            DocumentReference conversation = db.collection("conversations").document(conversationId);
+            DocumentSnapshot parent = transaction.get(conversation);
+            DocumentSnapshot profile = transaction.get(db.collection("publicProfiles").document(uid));
+            long now = System.currentTimeMillis();
+            Long previousUpdate = doc.getLong("updatedAt");
+            long timestamp = Math.max(now, previousUpdate == null ? 0 : previousUpdate);
+            Long lastMessageAt = parent.getLong("lastMessageAt");
+            timestamp = Math.max(timestamp, lastMessageAt == null ? 0 : lastMessageAt);
             Map<String, Object> update = new HashMap<>();
-            update.put("status", status); update.put("updatedAt", System.currentTimeMillis());
+            update.put("status", status); update.put("updatedAt", timestamp);
+            if (CallHistory.isTerminal(status)) {
+                Long expiry = doc.getLong("expiresAt");
+                String content = CallHistory.text(doc.getString("mediaType"), old, status,
+                        expiry != null && now >= expiry);
+                String messageId = "call_" + callId;
+                DocumentReference message = conversation.collection("messages").document(messageId);
+                Map<String, Object> history = new HashMap<>();
+                history.put("senderId", uid);
+                history.put("senderName", profile.getString("displayName"));
+                history.put("type", "text"); history.put("content", content);
+                history.put("sentAt", timestamp); history.put("createdAt", timestamp);
+                history.put("readBy", java.util.Collections.singletonList(uid));
+                Map<String, Object> summary = new HashMap<>();
+                summary.put("lastMessage", content); summary.put("lastMessageType", "text");
+                summary.put("lastMessageAt", timestamp); summary.put("lastMessageId", messageId);
+                summary.put("lastMessageSenderId", uid); summary.put("updatedAt", timestamp);
+                transaction.set(message, history);
+                transaction.update(conversation, summary);
+            }
             transaction.update(ref, update); return null;
         }).addOnSuccessListener(unused -> callback.onSuccess(null))
-                .addOnFailureListener(error -> callback.onError(context.getString(R.string.call_network_error)));
+                .addOnFailureListener(error -> {
+                    android.util.Log.e("UTEChatCalls", "Call state/history transaction failed", error);
+                    // A concurrent peer can commit first. Rules may reject this
+                    // client's now-stale history writer before the SDK retries.
+                    // Verify both durable records rather than report a false failure.
+                    ref.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener(ended -> {
+                        String conversation = ended.getString("conversationId");
+                        if (!CallHistory.isTerminal(ended.getString("status")) || conversation == null) {
+                            callback.onError(context.getString(R.string.call_network_error)); return;
+                        }
+                        db.collection("conversations").document(conversation).collection("messages")
+                                .document("call_" + callId).get(com.google.firebase.firestore.Source.SERVER)
+                                .addOnSuccessListener(history -> {
+                                    if (history.exists()) callback.onSuccess(null);
+                                    else callback.onError(context.getString(R.string.call_network_error));
+                                }).addOnFailureListener(failed -> callback.onError(context.getString(R.string.call_network_error)));
+                    }).addOnFailureListener(failed -> callback.onError(context.getString(R.string.call_network_error)));
+                });
     }
 
     private boolean allowed(String old, String next, String uid, String caller, String callee) {
@@ -138,7 +219,7 @@ public final class FirebaseCallRepository implements CallRepository {
     }
 
     @Override public void removeListener(String callId) { ListenerRegistration r = callListeners.remove(callId); if (r != null) r.remove(); }
-    @Override public synchronized void stopIncomingListener() { if (incomingRegistration != null) incomingRegistration.remove(); incomingRegistration = null; }
+    @Override public synchronized void stopIncomingListener() { incomingGeneration++; if (incomingRegistration != null) incomingRegistration.remove(); incomingRegistration = null; }
     private static final class SilentCallback implements Callback {
         @Override public void onSuccess(CallSession call) { }
         @Override public void onError(String safeMessage) { }

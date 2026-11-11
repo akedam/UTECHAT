@@ -11,8 +11,8 @@ const port = Number(process.env.PORT || 8787);
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const appId = process.env.AGORA_APP_ID;
 const appCertificate = process.env.AGORA_APP_CERTIFICATE;
-if (!projectId || !appId || !appCertificate) {
-  throw new Error("Set FIREBASE_PROJECT_ID, AGORA_APP_ID, and AGORA_APP_CERTIFICATE in the server environment.");
+if (!projectId || !/^[a-fA-F0-9]{32}$/.test(appId || "") || !/^[a-fA-F0-9]{32}$/.test(appCertificate || "")) {
+  throw new Error("Configure real FIREBASE_PROJECT_ID, AGORA_APP_ID, and AGORA_APP_CERTIFICATE. Run configure.ps1 first; never use placeholder credentials.");
 }
 
 initializeApp({ credential: applicationDefault(), projectId });
@@ -40,6 +40,7 @@ async function readJson(req) {
 }
 
 async function issueToken(req, res) {
+  if (req.method === "GET" && req.url === "/healthz") return send(res, 200, { status: "configured" });
   if (req.method !== "POST" || req.url !== "/api/rtc-token") return send(res, 404, { error: "not-found" });
   const authorization = req.headers.authorization || "";
   if (!authorization.startsWith("Bearer ")) return send(res, 401, { error: "unauthorized" });

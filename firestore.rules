@@ -197,6 +197,22 @@ service cloud.firestore {
                 && getAfter(messagePath).data.pollQuestion == request.resource.data.lastMessage))
           && getAfter(messagePath).data.sentAt == request.resource.data.lastMessageAt;
       }
+      function validReadCursor() {
+        let before = resource.data.get('readStates', {});
+        let after = request.resource.data.readStates;
+        let cursor = after[request.auth.uid];
+        let oldCursor = before.get(request.auth.uid, {'readAt': 0});
+        let message = get(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(cursor.messageId));
+        return signedIn() && request.auth.uid in resource.data.participantIds
+          && (resource.data.type == 'direct' || isMember(conversationId))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readStates'])
+          && after is map && before is map
+          && after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+          && cursor is map && cursor.keys().hasOnly(['messageId', 'readAt'])
+          && cursor.messageId is string && cursor.readAt is int
+          && cursor.readAt >= oldCursor.readAt
+          && message.data.sentAt == cursor.readAt;
+      }
       function validGroupDetailsChange() {
         return resource.data.type == 'group' && isManager(conversationId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -274,6 +290,7 @@ service cloud.firestore {
       allow update: if (resource.data.type == 'direct' && directParticipant(resource.data) && validTextSummary())
         || (resource.data.type == 'group' && isMember(conversationId) && validTextSummary())
         || validGroupDetailsChange() || validMembershipChange() || validSelfLeave();
+      allow update: if validReadCursor();
       allow delete: if false;
 
       match /members/{memberUid} {

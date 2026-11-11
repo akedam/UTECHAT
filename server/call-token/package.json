@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "Development token endpoint for UTEChat one-to-one Agora calls",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=20" },
+  "scripts": { "start": "node --env-file-if-exists=.env server.js", "check": "node --check server.js" },
+  "engines": { "node": ">=22" },
   "dependencies": {
     "agora-token": "2.0.7",
     "firebase-admin": "^13.0.0"

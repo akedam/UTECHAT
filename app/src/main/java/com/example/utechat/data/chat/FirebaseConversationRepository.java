@@ -25,6 +25,19 @@ public final class FirebaseConversationRepository implements ConversationReposit
     }
 
     @Override
+    public Subscription listenFirstPage(String userId, int pageSize, Callback callback) {
+        if(userId==null){callback.onError(context.getString(R.string.auth_not_signed_in));return ()->{};}
+        int size=Math.max(1,Math.min(pageSize,50));
+        var registration=firestore.collection("conversations").whereArrayContains("participantIds",userId)
+                .orderBy("lastMessageAt",Query.Direction.DESCENDING).limit(size+1L)
+                .addSnapshotListener((snapshot,error)->{
+                    if(error!=null)callback.onError(context.getString(R.string.conversations_load_error));
+                    else if(snapshot!=null)callback.onSuccess(toPage(snapshot,size,userId));
+                });
+        return registration::remove;
+    }
+
+    @Override
     public void loadPage(String userId, String cursor, int pageSize, Callback callback) {
         if (userId == null || userId.trim().isEmpty()) {
             callback.onError(context.getString(R.string.auth_not_signed_in));
@@ -66,7 +79,9 @@ public final class FirebaseConversationRepository implements ConversationReposit
         for (int i = 0; i < visibleCount; i++) {
             DocumentSnapshot document = documents.get(i);
             try {
-                items.add(FirestoreConversationMapper.fromSnapshot(document, userId));
+                Conversation item=FirestoreConversationMapper.fromSnapshot(document, userId);
+                new ConversationReadState(context,userId).decorate(item,document.get("readStates"));
+                items.add(item);
             } catch (RuntimeException malformedRecord) {
                 // Ignore an incompatible legacy document; keep remaining valid conversations visible.
             }

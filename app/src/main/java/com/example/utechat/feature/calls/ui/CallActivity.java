@@ -58,6 +58,9 @@ public final class CallActivity extends AppCompatActivity {
     private boolean cameraMuted;
     private boolean speakerEnabled;
     private boolean endingRequested;
+    private boolean finishingScheduled;
+    private android.media.Ringtone ringtone;
+    private boolean peerLoaded;
 
     public static Intent outgoingIntent(Context context, String conversationId, String title, String mediaType) {
         return new Intent(context, CallActivity.class).putExtra(EXTRA_MODE, "outgoing")
@@ -88,11 +91,22 @@ public final class CallActivity extends AppCompatActivity {
         });
         timeout = this::handleTimeout;
         setContentView(R.layout.activity_call);
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        View root = findViewById(R.id.call_root);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v,insets)->{
+            androidx.core.graphics.Insets bars=insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                    | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
+        });
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(),root).setAppearanceLightStatusBars(false);
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(),root).setAppearanceLightNavigationBars(false);
         repository = CallRepositoryProvider.get(this);
         incoming = "incoming".equals(getIntent().getStringExtra(EXTRA_MODE));
         callId = getIntent().getStringExtra(EXTRA_CALL_ID);
         mediaType = getIntent().getStringExtra(EXTRA_MEDIA);
         if (!"video".equals(mediaType)) mediaType = "audio";
+        speakerEnabled = "video".equals(mediaType);
+        findViewById(R.id.btn_toggle_speaker).setSelected(speakerEnabled);
         peerTitle = getIntent().getStringExtra(EXTRA_TITLE);
         conversationId = getIntent().getStringExtra(EXTRA_CONVERSATION_ID);
         if (!UteChatApplication.claimActiveCall(callId == null ? "pending-outgoing" : callId)) {
@@ -102,6 +116,7 @@ public final class CallActivity extends AppCompatActivity {
                 "video".equals(mediaType) ? R.string.call_video_title : R.string.call_audio_title));
         ((TextView) findViewById(R.id.tv_call_peer)).setText(peerTitle == null || peerTitle.trim().isEmpty()
                 ? getString(R.string.call_generic_peer) : peerTitle);
+        ((TextView) findViewById(R.id.tv_audio_peer_name)).setText(((TextView) findViewById(R.id.tv_call_peer)).getText());
         findViewById(R.id.btn_accept_call).setOnClickListener(v -> requestMediaPermissions());
         findViewById(R.id.btn_reject_call).setOnClickListener(v -> rejectCall());
         findViewById(R.id.btn_end_call).setOnClickListener(v -> endCall());
@@ -111,6 +126,8 @@ public final class CallActivity extends AppCompatActivity {
         findViewById(R.id.btn_switch_camera).setOnClickListener(v -> { if (rtc != null) rtc.switchCamera(); });
         findViewById(R.id.btn_toggle_camera).setVisibility("video".equals(mediaType) ? View.VISIBLE : View.GONE);
         findViewById(R.id.btn_switch_camera).setVisibility("video".equals(mediaType) ? View.VISIBLE : View.GONE);
+        findViewById(R.id.in_call_actions).setVisibility(incoming ? View.GONE : View.VISIBLE);
+        findViewById(R.id.btn_end_call).setVisibility(incoming ? View.GONE : View.VISIBLE);
         findViewById(R.id.tv_call_title).setContentDescription(getString(
                 incoming ? ("video".equals(mediaType) ? R.string.call_incoming_video : R.string.call_incoming_audio)
                         : ("video".equals(mediaType) ? R.string.call_video_title : R.string.call_audio_title)));
@@ -126,10 +143,19 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void handleTimeout() {
-        if (call != null && "ringing".equals(call.status)) {
+        if (call != null && "ringing".equals(call.status) && !endingRequested) {
+            endingRequested = true;
             setStatus(R.string.call_state_missed);
-            repository.updateStatus(call.id, incoming ? "missed" : "ended", silentCallback());
-            finishSoon();
+            repository.updateStatus(call.id, incoming ? "missed" : "ended", new CallRepository.Callback() {
+                @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) finishSoon(); }
+                @Override public void onError(String error) {
+                    endingRequested = false;
+                    if (!isFinishing() && !isDestroyed()) {
+                        showError(R.string.call_network_error);
+                        handler.postDelayed(timeout, 5000L);
+                    }
+                }
+            });
         }
     }
 
@@ -168,6 +194,7 @@ public final class CallActivity extends AppCompatActivity {
                     return;
                 }
                 showProgress(false); call = created; callId = created.id;
+                startCameraPreview();
                 UteChatApplication.clearActiveCall("pending-outgoing");
                 UteChatApplication.setActiveCall(callId);
                 observeCall(callId); setStatus(R.string.call_state_ringing);
@@ -181,18 +208,52 @@ public final class CallActivity extends AppCompatActivity {
         });
     }
 
+    private void startCameraPreview() {
+        if (!"video".equals(mediaType) || cameraMuted || BuildConfig.AGORA_APP_ID.isEmpty()
+                || !hasPermission(Manifest.permission.CAMERA) || endingRequested) return;
+        try {
+            if (rtc == null) rtc = createRtcController();
+            FrameLayout local=findViewById(R.id.local_video_container);
+            rtc.previewLocal(BuildConfig.AGORA_APP_ID,local);
+            local.setVisibility(View.VISIBLE);
+        } catch (Exception error) {
+            showError(R.string.call_camera_preview_unavailable);
+        }
+    }
+
     private void observeCall(String id) {
         repository.listen(id, (updated, error) -> {
             if (isFinishing() || isDestroyed()) return;
             if (error != null) { showError(R.string.call_network_error); return; }
             if (updated == null) { showError(R.string.call_network_error); return; }
             call = updated; mediaType = updated.mediaType;
+            if (!peerLoaded) {
+                peerLoaded = true;
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("publicProfiles")
+                        .document(incoming ? updated.callerUid : updated.calleeUid).get().addOnSuccessListener(profile -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            String name = profile.getString("displayName");
+                            if (name != null && !name.trim().isEmpty()) {
+                                peerTitle = name;
+                                ((TextView) findViewById(R.id.tv_call_peer)).setText(name);
+                                ((TextView) findViewById(R.id.tv_audio_peer_name)).setText(name);
+                            }
+                            String photo = profile.getString("photoUrl");
+                            if (photo != null && photo.startsWith("https://")) {
+                                android.widget.ImageView avatar=findViewById(R.id.iv_call_avatar);
+                                avatar.setPadding(0,0,0,0);avatar.setImageTintList(null);
+                                com.bumptech.glide.Glide.with(avatar).load(photo).circleCrop()
+                                        .placeholder(R.drawable.bg_call_avatar).error(R.drawable.bg_call_avatar).into(avatar);
+                            }
+                        });
+            }
             if ("ringing".equals(updated.status)) {
-                if (incoming) { findViewById(R.id.incoming_actions).setVisibility(View.VISIBLE); setStatus(R.string.call_state_incoming); }
+                if (incoming) { startRingtone(); findViewById(R.id.incoming_actions).setVisibility(View.VISIBLE); setStatus(R.string.call_state_incoming); }
                 else { findViewById(R.id.btn_end_call).setVisibility(View.VISIBLE); setStatus(R.string.call_state_ringing); }
                 long remaining = updated.expiresAt - System.currentTimeMillis();
                 if (remaining <= 0) timeout.run(); else { handler.removeCallbacks(timeout); handler.postDelayed(timeout, remaining); }
             } else if ("accepted".equals(updated.status)) {
+                stopRingtone();
                 handler.removeCallbacks(timeout); findViewById(R.id.incoming_actions).setVisibility(View.GONE);
                 findViewById(R.id.in_call_actions).setVisibility(View.VISIBLE);
                 findViewById(R.id.btn_end_call).setVisibility(View.VISIBLE);
@@ -209,12 +270,13 @@ public final class CallActivity extends AppCompatActivity {
 
     private void acceptCall() {
         if (callId == null) return;
+        stopRingtone();
         findViewById(R.id.incoming_actions).setVisibility(View.GONE); showProgress(true);
         repository.updateStatus(callId, "accepted", new CallRepository.Callback() {
             @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) showProgress(false); }
             @Override public void onError(String error) {
                 if (isFinishing() || isDestroyed()) return;
-                showProgress(false); showError(R.string.call_network_error); findViewById(R.id.incoming_actions).setVisibility(View.VISIBLE);
+                showProgress(false); showError(R.string.call_network_error); findViewById(R.id.incoming_actions).setVisibility(View.VISIBLE); startRingtone();
             }
         });
     }
@@ -251,6 +313,50 @@ public final class CallActivity extends AppCompatActivity {
         });
     }
 
+    private AgoraCallController createRtcController() {
+        FrameLayout local = findViewById(R.id.local_video_container);
+        FrameLayout remote = findViewById(R.id.remote_video_container);
+        return new AgoraCallController(CallActivity.this, new AgoraCallController.Events() {
+                        @Override public void onJoined() { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed() || endingRequested) return;
+                            showProgress(false); setStatus(connected ? R.string.call_state_connected : R.string.call_state_connecting);
+                        }); }
+                        @Override public void onRemoteJoined(int remoteUid) { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed() || endingRequested) return;
+                            connected = true;
+                            setStatus(R.string.call_state_connected);
+                            if ("video".equals(call.mediaType)) {
+                                remote.setVisibility(View.VISIBLE); local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
+                                rtc.attachRemote(remoteUid, remote);
+                            }
+                        }); }
+                        @Override public void onRemoteVideoAvailable(boolean available) { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed() || endingRequested || !"video".equals(mediaType)) return;
+                            findViewById(R.id.audio_peer_state).setVisibility(available ? View.GONE : View.VISIBLE);
+                            findViewById(R.id.tv_call_header_status).setVisibility(available ? View.VISIBLE : View.GONE);
+                        }); }
+                        @Override public void onRemoteLeft() { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            findViewById(R.id.audio_peer_state).setVisibility(View.VISIBLE);
+                            findViewById(R.id.tv_call_header_status).setVisibility(View.GONE);
+                            remote.setVisibility(View.GONE);
+                            connected = false;
+                            setStatus(R.string.call_state_connecting);
+                        }); }
+                        @Override public void onReconnecting() { runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed()) setStatus(R.string.call_state_connecting);
+                        }); }
+                        @Override public void onTokenRefresh() { runOnUiThread(() -> refreshRtcToken(call)); }
+                        @Override public void onError() { runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed() && !endingRequested) {
+                                showProgress(false); showError(R.string.call_network_error);
+                                repository.updateStatus(call.id, "failed", silentCallback());
+                            }
+                        }); }
+                    });
+
+    }
+
     private void startMediaOnce() {
         if (startingMedia || connected || endingRequested || call == null) return;
         if (!hasPermission(Manifest.permission.RECORD_AUDIO) || ("video".equals(call.mediaType) && !hasPermission(Manifest.permission.CAMERA))) {
@@ -260,7 +366,6 @@ public final class CallActivity extends AppCompatActivity {
             showError(R.string.call_service_unconfigured); repository.updateStatus(call.id, "failed", silentCallback()); return;
         }
         startingMedia = true; showProgress(true); setStatus(R.string.call_state_connecting);
-        speakerEnabled = "video".equals(call.mediaType);
         try { androidx.core.content.ContextCompat.startForegroundService(this,
                 CallForegroundService.startIntent(this, "video".equals(call.mediaType))); }
         catch (RuntimeException serviceError) { startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
@@ -271,34 +376,14 @@ public final class CallActivity extends AppCompatActivity {
                 try {
                     FrameLayout local = findViewById(R.id.local_video_container);
                     FrameLayout remote = findViewById(R.id.remote_video_container);
-                    rtc = new AgoraCallController(CallActivity.this, new AgoraCallController.Events() {
-                        @Override public void onJoined() { runOnUiThread(() -> {
-                            if (isFinishing() || isDestroyed() || endingRequested) return;
-                            showProgress(false); setStatus(R.string.call_state_connected);
-                        }); }
-                        @Override public void onRemoteJoined(int remoteUid) { runOnUiThread(() -> {
-                            if (isFinishing() || isDestroyed() || endingRequested) return;
-                            connected = true;
-                            if ("video".equals(callSnapshot.mediaType)) {
-                                findViewById(R.id.audio_peer_state).setVisibility(View.GONE);
-                                remote.setVisibility(View.VISIBLE); local.setVisibility(View.VISIBLE);
-                                rtc.attachRemote(remoteUid, remote);
-                            }
-                        }); }
-                        @Override public void onRemoteLeft() { runOnUiThread(() -> {
-                            if (isFinishing() || isDestroyed()) return;
-                            findViewById(R.id.audio_peer_state).setVisibility(View.VISIBLE);
-                            ((TextView) findViewById(R.id.tv_call_status)).setText(R.string.call_state_connecting);
-                        }); }
-                        @Override public void onReconnecting() { runOnUiThread(() -> {
-                            if (!isFinishing() && !isDestroyed()) setStatus(R.string.call_state_connecting);
-                        }); }
-                        @Override public void onTokenRefresh() { runOnUiThread(() -> refreshRtcToken(callSnapshot)); }
-                        @Override public void onError() { runOnUiThread(() -> {
-                            if (!isFinishing() && !isDestroyed()) { showProgress(false); showError(R.string.call_network_error); }
-                        }); }
-                    });
-                    rtc.join(appId, token, channel, uid, "video".equals(callSnapshot.mediaType), speakerEnabled, local, remote);
+                    if (rtc == null) rtc = createRtcController();
+                    rtc.join(appId, token, channel, uid, "video".equals(callSnapshot.mediaType),
+                            speakerEnabled, micMuted, cameraMuted, local, remote);
+                    rtc.muteMic(micMuted);
+                    if ("video".equals(callSnapshot.mediaType)) {
+                        rtc.muteCamera(cameraMuted);
+                        local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
+                    }
                 } catch (Exception error) {
                     startingMedia = false; showProgress(false); showError(R.string.call_network_error);
                     repository.updateStatus(callSnapshot.id, "failed", silentCallback());
@@ -309,7 +394,7 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void refreshRtcToken(CallSession callSnapshot) {
-        if (rtc == null || call == null || endingRequested || isFinishing() || isDestroyed()
+        if (rtc == null || call == null || callSnapshot == null || endingRequested || isFinishing() || isDestroyed()
                 || !call.id.equals(callSnapshot.id)) return;
         new AgoraTokenClient().fetch(callSnapshot, new AgoraTokenClient.Callback() {
             @Override public void onToken(String appId, String token, String channel, int uid) {
@@ -325,12 +410,18 @@ public final class CallActivity extends AppCompatActivity {
         int label = micMuted ? R.string.call_mic_off : R.string.call_mic_on;
         findViewById(R.id.btn_toggle_mic).setContentDescription(getString(label));
         findViewById(R.id.btn_toggle_mic).setSelected(micMuted);
+        ((android.widget.ImageButton)findViewById(R.id.btn_toggle_mic)).setImageResource(
+                micMuted ? R.drawable.ic_call_mic_off : R.drawable.ic_call_mic);
     }
     private void toggleCamera() {
         cameraMuted = !cameraMuted; if (rtc != null) rtc.muteCamera(cameraMuted);
         int label = cameraMuted ? R.string.call_camera_off : R.string.call_camera_on;
         findViewById(R.id.btn_toggle_camera).setContentDescription(getString(label));
         findViewById(R.id.btn_toggle_camera).setSelected(cameraMuted);
+        ((android.widget.ImageButton)findViewById(R.id.btn_toggle_camera)).setImageResource(
+                cameraMuted ? R.drawable.ic_call_video_off : R.drawable.ic_video_outline);
+        if (cameraMuted) findViewById(R.id.local_video_container).setVisibility(View.GONE);
+        else if (rtc != null) startCameraPreview();
     }
     private void toggleSpeaker() {
         speakerEnabled = !speakerEnabled; if (rtc != null) rtc.speaker(speakerEnabled);
@@ -339,9 +430,36 @@ public final class CallActivity extends AppCompatActivity {
         findViewById(R.id.btn_toggle_speaker).setSelected(speakerEnabled);
     }
     private void showError(int textId) { TextView error = findViewById(R.id.tv_call_error); error.setText(textId); error.setVisibility(View.VISIBLE); }
-    private void setStatus(int textId) { ((TextView) findViewById(R.id.tv_call_status)).setText(textId); }
+    private void setStatus(int textId) {
+        ((TextView) findViewById(R.id.tv_call_status)).setText(textId);
+        ((TextView) findViewById(R.id.tv_call_header_status)).setText(textId);
+    }
     private void showProgress(boolean visible) { findViewById(R.id.progress_call).setVisibility(visible ? View.VISIBLE : View.GONE); }
-    private void finishSoon() { handler.postDelayed(this::finish, FINISH_DELAY_MS); }
+    private void finishSoon() {
+        if (finishingScheduled) return;
+        finishingScheduled = true; endingRequested = true;
+        handler.removeCallbacks(timeout); stopRingtone(); showProgress(false);
+        findViewById(R.id.incoming_actions).setVisibility(View.GONE);
+        findViewById(R.id.in_call_actions).setVisibility(View.GONE);
+        findViewById(R.id.btn_end_call).setEnabled(false);
+        if (rtc != null) { rtc.release(); rtc = null; }
+        try { stopService(new Intent(this, CallForegroundService.class)); } catch (RuntimeException ignored) { }
+        handler.postDelayed(this::finish, FINISH_DELAY_MS);
+    }
+    private void startRingtone() {
+        if (ringtone != null || endingRequested) return;
+        try {
+            ringtone = android.media.RingtoneManager.getRingtone(this,
+                    android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE));
+            if (ringtone != null) {
+                if (android.os.Build.VERSION.SDK_INT >= 28) ringtone.setLooping(true);
+                ringtone.play();
+            }
+        } catch (RuntimeException ignored) { ringtone = null; }
+    }
+    private void stopRingtone() {
+        if (ringtone != null) { ringtone.stop(); ringtone = null; }
+    }
     private CallRepository.Callback silentCallback() { return new CallRepository.Callback() {
         @Override public void onSuccess(CallSession ignored) { }
         @Override public void onError(String ignored) { }
@@ -351,6 +469,7 @@ public final class CallActivity extends AppCompatActivity {
         if (incoming && call != null && "ringing".equals(call.status)) rejectCall(); else endCall();
     }
     @Override protected void onDestroy() {
+        stopRingtone();
         handler.removeCallbacksAndMessages(null);
         if (isFinishing() && call != null && !endingRequested
                 && ("ringing".equals(call.status) || "accepted".equals(call.status))) {

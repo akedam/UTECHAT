@@ -2,7 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, query, where, runTransaction } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 import { get as getDatabaseValue, ref as databaseRef, set as setDatabaseValue } from 'firebase/database';
 
@@ -13,6 +13,99 @@ const firestorePort = Number(process.env.FIRESTORE_EMULATOR_PORT ?? 18080);
 const storagePort = Number(process.env.STORAGE_EMULATOR_PORT ?? 19199);
 const databasePort = Number(process.env.FIREBASE_DATABASE_EMULATOR_PORT ?? 19000);
 let testEnv;
+
+test('read cursors are owner-only, message-backed, monotonic and preserve other members', async () => {
+  const alice=testEnv.authenticatedContext('alice').firestore();
+  const bob=testEnv.authenticatedContext('bob').firestore();
+  const outsider=testEnv.authenticatedContext('mallory').firestore();
+  for(const [id,time] of [['read-cursor-new',1000],['read-cursor-old',900]]) {
+    await assertSucceeds(setDoc(doc(alice,'conversations',conversationId,'messages',id),{
+      senderId:'alice',senderName:'Alice',type:'text',content:'read cursor fixture',sentAt:time,createdAt:time,readBy:['alice'],
+    }));
+  }
+  await assertSucceeds(updateDoc(doc(bob,'conversations',conversationId),{
+    'readStates.bob':{messageId:'read-cursor-new',readAt:1000},
+  }));
+  await assertFails(updateDoc(doc(alice,'conversations',conversationId),{
+    'readStates.bob':{messageId:'read-cursor-old',readAt:900},
+  }));
+  await assertFails(updateDoc(doc(bob,'conversations',conversationId),{
+    'readStates.bob':{messageId:'read-cursor-old',readAt:900},
+  }));
+  await assertFails(updateDoc(doc(bob,'conversations',conversationId),{
+    'readStates.bob':{messageId:'read-cursor-new',readAt:999999},
+  }));
+  await assertFails(updateDoc(doc(bob,'conversations',conversationId),{
+    'readStates.bob':{messageId:'missing-message',readAt:1000},
+  }));
+  await assertFails(updateDoc(doc(outsider,'conversations',conversationId),{
+    'readStates.mallory':{messageId:'read-cursor-new',readAt:1000},
+  }));
+  await assertSucceeds(updateDoc(doc(alice,'conversations',conversationId),{
+    'readStates.alice':{messageId:'read-cursor-new',readAt:1000},
+  }));
+  const states=(await getDoc(doc(bob,'conversations',conversationId))).data().readStates;
+  assert.equal(states.bob.messageId,'read-cursor-new');
+  assert.equal(states.alice.messageId,'read-cursor-new');
+});
+
+test('incoming call fallback remains restricted to participants', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+  const outsider = testEnv.authenticatedContext('mallory').firestore();
+  const now = Date.now();
+  await assertSucceeds(setDoc(doc(alice, 'calls/rules-incoming'), {
+    conversationId, callerUid: 'alice', calleeUid: 'bob', participants: ['alice', 'bob'],
+    channelName: 'rules-incoming', mediaType: 'audio', status: 'ringing',
+    createdAt: now, updatedAt: now, expiresAt: now + 45000,
+  }));
+  const inbox = await assertSucceeds(getDocs(query(collection(bob, 'calls'), where('participants', 'array-contains', 'bob'))));
+  assert.ok(inbox.docs.some(row => row.id === 'rules-incoming'));
+  await assertFails(getDocs(query(collection(outsider, 'calls'), where('participants', 'array-contains', 'bob'))));
+  await assertFails(updateDoc(doc(alice, 'calls/rules-incoming'), { status: 'accepted', updatedAt: now + 1 }));
+  await assertSucceeds(updateDoc(doc(bob, 'calls/rules-incoming'), { status: 'accepted', updatedAt: now + 1 }));
+});
+
+test('ending a call and its chat history commit atomically once even when both peers finish', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+  const now = Date.now();
+  const callId = 'rules-call-history';
+  const call = doc(alice, 'calls', callId);
+  await assertSucceeds(setDoc(call, {
+    conversationId, callerUid: 'alice', calleeUid: 'bob', participants: ['alice', 'bob'],
+    channelName: callId, mediaType: 'audio', status: 'ringing',
+    createdAt: now, updatedAt: now, expiresAt: now + 45000,
+  }));
+  await assertSucceeds(updateDoc(doc(bob, 'calls', callId), { status: 'accepted', updatedAt: now + 1 }));
+  const messageId = 'call_' + callId;
+  const content = 'Cuộc gọi thoại đã kết thúc';
+  const endCall = (db, uid, name) => runTransaction(db, async tx => {
+    const ref = doc(db, 'calls', callId);
+    const snapshot = await tx.get(ref);
+    if (['ended', 'rejected', 'missed', 'failed', 'busy'].includes(snapshot.data().status)) return;
+    const timestamp = now + 2;
+    tx.set(doc(db, 'conversations', conversationId, 'messages', messageId), {
+      senderId: uid, senderName: name, type: 'text', content,
+      sentAt: timestamp, createdAt: timestamp, readBy: [uid],
+    });
+    tx.update(doc(db, 'conversations', conversationId), {
+      lastMessage: content, lastMessageType: 'text', lastMessageAt: timestamp,
+      lastMessageSenderId: uid, lastMessageId: messageId, updatedAt: timestamp,
+    });
+    tx.update(ref, { status: 'ended', updatedAt: timestamp });
+  }).catch(async error => {
+    // Same recovery as the Android repository after a conflicting peer wins.
+    const ended = await getDoc(doc(db, 'calls', callId));
+    const history = await getDoc(doc(db, 'conversations', conversationId, 'messages', messageId));
+    if (ended.data()?.status !== 'ended' || !history.exists()) throw error;
+  });
+  await assertSucceeds(Promise.all([endCall(alice, 'alice', 'Alice'), endCall(bob, 'bob', 'Bob')]));
+  await assertSucceeds(endCall(alice, 'alice', 'Alice'));
+  assert.equal((await getDoc(call)).data().status, 'ended');
+  assert.equal((await getDoc(doc(bob, 'conversations', conversationId, 'messages', messageId))).data().content, content);
+  assert.equal((await getDoc(doc(bob, 'conversations', conversationId))).data().lastMessageId, messageId);
+});
 
 before(async () => {
   testEnv = await initializeTestEnvironment({

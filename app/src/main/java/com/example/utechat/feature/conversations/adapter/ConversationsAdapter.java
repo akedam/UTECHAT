@@ -52,6 +52,7 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
                             && Objects.equals(a.getLastMessageType(), b.getLastMessageType())
                             && a.getLastMessageAt() == b.getLastMessageAt()
                             && a.getUnreadCount() == b.getUnreadCount()
+                            && a.hasUnreadMessages() == b.hasUnreadMessages()
                             && a.getType() == b.getType();
                 }
             };
@@ -117,14 +118,17 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             }
 
             int unreadCount = Math.max(0, conversation.getUnreadCount());
-            title.setTypeface(null, unreadCount > 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            boolean hasUnread=conversation.hasUnreadMessages();
+            int weight=hasUnread?android.graphics.Typeface.BOLD:android.graphics.Typeface.NORMAL;
+            title.setTypeface(null,weight);
+            preview.setTypeface(null,weight);
             preview.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.getContext(),
-                    unreadCount > 0 ? R.color.utechat_on_surface : R.color.utechat_on_surface_variant));
-            if (unreadCount > 0) {
+                    hasUnread ? R.color.utechat_on_surface : R.color.utechat_on_surface_variant));
+            if (hasUnread) {
                 unread.setVisibility(View.VISIBLE);
                 unread.setText(unreadCount > 99
                         ? itemView.getContext().getString(R.string.conversation_unread_many)
-                        : String.valueOf(unreadCount));
+                        : unreadCount>0?String.valueOf(unreadCount):"•");
             } else {
                 unread.setVisibility(View.GONE);
             }

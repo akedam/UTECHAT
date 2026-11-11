@@ -72,6 +72,8 @@ public class ChatActivity extends AppCompatActivity {
     private boolean forceScrollToBottom;
     private ChatPreferences chatPreferences;
     private ChatOptionsDialog optionsDialog;
+    private com.example.utechat.data.chat.ConversationReadState readState;
+    private boolean reading;
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.chat_call_menu, menu);
@@ -106,11 +108,14 @@ public class ChatActivity extends AppCompatActivity {
         bindViews();
         viewModel = new ViewModelProvider(this).get(ChatViewModel.class);
         viewModel.init(conversationId, conversationTitle);
+        if(!viewModel.isMock())readState=new com.example.utechat.data.chat.ConversationReadState(this,viewModel.getCurrentUserId());
         adapter = new MessagesAdapter(viewModel.getCurrentUserId(), viewModel.getCurrentUserName(),
                 message -> viewModel.retryMessage(message.getId()), viewModel::votePoll,
                 MediaRepositoryProvider.get(this));
         adapter.setGroupConversation("group".equalsIgnoreCase(conversationType));
         adapter.setPeerPhoto(getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO));
+        if (!"group".equalsIgnoreCase(conversationType)) adapter.setCallListener(media ->
+                startActivity(CallActivity.outgoingIntent(this, conversationId, conversationTitle, media)));
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         rvMessages.setLayoutManager(layoutManager);
@@ -186,6 +191,7 @@ public class ChatActivity extends AppCompatActivity {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 super.onScrolled(recyclerView, dx, dy);
+                markVisibleMessagesRead();
                 if (dy < 0 && layoutManager.findFirstVisibleItemPosition() <= 2
                         && Boolean.TRUE.equals(viewModel.getHasMoreHistory().getValue())) {
                     View first = layoutManager.findViewByPosition(layoutManager.findFirstVisibleItemPosition());
@@ -228,6 +234,7 @@ public class ChatActivity extends AppCompatActivity {
                     rvMessages.scrollToPosition(items.size() - 1);
                 }
                 forceScrollToBottom = false;
+                rvMessages.post(this::markVisibleMessagesRead);
             });
             loadingState.setVisibility(View.GONE);
             errorState.setVisibility(View.GONE);
@@ -248,6 +255,12 @@ public class ChatActivity extends AppCompatActivity {
             if (id.equals(adapter.getMessageAt(i).getId())) return i;
         }
         return -1;
+    }
+
+    private void markVisibleMessagesRead() {
+        if(!reading || readState==null || adapter==null || adapter.getItemCount()==0 || rvMessages.getVisibility()!=View.VISIBLE)return;
+        int last=adapter.getItemCount()-1;
+        if(layoutManager.findLastVisibleItemPosition()>=last)readState.markRead(conversationId,adapter.getMessageAt(last));
     }
 
     String conversationId() { return conversationId; }
@@ -366,10 +379,13 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        reading=true;
+        if(rvMessages!=null)rvMessages.post(this::markVisibleMessagesRead);
         UteChatApplication.setActiveChat(conversationId);
     }
 
     @Override protected void onPause() {
+        reading=false;
         UteChatApplication.setActiveChat(null);
         super.onPause();
     }

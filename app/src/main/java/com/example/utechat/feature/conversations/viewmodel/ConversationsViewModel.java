@@ -31,6 +31,9 @@ public class ConversationsViewModel extends AndroidViewModel {
     private final MutableLiveData<String> pagingError = new MutableLiveData<>();
     private String nextCursor;
     private boolean requestInFlight;
+    private ConversationRepository.Subscription subscription;
+    private int generation;
+    private boolean loadedOlder;
 
     public ConversationsViewModel(@NonNull Application application) {
         super(application);
@@ -47,6 +50,10 @@ public class ConversationsViewModel extends AndroidViewModel {
 
     public void refresh() {
         if (requestInFlight) return;
+        generation++;
+        if(subscription!=null)subscription.remove();
+        subscription=null;
+        loadedOlder=false;
         requestInFlight = true;
         nextCursor = null;
         pagingError.setValue(null);
@@ -75,27 +82,32 @@ public class ConversationsViewModel extends AndroidViewModel {
 
     private void requestPage(String cursor, boolean append) {
         requestInFlight = true;
-        repository.loadPage(userId, cursor, PAGE_SIZE, new ConversationRepository.Callback() {
+        int requestGeneration=generation;
+        ConversationRepository.Callback callback=new ConversationRepository.Callback() {
             @Override
             public void onSuccess(ConversationPage page) {
-                requestInFlight = false;
-                loadingMore.setValue(false);
-                List<Conversation> merged = append && conversations.getValue() != null
+                if(requestGeneration!=generation)return;
+                if(append || !Boolean.TRUE.equals(loadingMore.getValue()))requestInFlight = false;
+                if(append)loadingMore.setValue(false);
+                List<Conversation> existing = (append || loadedOlder) && conversations.getValue() != null
                         && conversations.getValue().getData() != null
                         ? new ArrayList<>(conversations.getValue().getData())
                         : new ArrayList<>();
-                Set<String> ids = new HashSet<>();
-                for (Conversation item : merged) if (item.getId() != null) ids.add(item.getId());
+                java.util.Map<String,Conversation> indexed=new java.util.LinkedHashMap<>();
+                for(Conversation item:existing)indexed.put(item.getId(),item);
                 for (Conversation item : page.getItems()) {
-                    if (item != null && item.getId() != null && ids.add(item.getId())) merged.add(item);
+                    if (item != null && item.getId() != null) indexed.put(item.getId(),item);
                 }
+                List<Conversation> merged=new ArrayList<>(indexed.values());
                 merged.sort((left, right) -> Long.compare(right.getLastMessageAt(), left.getLastMessageAt()));
-                nextCursor = page.getNextCursor();
+                if(append || !loadedOlder)nextCursor = page.getNextCursor();
+                if(append)loadedOlder=true;
                 conversations.setValue(Resource.success(merged));
             }
 
             @Override
             public void onError(String message) {
+                if(requestGeneration!=generation)return;
                 requestInFlight = false;
                 loadingMore.setValue(false);
                 if (append && conversations.getValue() != null
@@ -109,6 +121,9 @@ public class ConversationsViewModel extends AndroidViewModel {
                             : message));
                 }
             }
-        });
+        };
+        if(append)repository.loadPage(userId,cursor,PAGE_SIZE,callback);
+        else subscription=repository.listenFirstPage(userId,PAGE_SIZE,callback);
     }
+    @Override protected void onCleared(){generation++;if(subscription!=null)subscription.remove();super.onCleared();}
 }

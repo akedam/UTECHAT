@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -6,8 +8,15 @@ val storageEmulatorHost = providers.gradleProperty("utechatStorageEmulatorHost")
 val storageEmulatorPort = providers.gradleProperty("utechatStorageEmulatorPort").orElse("19199").get().toInt()
 val authEmulatorPort = providers.gradleProperty("utechatAuthEmulatorPort").orElse("19099").get().toInt()
 val useStorageEmulator = providers.gradleProperty("utechatUseStorageEmulator").orElse("true").get().toBooleanStrict()
-val agoraAppId = providers.gradleProperty("utechatAgoraAppId").orElse("").get()
-val agoraTokenServerUrl = providers.gradleProperty("utechatAgoraTokenServerUrl").orElse("").get()
+// Local public client settings; the App Certificate is never read by Android builds.
+val agoraLocal = Properties().apply {
+    val settings = rootProject.file("agora.local.properties")
+    if (settings.isFile) settings.inputStream().use { load(it) }
+}
+val agoraAppId = providers.gradleProperty("utechatAgoraAppId")
+    .orElse(agoraLocal.getProperty("utechatAgoraAppId", "")).get()
+val agoraTokenServerUrl = providers.gradleProperty("utechatAgoraTokenServerUrl")
+    .orElse(agoraLocal.getProperty("utechatAgoraTokenServerUrl", "")).get()
 
 // Apply only when the developer has supplied their own Firebase app configuration.
 if (file("google-services.json").exists()) {

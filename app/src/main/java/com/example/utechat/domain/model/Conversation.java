@@ -26,6 +26,9 @@ public class Conversation {
     private String lastMessageSenderId;
     private String lastMessageType;
     private int unreadCount;
+    private boolean unread;
+    public boolean hasUnreadMessages() { return unread || unreadCount > 0; }
+    public void setUnread(boolean unread) { this.unread = unread; }
     private List<String> participantIds;
     private String createdBy;
     private long createdAt;

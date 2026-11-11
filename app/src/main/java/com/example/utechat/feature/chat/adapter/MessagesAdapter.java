@@ -23,10 +23,13 @@ import java.util.Objects;
 
 public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolder> {
     private static final int VIEW_TYPE_SENT = 1, VIEW_TYPE_RECEIVED = 2,
-            VIEW_TYPE_SENT_IMAGE = 3, VIEW_TYPE_RECEIVED_IMAGE = 4, VIEW_TYPE_POLL = 5;
+            VIEW_TYPE_SENT_IMAGE = 3, VIEW_TYPE_RECEIVED_IMAGE = 4, VIEW_TYPE_POLL = 5, VIEW_TYPE_CALL = 6;
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm", Locale.getDefault());
     public interface RetryListener { void onRetry(Message message); }
     public interface VoteListener { void onVote(Message message, int optionIndex); }
+    public interface CallListener { void onCallAgain(String mediaType); }
+    private CallListener callListener;
+    public void setCallListener(CallListener listener) { callListener = listener; }
     private final String currentUserId, currentUserName;
     private final RetryListener retryListener;
     private final VoteListener voteListener;
@@ -46,11 +49,42 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         @Override public boolean areItemsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getId(),b.getId());}
         @Override public boolean areContentsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getSenderId(),b.getSenderId())&&Objects.equals(a.getSenderName(),b.getSenderName())&&Objects.equals(a.getType(),b.getType())&&Objects.equals(a.getContent(),b.getContent())&&Objects.equals(a.getMediaUrl(),b.getMediaUrl())&&Objects.equals(a.getLocalMediaUri(),b.getLocalMediaUri())&&Objects.equals(a.getPollOptions(),b.getPollOptions())&&Objects.equals(a.getPollVotes(),b.getPollVotes())&&a.getSentAt()==b.getSentAt()&&a.getUploadProgress()==b.getUploadProgress()&&a.getDeliveryStatus()==b.getDeliveryStatus();}
     };
-    @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.POLL)return VIEW_TYPE_POLL;if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
-    @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_POLL:return new PollHolder(inflater.inflate(R.layout.item_message_poll,parent,false));case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
-    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else if(holder instanceof PollHolder)((PollHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
+    @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.TEXT&&com.example.utechat.data.calls.CallHistory.isHistoryMessage(m.getId(),m.getContent()))return VIEW_TYPE_CALL;if(m.getType()==Message.Type.POLL)return VIEW_TYPE_POLL;if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
+    @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_CALL:return new CallHolder(inflater.inflate(R.layout.item_message_call,parent,false));case VIEW_TYPE_POLL:return new PollHolder(inflater.inflate(R.layout.item_message_poll,parent,false));case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
+    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof CallHolder)((CallHolder)holder).bind(m);else if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else if(holder instanceof PollHolder)((PollHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
     @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder){if(holder instanceof ImageHolder)((ImageHolder)holder).clear();super.onViewRecycled(holder);}
     private String formattedTime(Message m){return m.getSentAt()>0?TIME_FORMAT.format(new Date(m.getSentAt())):"";}
+
+    private final class CallHolder extends RecyclerView.ViewHolder {
+        final TextView title, time, again;
+        final ImageView icon;
+        final View card;
+        CallHolder(View view) {
+            super(view); title=view.findViewById(R.id.tv_call_history_title);
+            time=view.findViewById(R.id.tv_call_history_time); again=view.findViewById(R.id.btn_call_again);
+            icon=view.findViewById(R.id.iv_call_history_type);
+            // Reserve the same 26dp avatar + 8dp gap as an incoming text bubble.
+            int available=view.getResources().getDisplayMetrics().widthPixels - Math.round(58*view.getResources().getDisplayMetrics().density);
+            card=((android.widget.LinearLayout)view).getChildAt(0);
+            card.getLayoutParams().width=Math.min(card.getLayoutParams().width,available);
+        }
+        void bind(Message m) {
+            String media=com.example.utechat.data.calls.CallHistory.mediaType(m.getContent());
+            String caption=com.example.utechat.data.calls.CallHistory.cardTitle(m.getContent());
+            title.setText(caption.startsWith("Đã nhỡ") ? caption.replace("gọi ", "gọi\n") : caption);
+            time.setText(formattedTime(m));
+            icon.setImageResource("video".equals(media)?R.drawable.ic_call_missed_video:R.drawable.ic_call_missed_voice);
+            boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());
+            float density=itemView.getResources().getDisplayMetrics().density;
+            itemView.setPaddingRelative(Math.round((mine?12:46)*density),Math.round(3*density),
+                    Math.round(12*density),Math.round(3*density));
+            card.setBackgroundResource(mine?R.drawable.bg_call_history_sent:R.drawable.bg_call_history);
+            ((android.widget.LinearLayout)itemView).setGravity(mine?android.view.Gravity.END:android.view.Gravity.START);
+            again.setEnabled(callListener!=null);
+            again.setOnClickListener(v->{if(callListener!=null)callListener.onCallAgain(media);});
+            again.setContentDescription(itemView.getContext().getString(R.string.call_card_accessibility,caption,time.getText()));
+        }
+    }
 
     private final class TextHolder extends RecyclerView.ViewHolder{
         final TextView content,sender,time,status;final boolean sent;
