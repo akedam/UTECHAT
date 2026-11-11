@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">UTEChat</string>
     <string name="brand_initial">U</string>
@@ -5,8 +6,6 @@
     <string name="sample_name">[Mock] Nguyễn Văn A</string>
     <string name="sample_bio">Sinh viên Đại học Sư phạm Kỹ thuật TP.HCM</string>
     <string name="mock_student_name">Sinh viên UTE</string>
-
-    <!-- Auth -->
     <string name="login_title">Đăng nhập</string>
     <string name="login_subtitle">Chào mừng trở lại UTEChat</string>
     <string name="label_email">Email</string>
@@ -15,25 +14,23 @@
     <string name="label_confirm_password">Xác nhận mật khẩu</string>
     <string name="btn_login">Đăng nhập</string>
     <string name="btn_register">Đăng ký</string>
-    <string name="go_to_register">Chưa có tài khoản? <b>Đăng ký</b></string>
-    <string name="go_to_login">Đã có tài khoản? <b>Đăng nhập</b></string>
+    <string name="go_to_register">Chưa có tài khoản? <b>Đăng ký</b>
+    </string>
+    <string name="go_to_login">Đã có tài khoản? <b>Đăng nhập</b>
+    </string>
     <string name="register_title">Tạo tài khoản</string>
     <string name="register_subtitle">Tham gia UTEChat</string>
-
-    <!-- Validation errors -->
     <string name="error_email_required">Vui lòng nhập email</string>
     <string name="error_email_invalid">Email chưa đúng định dạng</string>
     <string name="error_password_required">Vui lòng nhập mật khẩu</string>
     <string name="error_name_required">Vui lòng nhập họ tên</string>
     <string name="error_password_too_short">Mật khẩu tối thiểu 6 ký tự</string>
     <string name="error_password_mismatch">Mật khẩu không khớp</string>
-
-    <!-- Bottom Navigation -->
     <string name="nav_conversations">Tin nhắn</string>
     <string name="nav_friends">Bạn bè</string>
     <string name="nav_profile">Hồ sơ</string>
-    <string name="nav_discover">Khám phá</string>
-    <string name="discover_title">Khám phá</string>
+    <string name="nav_discover">Cộng đồng</string>
+    <string name="discover_title">Cộng đồng</string>
     <string name="discover_subtitle">Nhóm của bạn · tạo nhóm và quản lý thành viên</string>
     <string name="mock_groups_title">Nhóm gợi ý · dữ liệu mẫu</string>
     <string name="group_ltdt">Lập trình di động K22</string>
@@ -69,8 +66,6 @@
     <string name="mock_chat_received_one">Chào bạn! Hôm nay học có vui không?</string>
     <string name="mock_chat_sent_one">Có chứ! Mình vừa làm xong bài tập Java 😄</string>
     <string name="mock_chat_received_two">Hay quá! Chiều có rảnh không, mình muốn hỏi bài</string>
-
-    <!-- Conversations -->
     <string name="conversations_title">Tin nhắn</string>
     <string name="empty_conversations_title">Chưa có hội thoại</string>
     <string name="empty_conversations_message">Hãy tìm bạn bè và bắt đầu trò chuyện!</string>
@@ -99,16 +94,12 @@
     <string name="mock_preview_friend_two">OK bạn ơi 👍</string>
     <string name="mock_conversation_project">[Mẫu] Dự án Capstone</string>
     <string name="mock_preview_project">Bạn: Mình đã push code lên rồi</string>
-
-    <!-- Friends -->
     <string name="friends_title">Bạn bè</string>
     <string name="empty_friends_title">Chưa có bạn bè</string>
     <string name="empty_friends_message">Tìm kiếm và thêm bạn bè để bắt đầu trò chuyện</string>
     <string name="status_online">Đang hoạt động</string>
     <string name="status_offline">Ngoại tuyến</string>
     <string name="btn_add_friend">Thêm bạn</string>
-
-    <!-- Profile -->
     <string name="profile_title">Hồ sơ</string>
     <string name="profile_no_bio">Chưa có giới thiệu</string>
     <string name="btn_edit_profile">Chỉnh sửa hồ sơ</string>
@@ -117,8 +108,6 @@
     <string name="label_bio">Giới thiệu bản thân</string>
     <string name="btn_save">Lưu</string>
     <string name="label_change_avatar">Đổi ảnh đại diện</string>
-
-    <!-- Chat -->
     <string name="hint_message">Nhắn tin…</string>
     <string name="btn_send">Gửi</string>
     <string name="btn_attach">Đính kèm</string>
@@ -150,12 +139,8 @@
     <string name="message_accessibility_sent">Đã gửi lúc %2$s: %1$s</string>
     <string name="message_accessibility_received">Tin nhắn từ %1$s lúc %3$s: %2$s</string>
     <string name="friends_mock_chat_unavailable">Bạn bè đang là dữ liệu mẫu; không mở chat thật từ mục này.</string>
-
-    <!-- Mock notice -->
     <string name="saved_mock_notice">[Mock] Lưu tạm thời — chưa kết nối server</string>
     <string name="mock_data_notice">[Mock] Dữ liệu mẫu</string>
-
-    <!-- Content descriptions for accessibility -->
     <string name="cd_avatar">Ảnh đại diện</string>
     <string name="cd_send_message">Gửi tin nhắn</string>
     <string name="cd_attach_file">Đính kèm tệp</string>
@@ -214,8 +199,6 @@
     <string name="groups_select_one_member">Chọn ít nhất một người bạn để tạo nhóm.</string>
     <string name="groups_owner_transfer_first">Chuyển quyền chủ nhóm cho thành viên khác trước khi rời nhóm.</string>
     <string name="groups_open_chat">Mở chat</string>
-
-    <!-- One-to-one calls -->
     <string name="call_audio_menu">Gọi thoại</string>
     <string name="call_video_menu">Gọi video</string>
     <string name="call_screen_title">Cuộc gọi UTEChat</string>
@@ -260,8 +243,6 @@
     <string name="call_notification_channel">Cuộc gọi</string>
     <string name="call_invalid_conversation">Chỉ có thể gọi trong hội thoại riêng.</string>
     <string name="call_generic_peer">Người dùng UTEChat</string>
-
-    <!-- Notifications and presence -->
     <string name="notifications_channel_id">chat_messages</string>
     <string name="notifications_channel_name">Tin nhắn</string>
     <string name="notifications_channel_description">Thông báo tin nhắn mới trong UTEChat</string>
@@ -280,4 +261,22 @@
     <string name="presence_setup_needed">Cần tạo Realtime Database trong Firebase Console rồi tải lại google-services.json.</string>
     <string name="status_last_seen">Hoạt động %1$s</string>
     <string name="status_last_seen_unknown">Ngoại tuyến</string>
+    <string name="ui_search">Tìm kiếm</string>
+    <string name="ui_new_chat">Tin nhắn mới</string>
+    <string name="ui_all">Tất cả</string>
+    <string name="ui_online">Trực tuyến</string>
+    <string name="ui_requests">Lời mời</string>
+    <string name="ui_edit_profile">Thông tin cá nhân</string>
+    <string name="ui_edit_summary">Cập nhật tên và giới thiệu của bạn</string>
+    <string name="ui_privacy">Quyền riêng tư</string>
+    <string name="ui_privacy_summary">Quản lý trạng thái hoạt động của bạn</string>
+    <string name="ui_notifications">Thông báo</string>
+    <string name="ui_notifications_summary">Tùy chỉnh nội dung thông báo tin nhắn</string>
+    <string name="ui_account">Tài khoản</string>
+    <string name="ui_account_summary">Thông tin đăng nhập và quản lý tài khoản</string>
+    <string name="ui_no_search_results">Không tìm thấy cuộc trò chuyện phù hợp</string>
+    <string name="ui_no_online">Chưa có bạn bè đang trực tuyến</string>
+    <string name="ui_no_requests">Chưa có lời mời kết bạn</string>
+    <string name="ui_call_friend">Gọi thoại</string>
+    <string name="ui_video_friend">Gọi video</string>
 </resources>

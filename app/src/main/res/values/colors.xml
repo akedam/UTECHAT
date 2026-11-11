@@ -6,8 +6,8 @@
 
     <!-- UTEChat Brand Colors -->
     <!-- Primary: deep blue-teal, inspired by trust and communication -->
-    <color name="utechat_primary">#FF0057B8</color>
-    <color name="utechat_primary_dark">#FF003F87</color>
+    <color name="utechat_primary">#FF078BFA</color>
+    <color name="utechat_primary_dark">#FF0788FF</color>
     <color name="utechat_primary_light">#FF5C8FE8</color>
     <color name="utechat_on_primary">#FFFFFFFF</color>
 
@@ -17,22 +17,22 @@
     <color name="utechat_on_secondary">#FFFFFFFF</color>
 
     <!-- Surface & Background -->
-    <color name="utechat_background">#FFF5F7FA</color>
+    <color name="utechat_background">#FFF3F4F6</color>
     <color name="utechat_surface">#FFFFFFFF</color>
-    <color name="utechat_surface_variant">#FFE8EDF5</color>
+    <color name="utechat_surface_variant">#FFF0F1F2</color>
     <color name="utechat_nav_selected">#FFE8F0FE</color>
-    <color name="utechat_nav_active">#FF0057B8</color>
-    <color name="utechat_on_surface">#FF1A1A2E</color>
-    <color name="utechat_on_surface_variant">#FF4A5568</color>
+    <color name="utechat_nav_active">#FF078BFA</color>
+    <color name="utechat_on_surface">#FF16181B</color>
+    <color name="utechat_on_surface_variant">#FF85898E</color>
 
     <!-- Chat bubble colors -->
-    <color name="utechat_bubble_sent">#FF0057B8</color>
+    <color name="utechat_bubble_sent">#FF078BFA</color>
     <color name="utechat_bubble_sent_text">#FFFFFFFF</color>
     <color name="utechat_bubble_received">#FFFFFFFF</color>
-    <color name="utechat_bubble_received_text">#FF1A1A2E</color>
+    <color name="utechat_bubble_received_text">#FF16181B</color>
 
     <!-- Utility -->
-    <color name="utechat_divider">#FFE2E8F0</color>
+    <color name="utechat_divider">#FFEDEEF0</color>
     <color name="utechat_error">#FFDC2626</color>
     <color name="utechat_success">#FF15803D</color>
     <color name="utechat_warning">#FFD97706</color>

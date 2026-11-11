@@ -38,6 +38,7 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         try { currentUser = FirebaseAuth.getInstance().getCurrentUser(); }
         catch (RuntimeException unavailable) { return; }
         if (currentUser == null || !recipientUid.equals(currentUser.getUid())) return;
+        if (new com.example.utechat.feature.chat.ui.ChatPreferences(this, conversationId).enabled("muted")) return;
         if (!NotificationPreferences.markEventSeen(this, conversationId + ":" + messageId)) return;
         if (UteChatApplication.isChatVisible(conversationId)) return;
 

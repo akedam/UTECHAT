@@ -1,21 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/utechat_background"
+    android:background="@drawable/bg_header_gradient"
     android:orientation="vertical"
-    android:fitsSystemWindows="true">
-
+    android:id="@+id/chat_root">
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/utechat_surface"
-        android:elevation="2dp"
+        android:layout_height="56dp"
+        android:background="@drawable/bg_header_gradient"
+        android:elevation="0dp"
         app:navigationContentDescription="@string/cd_back"
-        app:titleTextColor="@color/utechat_on_surface" />
-
+        app:titleTextColor="@color/white"
+        app:navigationIconTint="@color/white"
+        app:titleTextAppearance="@style/ChatToolbarTitle" />
     <TextView
         android:id="@+id/tv_chat_source"
         android:layout_width="match_parent"
@@ -27,7 +26,6 @@
         android:textColor="@color/utechat_on_surface"
         android:textSize="@dimen/text_sm"
         android:visibility="gone" />
-
     <LinearLayout
         android:id="@+id/tv_chat_send_error"
         android:layout_width="match_parent"
@@ -39,7 +37,6 @@
         android:paddingStart="@dimen/list_item_padding_h"
         android:paddingEnd="@dimen/space_xs"
         android:visibility="gone">
-
         <TextView
             android:id="@+id/tv_chat_send_error_message"
             android:layout_width="0dp"
@@ -48,7 +45,6 @@
             android:paddingVertical="@dimen/space_xs"
             android:textColor="@color/utechat_error"
             android:textSize="@dimen/text_sm" />
-
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_retry_stream"
             android:layout_width="wrap_content"
@@ -57,12 +53,11 @@
             android:text="@string/btn_retry"
             android:textSize="@dimen/text_xs" />
     </LinearLayout>
-
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
+        android:layout_weight="1"
+        android:background="@color/chat_canvas">
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rv_messages"
             android:layout_width="match_parent"
@@ -72,7 +67,6 @@
             android:paddingBottom="@dimen/space_sm"
             android:scrollbars="vertical"
             android:visibility="gone" />
-
         <ProgressBar
             android:id="@+id/progress_chat"
             android:layout_width="wrap_content"
@@ -80,7 +74,6 @@
             android:layout_gravity="center"
             android:contentDescription="@string/chat_loading"
             android:visibility="gone" />
-
         <LinearLayout
             android:id="@+id/chat_error_state"
             android:layout_width="match_parent"
@@ -89,7 +82,6 @@
             android:orientation="vertical"
             android:padding="@dimen/space_xl"
             android:visibility="gone">
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -97,7 +89,6 @@
                 android:textColor="@color/utechat_on_surface"
                 android:textSize="@dimen/text_lg"
                 android:textStyle="bold" />
-
             <TextView
                 android:id="@+id/tv_chat_error"
                 android:layout_width="wrap_content"
@@ -107,7 +98,6 @@
                 android:text="@string/chat_load_error"
                 android:textColor="@color/utechat_on_surface_variant"
                 android:textSize="@dimen/text_md" />
-
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_retry_chat"
                 android:layout_width="wrap_content"
@@ -115,7 +105,6 @@
                 android:layout_marginTop="@dimen/space_md"
                 android:text="@string/btn_retry" />
         </LinearLayout>
-
         <LinearLayout
             android:id="@+id/empty_chat_state"
             android:layout_width="match_parent"
@@ -124,7 +113,6 @@
             android:orientation="vertical"
             android:padding="@dimen/space_xl"
             android:visibility="gone">
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -132,7 +120,6 @@
                 android:textColor="@color/utechat_on_surface"
                 android:textSize="@dimen/text_lg"
                 android:textStyle="bold" />
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -142,51 +129,63 @@
                 android:textColor="@color/utechat_on_surface_variant"
                 android:textSize="@dimen/text_md" />
         </LinearLayout>
-
         <ProgressBar
-            android:id="@+id/progress_history"
-            style="?android:attr/progressBarStyleHorizontal"
+            android:id="@+id/progress_history" style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
             android:indeterminate="true"
             android:visibility="gone" />
     </FrameLayout>
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/utechat_surface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="@dimen/input_bar_padding">
-
+        android:padding="4dp">
+        <ImageButton
+            android:id="@+id/btn_chat_emoji"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_chat_smile"
+            android:padding="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_emoji"
+            android:tint="@color/utechat_on_surface_variant" />
         <EditText
             android:id="@+id/et_message"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/bg_input_bar"
+            android:background="@android:color/transparent"
             android:hint="@string/hint_message"
             android:imeOptions="actionSend"
             android:inputType="textCapSentences|textMultiLine"
             android:maxLines="4"
             android:minHeight="@dimen/touch_target_min"
-            android:paddingHorizontal="@dimen/space_md"
+            android:paddingHorizontal="8dp"
             android:paddingVertical="@dimen/space_sm"
             android:textColor="@color/utechat_on_surface"
             android:textColorHint="@color/utechat_on_surface_variant"
-            android:textSize="@dimen/text_md" />
-
+            android:textSize="17sp" />
+        <ImageButton
+            android:id="@+id/btn_chat_more"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_chat_more"
+            android:padding="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/chat_more"
+            android:tint="@color/utechat_on_surface_variant" />
         <ImageButton
             android:id="@+id/btn_attach_image"
             android:layout_width="@dimen/touch_target_min"
             android:layout_height="@dimen/touch_target_min"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/cd_attach_image"
-            android:src="@android:drawable/ic_menu_gallery"
-            android:tint="@color/utechat_primary" />
-
+            android:src="@drawable/ic_chat_gallery"
+            android:tint="@color/utechat_on_surface_variant" />
         <ImageButton
             android:id="@+id/btn_send"
             android:layout_width="@dimen/touch_target_min"
@@ -194,7 +193,7 @@
             android:layout_marginStart="@dimen/space_xs"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/cd_send_message"
-            android:src="@android:drawable/ic_menu_send"
+            android:src="@drawable/ic_chat_send"
             android:tint="@color/utechat_primary" />
     </LinearLayout>
 </LinearLayout>

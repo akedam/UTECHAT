@@ -2,23 +2,21 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="@dimen/list_item_gap"
-    android:layout_marginBottom="@dimen/list_item_gap"
-    android:minHeight="72dp"
-    android:background="@drawable/bg_list_item"
+    android:layout_marginTop="0dp"
+    android:layout_marginBottom="0dp"
+    android:minHeight="80dp"
+    android:background="@color/utechat_surface"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingHorizontal="@dimen/list_item_padding_h"
-    android:paddingVertical="@dimen/list_item_padding_v">
-
+    android:paddingVertical="12dp">
     <FrameLayout
-        android:layout_width="@dimen/avatar_size_md"
-        android:layout_height="@dimen/avatar_size_md"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:importantForAccessibility="no">
-
         <ImageView
             android:id="@+id/iv_conversation_avatar"
             android:layout_width="match_parent"
@@ -26,7 +24,6 @@
             android:contentDescription="@null"
             android:scaleType="centerCrop"
             android:visibility="gone" />
-
         <TextView
             android:id="@+id/tv_avatar_placeholder"
             android:layout_width="match_parent"
@@ -37,14 +34,12 @@
             android:textSize="@dimen/text_lg"
             android:textStyle="bold" />
     </FrameLayout>
-
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/space_md"
         android:layout_weight="1"
         android:orientation="vertical">
-
         <TextView
             android:id="@+id/tv_conversation_title"
             android:layout_width="match_parent"
@@ -52,9 +47,8 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/utechat_on_surface"
-            android:textSize="@dimen/text_md"
-            android:textStyle="bold" />
-
+            android:textSize="17sp"
+            android:textStyle="normal" />
         <TextView
             android:id="@+id/tv_last_message"
             android:layout_width="match_parent"
@@ -63,24 +57,21 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/utechat_on_surface_variant"
-            android:textSize="@dimen/text_sm" />
+            android:textSize="15sp" />
     </LinearLayout>
-
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/space_sm"
         android:gravity="center"
         android:orientation="vertical">
-
         <TextView
             android:id="@+id/tv_time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxLines="1"
             android:textColor="@color/utechat_on_surface_variant"
-            android:textSize="@dimen/text_xs" />
-
+            android:textSize="12sp" />
         <TextView
             android:id="@+id/tv_unread_count"
             android:layout_width="wrap_content"

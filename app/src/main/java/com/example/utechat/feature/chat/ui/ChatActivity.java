@@ -70,6 +70,8 @@ public class ChatActivity extends AppCompatActivity {
     private String pendingAnchorId;
     private int pendingAnchorOffset;
     private boolean forceScrollToBottom;
+    private ChatPreferences chatPreferences;
+    private ChatOptionsDialog optionsDialog;
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.chat_call_menu, menu);
@@ -88,6 +90,7 @@ public class ChatActivity extends AppCompatActivity {
         conversationTitle = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TITLE);
         conversationType = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TYPE);
         setContentView(R.layout.activity_chat);
+        applyChatInsets(getWindow(), findViewById(R.id.chat_root), this);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
@@ -95,6 +98,10 @@ public class ChatActivity extends AppCompatActivity {
             getSupportActionBar().setTitle(conversationTitle == null || conversationTitle.trim().isEmpty()
                     ? getString(R.string.conversation_unknown_title) : conversationTitle);
         }
+        toolbar.setNavigationIcon(R.drawable.ic_chat_back);
+        if (toolbar.getNavigationIcon() != null) toolbar.getNavigationIcon().setTint(getColor(R.color.white));
+        chatPreferences = new ChatPreferences(this, conversationId);
+        applyConversationAppearance();
 
         bindViews();
         viewModel = new ViewModelProvider(this).get(ChatViewModel.class);
@@ -102,6 +109,8 @@ public class ChatActivity extends AppCompatActivity {
         adapter = new MessagesAdapter(viewModel.getCurrentUserId(), viewModel.getCurrentUserName(),
                 message -> viewModel.retryMessage(message.getId()), viewModel::votePoll,
                 MediaRepositoryProvider.get(this));
+        adapter.setGroupConversation("group".equalsIgnoreCase(conversationType));
+        adapter.setPeerPhoto(getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO));
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         rvMessages.setLayoutManager(layoutManager);
@@ -128,6 +137,20 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
+        findViewById(R.id.btn_chat_more).setOnClickListener(v ->
+                new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_more)
+                        .setItems(new String[]{getString(R.string.cd_attach_image), getString(R.string.chat_create_poll)},
+                                (dialog, which) -> { if (which == 0) btnAttachImage.performClick(); else showCreatePollDialog(); })
+                        .setNegativeButton(android.R.string.cancel, null).show());
+        findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
+            String[] emojis = {"😀", "😂", "❤️", "👍", "🥰", "🎉", "😢", "🙏", "🔥", "😊", "🤔", "👋"};
+            new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_emoji_title).setItems(emojis, (d, which) -> {
+                int start = Math.max(0, etMessage.getSelectionStart());
+                int end = Math.max(0, etMessage.getSelectionEnd());
+                etMessage.getText().replace(Math.min(start, end), Math.max(start, end), emojis[which]);
+                etMessage.requestFocus();
+            }).show();
+        });
         btnSend.setOnClickListener(v -> sendCurrentText());
         btnAttachImage.setOnClickListener(v -> {
             if (!viewModel.canSendImage()) {
@@ -141,10 +164,12 @@ public class ChatActivity extends AppCompatActivity {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 btnSend.setEnabled(s != null && s.toString().trim().length() > 0);
+                btnSend.setVisibility(btnSend.isEnabled() ? View.VISIBLE : View.GONE);
             }
             @Override public void afterTextChanged(Editable s) { }
         });
         btnSend.setEnabled(false);
+        btnSend.setVisibility(View.GONE);
         etMessage.setOnEditorActionListener((textView, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendCurrentText();
@@ -223,6 +248,51 @@ public class ChatActivity extends AppCompatActivity {
             if (id.equals(adapter.getMessageAt(i).getId())) return i;
         }
         return -1;
+    }
+
+    String conversationId() { return conversationId; }
+
+    void scrollToMessage(String id) {
+        int position = findMessage(id);
+        if (position >= 0) layoutManager.scrollToPositionWithOffset(position, getResources().getDimensionPixelSize(R.dimen.space_md));
+    }
+
+    void applyConversationAppearance() {
+        if (chatPreferences == null) return;
+        String fallback = conversationTitle == null || conversationTitle.trim().isEmpty()
+                ? getString(R.string.conversation_unknown_title) : conversationTitle;
+        if (getSupportActionBar() != null) getSupportActionBar().setTitle(chatPreferences.title(fallback));
+        View messages = findViewById(R.id.rv_messages);
+        if (messages != null) ((View) messages.getParent()).setBackgroundColor(chatPreferences.wallpaper());
+    }
+
+    static void applyChatInsets(android.view.Window window, View root, android.content.Context context) {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                    | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            int bottom = Math.max(bars.bottom, insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom);
+            view.setPadding(bars.left, bars.top, bars.right, bottom);
+            android.graphics.drawable.LayerDrawable background = new android.graphics.drawable.LayerDrawable(
+                    new android.graphics.drawable.Drawable[]{
+                            androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.bg_header_gradient),
+                            new android.graphics.drawable.ColorDrawable(androidx.core.content.ContextCompat.getColor(context,R.color.utechat_surface))});
+            background.setLayerGravity(1, android.view.Gravity.BOTTOM); background.setLayerHeight(1, bottom);
+            view.setBackground(background);
+            return insets;
+        });
+        androidx.core.view.WindowCompat.getInsetsController(window, root).setAppearanceLightStatusBars(false);
+        androidx.core.view.WindowCompat.getInsetsController(window, root).setAppearanceLightNavigationBars(true);
+        androidx.core.view.ViewCompat.requestApplyInsets(root);
+    }
+
+    private void showChatOptions() {
+        if (optionsDialog != null && optionsDialog.isShowing()) return;
+        optionsDialog = new ChatOptionsDialog(this, chatPreferences,
+                conversationTitle == null ? getString(R.string.conversation_unknown_title) : conversationTitle,
+                getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO),
+                "group".equalsIgnoreCase(conversationType), adapter.getCurrentList());
+        optionsDialog.show();
     }
 
     private void showCreatePollDialog() {
@@ -306,8 +376,8 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        if (item.getItemId() == R.id.action_create_poll) {
-            showCreatePollDialog();
+        if (item.getItemId() == R.id.action_chat_options) {
+            showChatOptions();
             return true;
         }
         if (item.getItemId() == R.id.action_voice_call || item.getItemId() == R.id.action_video_call) {
@@ -324,5 +394,10 @@ public class ChatActivity extends AppCompatActivity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override protected void onDestroy() {
+        if (optionsDialog != null) optionsDialog.dismiss();
+        super.onDestroy();
     }
 }

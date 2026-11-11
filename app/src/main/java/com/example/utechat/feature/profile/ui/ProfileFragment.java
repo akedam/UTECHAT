@@ -61,6 +61,22 @@ public class ProfileFragment extends Fragment {
 
         observeViewModel();
         setupListeners();
+        View privacy = view.findViewById(R.id.layout_privacy);
+        View notifications = view.findViewById(R.id.layout_notifications);
+        privacy.setVisibility(View.GONE);
+        notifications.setVisibility(View.GONE);
+        view.findViewById(R.id.row_privacy).setOnClickListener(v ->
+                privacy.setVisibility(privacy.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        view.findViewById(R.id.row_notifications).setOnClickListener(v ->
+                notifications.setVisibility(notifications.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        view.findViewById(R.id.btn_profile_settings).setOnClickListener(v -> {
+            privacy.setVisibility(View.VISIBLE);
+            notifications.setVisibility(View.VISIBLE);
+            privacy.requestFocus();
+            privacy.getParent().requestChildFocus(privacy, privacy);
+        });
+        ivAvatar.setOnClickListener(v -> btnEditProfile.performClick());
+        tvName.setOnClickListener(v -> btnEditProfile.performClick());
     }
 
     @Override
@@ -77,7 +93,19 @@ public class ProfileFragment extends Fragment {
             tvBio.setText(user.getBio().isEmpty()
                     ? getString(R.string.profile_no_bio)
                     : user.getBio());
-            // TODO (G4): Load avatar với Glide từ user.getPhotoUrl()
+            String photo = user.getPhotoUrl();
+            if (photo != null && photo.startsWith("https://")) {
+                ivAvatar.setPadding(0, 0, 0, 0);
+                ivAvatar.setImageTintList(null);
+                com.bumptech.glide.Glide.with(ivAvatar).load(photo).circleCrop()
+                        .placeholder(R.drawable.ic_nav_profile).error(R.drawable.ic_nav_profile).into(ivAvatar);
+            } else {
+                com.bumptech.glide.Glide.with(ivAvatar).clear(ivAvatar);
+                int padding = Math.round(20 * getResources().getDisplayMetrics().density);
+                ivAvatar.setPadding(padding, padding, padding, padding);
+                ivAvatar.setImageResource(R.drawable.ic_nav_profile);
+                ivAvatar.setImageTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE));
+            }
         });
         viewModel.getProfileError().observe(getViewLifecycleOwner(), message -> {
             if (message != null && !message.isEmpty()) {

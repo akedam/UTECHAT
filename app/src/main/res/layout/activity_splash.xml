@@ -1,54 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/utechat_primary">
-
-    <!-- Logo / App Icon placeholder -->
-    <TextView
-        android:id="@+id/tv_logo"
-        android:layout_width="@dimen/auth_logo_size"
-        android:layout_height="@dimen/auth_logo_size"
-        android:background="@drawable/bg_avatar_circle_white"
-        android:gravity="center"
-        android:text="@string/brand_initial"
-        android:textColor="@color/utechat_primary"
-        android:textSize="@dimen/text_xxl"
-        android:textStyle="bold"
-        android:contentDescription="@string/app_name"
-        app:layout_constraintBottom_toTopOf="@id/tv_app_name"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_chainStyle="packed"
-        app:layout_constraintVertical_bias="0.42" />
-
+    android:background="@color/white">
     <TextView
         android:id="@+id/tv_app_name"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/brand_tagline"
-        android:textColor="@color/white"
-        android:textSize="@dimen/text_xxl"
-        android:textStyle="bold"
-        android:letterSpacing="0.05"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tv_logo" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="@dimen/space_xl"
-        android:text="@string/app_name"
-        android:textColor="@color/utechat_splash_muted"
-        android:textSize="@dimen/text_sm"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+        android:layout_gravity="center"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:text="@string/launch_brand_name"
+        android:textColor="#078BFA"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+</FrameLayout>

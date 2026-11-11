@@ -14,6 +14,7 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/utechat_divider" />
     <!-- Bottom Navigation -->
     <LinearLayout
         android:id="@+id/bottom_nav"
@@ -21,7 +22,7 @@
         android:layout_height="@dimen/bottom_nav_height"
         android:layout_gravity="bottom"
         android:background="@color/utechat_surface"
-        android:elevation="8dp"
+        android:elevation="0dp"
         android:orientation="horizontal">
 
         <LinearLayout

@@ -1,6 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="start" android:orientation="vertical" android:paddingHorizontal="@dimen/space_md" android:paddingVertical="@dimen/space_xs">
-    <TextView android:id="@+id/tv_sender_name" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/utechat_primary_dark" android:textSize="@dimen/text_xs" android:textStyle="bold" />
-    <TextView android:id="@+id/tv_message_content" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxWidth="@dimen/chat_bubble_max_width" android:background="@drawable/bg_bubble_received" android:paddingHorizontal="@dimen/bubble_padding_h" android:paddingVertical="@dimen/bubble_padding_v" android:textColor="@color/utechat_bubble_received_text" android:textSize="@dimen/text_md" android:breakStrategy="high_quality" />
-    <TextView android:id="@+id/tv_message_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_xs" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_xs" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="start"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="3dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="start">
+        <TextView
+            android:id="@+id/tv_message_avatar"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="3dp"
+            android:gravity="center"
+            android:background="@drawable/bg_avatar_circle_accent"
+            android:textColor="@color/white"
+            android:textSize="11sp"
+            android:importantForAccessibility="no" />
+        <ImageView
+            android:id="@+id/iv_message_avatar"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="3dp"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:background="@drawable/bg_bubble_received">
+            <TextView
+                android:id="@+id/tv_sender_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/utechat_primary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+            <TextView
+                android:id="@+id/tv_message_content"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="@dimen/chat_bubble_max_width"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="16sp"
+                android:breakStrategy="high_quality" />
+            <TextView
+                android:id="@+id/tv_message_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

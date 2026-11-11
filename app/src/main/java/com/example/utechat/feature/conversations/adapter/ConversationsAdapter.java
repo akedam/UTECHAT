@@ -90,6 +90,10 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
         void bind(Conversation conversation) {
             String safeTitle = hasText(conversation.getTitle())
                     ? conversation.getTitle().trim() : itemView.getContext().getString(R.string.conversation_unknown_title);
+            com.example.utechat.feature.chat.ui.ChatPreferences prefs = new com.example.utechat.feature.chat.ui.ChatPreferences(itemView.getContext(), conversation.getId());
+            safeTitle = prefs.title(safeTitle);
+            if (prefs.enabled("pinned")) safeTitle = "⌁ " + safeTitle;
+            else if (prefs.enabled("favorite")) safeTitle = "☆ " + safeTitle;
             title.setText(safeTitle);
             preview.setText(previewText(conversation));
             String formattedTime = formatTime(conversation.getLastMessageAt());
@@ -113,6 +117,9 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             }
 
             int unreadCount = Math.max(0, conversation.getUnreadCount());
+            title.setTypeface(null, unreadCount > 0 ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            preview.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.getContext(),
+                    unreadCount > 0 ? R.color.utechat_on_surface : R.color.utechat_on_surface_variant));
             if (unreadCount > 0) {
                 unread.setVisibility(View.VISIBLE);
                 unread.setText(unreadCount > 99

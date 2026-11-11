@@ -58,11 +58,14 @@
         <item name="android:duplicateParentState">true</item>
     </style>
 
-    <!-- Splash screen theme (no action bar, branded background) -->
+    <!-- Keep the launch screen white in both light and dark mode. -->
     <style name="Theme.UTEChat.Splash" parent="Theme.UTEChat">
-        <item name="android:windowBackground">@color/utechat_primary</item>
-        <item name="android:statusBarColor">@color/utechat_primary</item>
-        <item name="android:navigationBarColor">@color/utechat_primary</item>
+        <item name="android:windowBackground">@color/white</item>
+        <item name="android:statusBarColor">@color/white</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 
     <!-- Action bar themed screens (Login, Register, Chat header) -->

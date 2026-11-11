@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="chat_canvas">#E3E8EC</color>
+    <color name="chat_sent_fill">#D2F1FD</color>
+    <color name="chat_sent_stroke">#BBD9E2</color>
+    <string name="chat_options">Tùy chọn</string>
+    <string name="chat_more">Thêm tiện ích</string>
+    <string name="chat_emoji">Biểu tượng cảm xúc</string>
+    <string name="chat_unavailable">Chưa hỗ trợ</string>
+    <string name="chat_search_messages">Tìm tin nhắn</string>
+    <string name="chat_peer_profile">Trang cá nhân</string>
+    <string name="chat_wallpaper">Đổi hình nền</string>
+    <string name="chat_mute">Tắt thông báo</string>
+    <string name="chat_nickname">Đổi tên gợi nhớ</string>
+    <string name="chat_local_setting">Chỉ áp dụng trên thiết bị này</string>
+    <string name="chat_favorite">Đánh dấu liên hệ nhanh</string>
+    <string name="chat_shared_diary">Nhật ký chung</string>
+    <string name="chat_media">Ảnh, file, link</string>
+    <string name="chat_create_group">Tạo nhóm</string>
+    <string name="chat_add_group">Thêm vào nhóm</string>
+    <string name="chat_common_groups">Xem nhóm chung</string>
+    <string name="chat_translate">Dịch trò chuyện</string>
+    <string name="chat_pin">Ghim trò chuyện</string>
+    <string name="chat_hide">Ẩn trò chuyện</string>
+    <string name="chat_incoming_calls">Báo cuộc gọi đến</string>
+    <string name="chat_personal_settings">Cài đặt cá nhân</string>
+    <string name="chat_protection">Bảo vệ trò chuyện</string>
+    <string name="chat_report">Báo xấu</string>
+    <string name="chat_block">Quản lý chặn</string>
+    <string name="chat_storage">Dung lượng trò chuyện</string>
+    <string name="chat_delete_history">Xóa lịch sử trò chuyện</string>
+    <string name="chat_loaded_scope">Trong các tin nhắn đã tải. Cuộn lên trong cuộc trò chuyện để tải thêm lịch sử.</string>
+    <string name="chat_no_results">Không có tin nhắn phù hợp</string>
+    <string name="chat_no_media">Chưa có ảnh, file hoặc liên kết trong các tin nhắn đã tải.</string>
+    <string name="chat_wallpaper_default">Xám nhạt (mặc định)</string>
+    <string name="chat_wallpaper_blue">Xanh nhạt</string>
+    <string name="chat_wallpaper_cream">Kem nhạt</string>
+    <string name="chat_wallpaper_white">Trắng</string>
+    <string name="chat_storage_summary">Đã tải %1$d tin nhắn, gồm %2$d ảnh. Tổng kích thước tệp đính kèm đã tải: %3$s.</string>
+    <string name="chat_protection_summary">Quyền truy cập tin nhắn được kiểm soát bởi tài khoản và thành viên cuộc trò chuyện. Ứng dụng hiện chưa hỗ trợ mã hóa đầu cuối hoặc khóa riêng từng cuộc trò chuyện.</string>
+    <string name="chat_profile_summary">Tên hiển thị: %1$s</string>
+    <string name="chat_emoji_title">Chọn biểu tượng cảm xúc</string>
+    <style name="ChatToolbarTitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/white</item>
+    </style>
+</resources>

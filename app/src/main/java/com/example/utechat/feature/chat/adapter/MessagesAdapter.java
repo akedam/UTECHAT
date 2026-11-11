@@ -31,6 +31,10 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     private final RetryListener retryListener;
     private final VoteListener voteListener;
     private final MediaRepository media;
+    private boolean groupConversation;
+    private String peerPhoto;
+    public void setGroupConversation(boolean group) { groupConversation = group; }
+    public void setPeerPhoto(String url) { peerPhoto = url; }
 
     public MessagesAdapter(String currentUserId, String currentUserName, RetryListener retryListener,
                            VoteListener voteListener, MediaRepository media) {
@@ -50,8 +54,20 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
 
     private final class TextHolder extends RecyclerView.ViewHolder{
         final TextView content,sender,time,status;final boolean sent;
-        TextHolder(View view,boolean sent){super(view);this.sent=sent;content=view.findViewById(R.id.tv_message_content);sender=view.findViewById(R.id.tv_sender_name);time=view.findViewById(R.id.tv_message_time);status=sent?view.findViewById(R.id.tv_message_status):null;}
+        TextHolder(View view,boolean sent){super(view);this.sent=sent;content=view.findViewById(R.id.tv_message_content);sender=view.findViewById(R.id.tv_sender_name);time=view.findViewById(R.id.tv_message_time);status=sent?view.findViewById(R.id.tv_message_status):null;
+            float density=view.getResources().getDisplayMetrics().density;
+            content.setMaxWidth((int)Math.min(280*density,view.getResources().getDisplayMetrics().widthPixels-88*density));
+        }
         void bind(Message m){sender.setText(sent?(currentUserName==null?"":currentUserName):(m.getSenderName()==null?"":m.getSenderName()));content.setText(m.getContent()==null?"":m.getContent());time.setText(formattedTime(m));
+            sender.setVisibility(!sent && groupConversation ? View.VISIBLE : View.GONE);
+            if(!sent){
+                TextView avatar=itemView.findViewById(R.id.tv_message_avatar);String name=m.getSenderName();avatar.setText(name==null||name.trim().isEmpty()?"?":name.trim().substring(0,1).toUpperCase(Locale.ROOT));
+                ImageView photo=itemView.findViewById(R.id.iv_message_avatar);
+                boolean showPhoto=!groupConversation && peerPhoto!=null && peerPhoto.startsWith("https://");
+                photo.setVisibility(showPhoto?View.VISIBLE:View.GONE);avatar.setVisibility(showPhoto?View.GONE:View.VISIBLE);
+                Glide.with(photo).clear(photo);
+                if(showPhoto) Glide.with(photo).load(peerPhoto).circleCrop().error(R.drawable.bg_avatar_circle_accent).into(photo);
+            }
             if(sent){status.setVisibility(View.VISIBLE);status.setOnClickListener(null);status.setMinHeight(0);if(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED){status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));status.setText(R.string.message_send_failed_retry);status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));status.setOnClickListener(v->retryListener.onRetry(m));}else if(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING){status.setText(R.string.message_sending);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}else{status.setText(R.string.message_sent);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}}
             itemView.setContentDescription(sent?content.getText():itemView.getContext().getString(R.string.message_accessibility_received,sender.getText(),content.getText(),time.getText()));}
     }

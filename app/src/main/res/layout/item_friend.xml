@@ -1,11 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/list_item_gap" android:layout_marginBottom="@dimen/list_item_gap" android:minHeight="72dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="@dimen/list_item_padding_h" android:paddingVertical="@dimen/list_item_padding_v" android:background="@drawable/bg_list_item" android:clickable="true" android:focusable="true" android:foreground="?attr/selectableItemBackground">
-    <FrameLayout android:layout_width="@dimen/avatar_size_md" android:layout_height="@dimen/avatar_size_md">
-        <TextView android:id="@+id/tv_avatar_placeholder" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_avatar_circle_accent" android:gravity="center" android:textColor="@color/white" android:textSize="@dimen/text_md" android:textStyle="bold" android:importantForAccessibility="no" />
-        <View android:id="@+id/view_online_indicator" android:layout_width="@dimen/online_indicator_size" android:layout_height="@dimen/online_indicator_size" android:layout_gravity="bottom|end" android:background="@drawable/bg_online_indicator" android:contentDescription="@string/cd_online_indicator" />
-    </FrameLayout>
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="@dimen/space_md" android:orientation="vertical">
-        <TextView android:id="@+id/tv_friend_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_md" android:textStyle="bold" />
-        <TextView android:id="@+id/tv_friend_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_xs" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+    <TextView
+        android:id="@+id/tv_friend_section"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="14dp"
+        android:paddingBottom="8dp"
+        android:textSize="14sp"
+        android:textColor="@color/utechat_on_surface_variant" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="0dp"
+        android:layout_marginBottom="0dp"
+        android:minHeight="76dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/list_item_padding_h"
+        android:paddingVertical="@dimen/list_item_padding_v"
+        android:background="@color/utechat_surface"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground">
+        <FrameLayout
+            android:layout_width="@dimen/avatar_size_md"
+            android:layout_height="@dimen/avatar_size_md">
+            <ImageView
+                android:id="@+id/iv_friend_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop" />
+            <TextView
+                android:id="@+id/tv_avatar_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_avatar_circle_accent"
+                android:gravity="center"
+                android:textColor="@color/white"
+                android:textSize="@dimen/text_md"
+                android:textStyle="bold"
+                android:importantForAccessibility="no" />
+            <View
+                android:id="@+id/view_online_indicator"
+                android:layout_width="@dimen/online_indicator_size"
+                android:layout_height="@dimen/online_indicator_size"
+                android:layout_gravity="bottom|end"
+                android:background="@drawable/bg_online_indicator"
+                android:contentDescription="@string/cd_online_indicator" />
+        </FrameLayout>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/space_md"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/tv_friend_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/utechat_on_surface"
+                android:textSize="17sp"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:ellipsize="end" />
+            <TextView
+                android:id="@+id/tv_friend_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:textColor="@color/utechat_on_surface_variant"
+                android:textSize="@dimen/text_sm"
+                android:visibility="gone" />
+        </LinearLayout>
+        <ImageButton
+            android:id="@+id/btn_friend_call"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_phone_outline"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/utechat_on_surface"
+            android:contentDescription="@string/ui_call_friend" />
+        <ImageButton
+            android:id="@+id/btn_friend_video"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_video_outline"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/utechat_on_surface"
+            android:contentDescription="@string/ui_video_friend" />
     </LinearLayout>
 </LinearLayout>

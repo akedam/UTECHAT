@@ -55,10 +55,30 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         if (AuthGate.redirectIfSignedOut(this)) return;
         setContentView(R.layout.activity_main);
+        View content = findViewById(android.R.id.content);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            android.graphics.drawable.LayerDrawable background = new android.graphics.drawable.LayerDrawable(
+                    new android.graphics.drawable.Drawable[]{
+                            androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.bg_header_gradient),
+                            new android.graphics.drawable.ColorDrawable(androidx.core.content.ContextCompat.getColor(this, R.color.utechat_surface))});
+            background.setLayerGravity(1, android.view.Gravity.BOTTOM);
+            background.setLayerHeight(1, bars.bottom);
+            view.setBackground(background);
+            return insets;
+        });
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), content).setAppearanceLightStatusBars(false);
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), content).setAppearanceLightNavigationBars(
+                (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                        != android.content.res.Configuration.UI_MODE_NIGHT_YES);
 
         bottomNav = findViewById(R.id.bottom_nav);
         setupFragments();
         setupBottomNav();
+        openCommunityIfRequested(getIntent());
         if (savedInstanceState == null) openNotificationConversation(getIntent());
         explainAndRequestNotifications();
     }
@@ -67,6 +87,14 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         openNotificationConversation(intent);
+        openCommunityIfRequested(intent);
+    }
+
+    private void openCommunityIfRequested(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("open_community", false)) {
+            intent.removeExtra("open_community");
+            showTab(R.id.nav_discover);
+        }
     }
 
     private void openNotificationConversation(Intent intent) {
@@ -159,6 +187,8 @@ public class MainActivity extends AppCompatActivity {
         int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_discover, R.id.nav_profile};
         for (int id : tabIds) bottomNav.findViewById(id).setSelected(id == tabId);
     }
+
+    public void openFriends() { showTab(R.id.nav_friends); }
 
     @Override
     public void onBackPressed() {

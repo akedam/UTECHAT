@@ -37,11 +37,18 @@ public class ConversationsFragment extends Fragment {
     private ProgressBar loadMoreProgress;
     private TextView errorMessage;
     private TextView pagingErrorMessage;
+    private android.widget.EditText search;
+    private java.util.List<Conversation> loadedItems = java.util.Collections.emptyList();
 
     @Override
     public void onResume() {
         super.onResume();
         if (viewModel != null) viewModel.refresh();
+        if (adapter != null) {
+            filterConversations();
+            // These display choices live outside the server-backed conversation model.
+            adapter.notifyDataSetChanged();
+        }
     }
 
     @Nullable
@@ -78,6 +85,19 @@ public class ConversationsFragment extends Fragment {
         });
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         recyclerView.setAdapter(adapter);
+        androidx.recyclerview.widget.DividerItemDecoration divider = new androidx.recyclerview.widget.DividerItemDecoration(
+                requireContext(), androidx.recyclerview.widget.DividerItemDecoration.VERTICAL);
+        divider.setDrawable(java.util.Objects.requireNonNull(
+                androidx.appcompat.content.res.AppCompatResources.getDrawable(requireContext(), R.drawable.conversation_divider)));
+        recyclerView.addItemDecoration(divider);
+        search = view.findViewById(R.id.et_conversation_search);
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { filterConversations(); }
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+        view.findViewById(R.id.btn_new_chat).setOnClickListener(v ->
+                ((com.example.utechat.feature.main.ui.MainActivity) requireActivity()).openFriends());
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView list, int dx, int dy) {
@@ -112,12 +132,10 @@ public class ConversationsFragment extends Fragment {
             }
             ArrayList<Conversation> items = new ArrayList<>(result.getData() == null
                     ? java.util.Collections.emptyList() : result.getData());
-            adapter.submitList(items);
-            boolean isEmpty = items.isEmpty();
-            recyclerView.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
-            emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+            loadedItems = items;
             errorState.setVisibility(View.GONE);
             initialProgress.setVisibility(View.GONE);
+            filterConversations();
         });
 
         viewModel.getLoadingMore().observe(getViewLifecycleOwner(), loading -> {
@@ -134,6 +152,29 @@ public class ConversationsFragment extends Fragment {
             if (show) pagingErrorMessage.setText(message);
             loadMoreState.findViewById(R.id.btn_retry_page).setVisibility(show ? View.VISIBLE : View.GONE);
         });
+    }
+
+    private void filterConversations() {
+        String query = search.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
+        ArrayList<Conversation> matches = new ArrayList<>();
+        for (Conversation item : loadedItems) {
+            String title = new com.example.utechat.feature.chat.ui.ChatPreferences(requireContext(), item.getId()).title(item.getTitle());
+            if (query.isEmpty() || (title != null && title.toLowerCase(java.util.Locale.ROOT).contains(query))) matches.add(item);
+        }
+        // Stable sorting retains activity order inside each device-local priority level.
+        matches.sort(java.util.Comparator.comparingInt((Conversation item) -> {
+            com.example.utechat.feature.chat.ui.ChatPreferences p = new com.example.utechat.feature.chat.ui.ChatPreferences(requireContext(), item.getId());
+            return p.enabled("pinned") ? 0 : p.enabled("favorite") ? 1 : 2;
+        }));
+        adapter.submitList(matches);
+        ViewGroup emptyContent = (ViewGroup) emptyState;
+        ((TextView) emptyContent.getChildAt(0)).setText(query.isEmpty()
+                ? R.string.empty_conversations_title : R.string.ui_no_search_results);
+        emptyContent.getChildAt(1).setVisibility(query.isEmpty() ? View.VISIBLE : View.GONE);
+        if (errorState.getVisibility() != View.VISIBLE && initialProgress.getVisibility() != View.VISIBLE) {
+            recyclerView.setVisibility(matches.isEmpty() ? View.GONE : View.VISIBLE);
+            emptyState.setVisibility(matches.isEmpty() ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void showInitialLoading() {

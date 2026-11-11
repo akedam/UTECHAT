@@ -20,6 +20,7 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
 
     public interface OnFriendClickListener {
         void onFriendClick(User user);
+        void onFriendCall(User user, String mediaType);
     }
 
     private final OnFriendClickListener listener;
@@ -54,11 +55,23 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         holder.bind(getItem(position));
+        String letter = section(getItem(position));
+        holder.section.setText(letter);
+        holder.section.setVisibility(position == 0 || !letter.equals(section(getItem(position - 1))) ? View.VISIBLE : View.GONE);
+    }
+
+    private String section(User user) {
+        String name = user.getDisplayName();
+        if (name == null || name.trim().isEmpty()) return "#";
+        return java.text.Normalizer.normalize(name.trim().substring(0, 1), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT);
     }
 
     class ViewHolder extends RecyclerView.ViewHolder {
         private final TextView tvAvatar, tvName, tvStatus;
         private final View onlineIndicator;
+        private final TextView section;
+        private final android.widget.ImageView avatar;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -66,11 +79,20 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
             tvName = itemView.findViewById(R.id.tv_friend_name);
             tvStatus = itemView.findViewById(R.id.tv_friend_status);
             onlineIndicator = itemView.findViewById(R.id.view_online_indicator);
+            section = itemView.findViewById(R.id.tv_friend_section);
+            avatar = itemView.findViewById(R.id.iv_friend_avatar);
         }
 
         void bind(User user) {
             tvAvatar.setText(user.getInitials());
             tvName.setText(user.getDisplayName());
+            String photo = user.getPhotoUrl();
+            boolean hasPhoto = photo != null && photo.startsWith("https://");
+            avatar.setVisibility(hasPhoto ? View.VISIBLE : View.GONE);
+            tvAvatar.setVisibility(hasPhoto ? View.GONE : View.VISIBLE);
+            com.bumptech.glide.Glide.with(avatar).clear(avatar);
+            if (hasPhoto) com.bumptech.glide.Glide.with(avatar).load(photo).circleCrop()
+                    .error(R.drawable.bg_avatar_circle_accent).into(avatar);
 
             boolean online = user.isOnline();
             onlineIndicator.setVisibility(online ? View.VISIBLE : View.INVISIBLE);
@@ -86,6 +108,8 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
             }
 
             itemView.setOnClickListener(v -> listener.onFriendClick(user));
+            itemView.findViewById(R.id.btn_friend_call).setOnClickListener(v -> listener.onFriendCall(user, "audio"));
+            itemView.findViewById(R.id.btn_friend_video).setOnClickListener(v -> listener.onFriendCall(user, "video"));
         }
     }
 }

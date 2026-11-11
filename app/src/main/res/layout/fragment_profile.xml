@@ -1,21 +1,293 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/utechat_background">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_horizontal" android:orientation="vertical" android:padding="@dimen/space_lg">
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/profile_title" android:textColor="@color/utechat_primary" android:textSize="@dimen/text_xxl" android:textStyle="bold" />
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_lg" android:background="@drawable/bg_list_item" android:gravity="center_horizontal" android:orientation="vertical" android:padding="@dimen/space_lg">
-        <ImageView android:id="@+id/iv_avatar" android:layout_width="@dimen/avatar_size_xl" android:layout_height="@dimen/avatar_size_xl" android:background="@drawable/bg_avatar_circle_primary" android:contentDescription="@string/cd_avatar" android:src="@drawable/bg_avatar_circle_primary" />
-        <TextView android:id="@+id/tv_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:gravity="center" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_xl" android:textStyle="bold" />
-        <TextView android:id="@+id/tv_email" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_md" />
-        <TextView android:id="@+id/tv_bio" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:gravity="center" android:textColor="@color/utechat_on_surface" android:textSize="@dimen/text_md" />
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:gravity="center" android:text="@string/profile_avatar_unavailable" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/btn_edit_profile" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_lg" android:text="@string/btn_edit_profile" />
-        </LinearLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/space_md" android:background="@drawable/bg_list_item" android:orientation="vertical" android:padding="@dimen/space_md">
-        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch_share_presence" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_md" android:text="@string/presence_setting" android:textColor="@color/utechat_on_surface" />
-        <TextView android:id="@+id/tv_presence_summary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/presence_summary" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" android:paddingStart="@dimen/space_md" android:paddingEnd="@dimen/space_md" />
-        <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/switch_message_previews" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_sm" android:text="@string/notifications_preview_setting" android:textColor="@color/utechat_on_surface" />
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/notifications_preview_summary" android:textColor="@color/utechat_on_surface_variant" android:textSize="@dimen/text_sm" android:paddingStart="@dimen/space_md" android:paddingEnd="@dimen/space_md" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/btn_logout" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="@dimen/touch_target_min" android:layout_marginTop="@dimen/space_sm" android:text="@string/btn_logout" />
-        </LinearLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/utechat_background">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_header_gradient"
+        android:paddingHorizontal="4dp"
+        android:paddingVertical="4dp"
+        android:gravity="center_vertical"
+        android:minHeight="56dp">
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="48dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_nav_profile"
+            android:tint="@color/white"
+            android:importantForAccessibility="no" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="@string/profile_title"
+            android:textSize="19sp"
+            android:textColor="@color/white"
+            android:layout_weight="1"
+            android:paddingStart="6dp" />
+        <ImageButton
+            android:id="@+id/btn_profile_settings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_settings_outline"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/white"
+            android:contentDescription="@string/ui_account" />
     </LinearLayout>
-</ScrollView>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="24dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@color/utechat_surface"
+                android:gravity="center_horizontal"
+                android:paddingTop="28dp"
+                android:paddingBottom="24dp">
+                <ImageView
+                    android:id="@+id/iv_avatar"
+                    android:layout_width="88dp"
+                    android:layout_height="88dp"
+                    android:background="@drawable/bg_avatar_circle_primary"
+                    android:src="@drawable/ic_nav_profile"
+                    android:padding="20dp"
+                    android:tint="@color/white"
+                    android:contentDescription="@string/cd_avatar" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="22sp"
+                    android:textColor="@color/utechat_on_surface"
+                    android:id="@+id/tv_name"
+                    android:gravity="center"
+                    android:layout_marginTop="14dp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="14sp"
+                    android:textColor="@color/utechat_on_surface"
+                    android:id="@+id/tv_email"
+                    android:gravity="center"
+                    android:layout_marginTop="6dp"
+                    android:textColorHint="@color/utechat_on_surface_variant" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="14sp"
+                    android:textColor="@color/utechat_on_surface"
+                    android:id="@+id/tv_bio"
+                    android:gravity="center"
+                    android:paddingHorizontal="24dp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:id="@+id/btn_edit_profile"
+                android:background="@color/utechat_surface"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="18dp"
+                android:layout_marginTop="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_edit_outline"
+                    android:tint="@color/utechat_primary"
+                    android:importantForAccessibility="no" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="1"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="8dp">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_edit_profile"
+                        android:textSize="17sp"
+                        android:textColor="@color/utechat_on_surface" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_edit_summary"
+                        android:textSize="14sp"
+                        android:textColor="@color/utechat_on_surface_variant"
+                        android:layout_marginTop="6dp" />
+                </LinearLayout>
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_chevron_outline"
+                    android:tint="@color/utechat_on_surface_variant"
+                    android:importantForAccessibility="no" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:id="@+id/row_privacy"
+                android:background="@color/utechat_surface"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="18dp"
+                android:layout_marginTop="1dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_shield_outline"
+                    android:tint="@color/utechat_primary"
+                    android:importantForAccessibility="no" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="1"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="8dp">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_privacy"
+                        android:textSize="17sp"
+                        android:textColor="@color/utechat_on_surface" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_privacy_summary"
+                        android:textSize="14sp"
+                        android:textColor="@color/utechat_on_surface_variant"
+                        android:layout_marginTop="6dp" />
+                </LinearLayout>
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_chevron_outline"
+                    android:tint="@color/utechat_on_surface_variant"
+                    android:importantForAccessibility="no" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:id="@+id/layout_privacy"
+                android:background="@color/utechat_surface"
+                android:paddingHorizontal="24dp"
+                android:paddingBottom="16dp">
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switch_share_presence"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/presence_setting"
+                    android:textColor="@color/utechat_on_surface" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/presence_summary"
+                    android:textSize="13sp"
+                    android:textColor="@color/utechat_on_surface_variant"
+                    android:id="@+id/tv_presence_summary" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:id="@+id/row_notifications"
+                android:background="@color/utechat_surface"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="18dp"
+                android:layout_marginTop="1dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical">
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_bell_outline"
+                    android:tint="@color/utechat_primary"
+                    android:importantForAccessibility="no" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_weight="1"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="8dp">
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_notifications"
+                        android:textSize="17sp"
+                        android:textColor="@color/utechat_on_surface" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ui_notifications_summary"
+                        android:textSize="14sp"
+                        android:textColor="@color/utechat_on_surface_variant"
+                        android:layout_marginTop="6dp" />
+                </LinearLayout>
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_chevron_outline"
+                    android:tint="@color/utechat_on_surface_variant"
+                    android:importantForAccessibility="no" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:id="@+id/layout_notifications"
+                android:background="@color/utechat_surface"
+                android:paddingHorizontal="24dp"
+                android:paddingBottom="16dp">
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switch_message_previews"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/notifications_preview_setting"
+                    android:textColor="@color/utechat_on_surface" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/notifications_preview_summary"
+                    android:textSize="13sp"
+                    android:textColor="@color/utechat_on_surface_variant" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_logout"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="16dp"
+                android:text="@string/btn_logout" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
