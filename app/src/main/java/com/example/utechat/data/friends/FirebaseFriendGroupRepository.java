@@ -124,7 +124,25 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
         request.get().addOnSuccessListener(friend -> {
             if (!friend.exists() || !"accepted".equals(friend.getString("status"))) { cb.error(context.getString(R.string.friends_request_error)); return; }
             var ref = db.collection("conversations").document(com.example.utechat.domain.model.ConversationId.direct(from,to));
-            db.collection("publicProfiles").document(from).get().addOnSuccessListener(me ->
+            // Opening a known chat is a read, not an attempted overwrite of its history/summary.
+            ref.get().addOnSuccessListener(existing -> {
+                if (!existing.exists()) { createDirect(from,to,ref,cb); return; }
+                Object participants=existing.get("participantIds");
+                if ("direct".equals(existing.getString("type")) && participants instanceof List
+                        && ((List<?>)participants).size()==2 && ((List<?>)participants).contains(from) && ((List<?>)participants).contains(to)) cb.success(ref.getId());
+                else cb.error(context.getString(R.string.friends_request_error));
+            }).addOnFailureListener(error -> {
+                // Participant-only rules deny reading a conversation that has not been created yet.
+                if(error instanceof com.google.firebase.firestore.FirebaseFirestoreException
+                        && ((com.google.firebase.firestore.FirebaseFirestoreException)error).getCode()==com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                    createDirect(from,to,ref,cb);
+                else cb.error(context.getString(R.string.friends_load_error));
+            });
+        }).addOnFailureListener(e->cb.error(context.getString(R.string.friends_request_error)));
+    }
+
+    private void createDirect(String from,String to,com.google.firebase.firestore.DocumentReference ref,Result<String> cb) {
+        db.collection("publicProfiles").document(from).get().addOnSuccessListener(me ->
                 db.collection("publicProfiles").document(to).get().addOnSuccessListener(peer -> {
                     if (!me.exists() || !peer.exists()) { cb.error(context.getString(R.string.friends_load_error)); return; }
                     Map<String,Object> summaries = new HashMap<>(); summaries.put(from, summary(readUser(me))); summaries.put(to, summary(readUser(peer)));
@@ -145,7 +163,6 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
                                     .addOnFailureListener(readError -> cb.error(context.getString(R.string.friends_request_error))));
                 }).addOnFailureListener(e->cb.error(context.getString(R.string.friends_load_error))))
                 .addOnFailureListener(e->cb.error(context.getString(R.string.friends_load_error)));
-        }).addOnFailureListener(e->cb.error(context.getString(R.string.friends_request_error)));
     }
 
     @Override public void createGroup(String ownerUid,String name,List<User> initial,Result<String> cb) {

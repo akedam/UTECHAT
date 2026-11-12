@@ -1,0 +1,11 @@
+<resources>
+    <string name="search_back">Quay lại</string>
+    <string name="search_clear">Xóa nội dung tìm kiếm</string>
+    <string name="search_input_hint">Tìm bạn bè, nhóm, người dùng</string>
+    <string name="search_start_hint">Tìm bạn bè hoặc nhóm của bạn. Nhập từ 2 ký tự để tìm thêm người dùng theo tên.</string>
+    <string name="search_groups">Nhóm</string>
+    <string name="search_people">Người dùng</string>
+    <string name="search_request_sent">Đã gửi</string>
+    <string name="search_request_received">Đã gửi lời mời cho bạn</string>
+    <string name="search_group_members">%1$d thành viên</string>
+</resources>

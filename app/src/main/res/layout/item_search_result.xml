@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="76dp"
+    android:orientation="horizontal" android:gravity="center_vertical" android:paddingHorizontal="16dp" android:paddingVertical="10dp"
+    android:background="@color/utechat_surface" android:foreground="?attr/selectableItemBackground">
+    <FrameLayout android:layout_width="48dp" android:layout_height="48dp">
+        <TextView android:id="@+id/tv_search_avatar" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:background="@drawable/bg_avatar_circle_accent" android:gravity="center" android:textColor="@color/white"
+            android:textSize="18sp" android:textStyle="bold" android:importantForAccessibility="no" />
+        <ImageView android:id="@+id/iv_search_avatar" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:scaleType="centerCrop" android:contentDescription="@null" android:visibility="gone" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+        android:orientation="vertical" android:layout_marginStart="14dp" android:layout_marginEnd="8dp">
+        <TextView android:id="@+id/tv_search_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="@color/utechat_on_surface" android:textSize="17sp" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/tv_search_subtitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textColor="@color/utechat_on_surface_variant" android:textSize="13sp" />
+    </LinearLayout>
+    <com.google.android.material.button.MaterialButton android:id="@+id/btn_search_action" style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content" android:layout_height="48dp" android:minWidth="80dp" android:textSize="13sp"
+        app:cornerRadius="24dp" android:visibility="gone" />
+</LinearLayout>

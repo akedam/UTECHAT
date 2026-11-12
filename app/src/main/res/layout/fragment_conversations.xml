@@ -14,26 +14,27 @@
         android:gravity="center_vertical"
         android:minHeight="56dp">
         <ImageView
+            android:id="@+id/btn_open_conversation_search"
             android:layout_width="40dp"
             android:layout_height="48dp"
             android:padding="8dp"
             android:src="@drawable/ic_search_outline"
             android:tint="@color/white"
             android:importantForAccessibility="no" />
-        <EditText
+        <TextView
             android:id="@+id/et_conversation_search"
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:hint="@string/ui_search"
+            android:text="@string/ui_search"
             android:textColor="@color/white"
             android:textColorHint="#EEFFFFFF"
             android:textSize="18sp"
             android:singleLine="true"
-            android:inputType="text"
-            android:imeOptions="actionSearch"
-            android:importantForAutofill="no"
+            android:gravity="center_vertical"
+            android:clickable="true"
+            android:focusable="true"
             android:paddingHorizontal="6dp" />
         <ImageButton
             android:id="@+id/btn_new_chat"

@@ -27,6 +27,7 @@ public class FriendsViewModel extends AndroidViewModel {
     private final PresenceRepository presenceRepository;
     private final Map<String, PresenceRepository.Subscription> presenceSubscriptions = new HashMap<>();
     private final Map<String, User> observedFriends = new LinkedHashMap<>();
+    private int searchGeneration;
     public FriendsViewModel(@NonNull Application app) {
         super(app); repo=FriendGroupRepositoryProvider.get(app);currentUser=AuthRepositoryProvider.get(app).getCurrentUser();
         presenceRepository=PresenceRepositoryProvider.get();
@@ -36,9 +37,10 @@ public class FriendsViewModel extends AndroidViewModel {
     public LiveData<List<Friendship>> getRequests(){return requests;} public LiveData<String> getError(){return error;}
     public LiveData<Boolean> getLoading(){return loading;} public boolean isMock(){return repo==null||repo.isMock();}
     public User getCurrentUser(){return currentUser;}
-    public void search(String term){if(repo==null){error.setValue(getApplication().getString(R.string.friends_firebase_required));return;}loading.setValue(true);
-        repo.searchUsers(term,new FriendGroupRepository.Result<List<User>>(){public void success(List<User> users){loading.setValue(false);if(currentUser!=null)users.removeIf(u->currentUser.getUid().equals(u.getUid()));results.setValue(users);error.setValue(null);}
-            public void error(String s){loading.setValue(false);error.setValue(s);}});}
+    public void clearSearch(){searchGeneration++;results.setValue(Collections.emptyList());loading.setValue(false);error.setValue(null);}
+    public void search(String term){int generation=++searchGeneration;if(repo==null){error.setValue(getApplication().getString(R.string.friends_firebase_required));return;}loading.setValue(true);
+        repo.searchUsers(term,new FriendGroupRepository.Result<List<User>>(){public void success(List<User> users){if(generation!=searchGeneration)return;loading.setValue(false);List<User> matches=new ArrayList<>(users);if(currentUser!=null)matches.removeIf(u->currentUser.getUid().equals(u.getUid()));results.setValue(matches);error.setValue(null);}
+            public void error(String s){if(generation!=searchGeneration)return;loading.setValue(false);error.setValue(s);}});}
     public void sendRequest(User user){if(repo==null||currentUser==null)return;loading.setValue(true);repo.requestFriend(currentUser.getUid(),user.getUid(),done());}
     public void accept(Friendship f){repo.respondFriend(f.getId(),true,done());}
     public void decline(Friendship f){repo.respondFriend(f.getId(),false,done());}
