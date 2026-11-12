@@ -6,13 +6,10 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import com.example.utechat.R;
-import com.example.utechat.app.UteChatApplication;
 import com.example.utechat.domain.model.CallSession;
 import com.example.utechat.feature.calls.ui.CallActivity;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Source;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
@@ -25,19 +22,15 @@ public final class IncomingCallNotification {
         Context app=context.getApplicationContext();
         FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
         if(user==null || !user.getUid().equals(recipientUid))return;
-        FirebaseFirestore.getInstance().collection("calls").document(callId).get(Source.SERVER).addOnSuccessListener(doc -> {
-            FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
-            if(current==null || !current.getUid().equals(recipientUid) || !doc.exists()
-                    || !recipientUid.equals(doc.getString("calleeUid")) || !"ringing".equals(doc.getString("status")))return;
-            Long expires=doc.getLong("expiresAt"),created=doc.getLong("createdAt");
-            String conversation=doc.getString("conversationId"),caller=doc.getString("callerUid");
-            if(expires==null || expires<=System.currentTimeMillis() || created==null || conversation==null || caller==null)return;
-            CallSession call=new CallSession(callId,conversation,caller,recipientUid,callId,
-                    "video".equals(doc.getString("mediaType"))?"video":"audio","ringing",created,expires);
-            UteChatApplication application=UteChatApplication.from(app);
-            if(application!=null && application.isForeground()){application.deliverIncomingCall(call);return;}
-            showVerified(app,call);
-        });
+        androidx.work.OneTimeWorkRequest.Builder work=new androidx.work.OneTimeWorkRequest.Builder(IncomingCallWorker.class)
+                .setInputData(new androidx.work.Data.Builder().putString("callId",callId).putString("recipientUid",recipientUid)
+                        .putLong("receivedAt",System.currentTimeMillis()).build())
+                .setBackoffCriteria(androidx.work.BackoffPolicy.LINEAR,10,java.util.concurrent.TimeUnit.SECONDS);
+        // Before Android 12 expedited work needs a separate foreground notification.
+        // A normal job keeps the verified-call notification as the only notification.
+        if(android.os.Build.VERSION.SDK_INT>=31)work.setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST);
+        androidx.work.WorkManager.getInstance(app).enqueueUniqueWork("incoming-call-"+recipientUid+"-"+callId,
+                androidx.work.ExistingWorkPolicy.KEEP,work.build());
     }
     public static void showVerified(Context app,CallSession call) {
             if(call.expiresAt<=System.currentTimeMillis())return;

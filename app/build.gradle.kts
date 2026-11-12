@@ -98,6 +98,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-database")
     implementation("com.google.firebase:firebase-messaging")
+    implementation("androidx.work:work-runtime:2.12.0")
     implementation(libs.firebase.storage)
     implementation(libs.agora.rtc)
     implementation(libs.activity.ktx)

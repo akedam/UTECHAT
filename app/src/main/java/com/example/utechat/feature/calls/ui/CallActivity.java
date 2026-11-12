@@ -271,6 +271,7 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void applyCall(CallSession updated) {
+            if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Signal state=" + updated.status + ", incoming=" + incoming + ", ending=" + endingRequested);
             if (call != null && "accepted".equals(call.status) && "ringing".equals(updated.status)) return;
             call = updated; mediaType = updated.mediaType;
             if (!peerLoaded) {
@@ -403,6 +404,7 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void startMediaOnce() {
+        if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Start media: starting=" + startingMedia + ", connected=" + connected + ", ending=" + endingRequested);
         if (startingMedia || connected || endingRequested || call == null) return;
         if (!hasPermission(Manifest.permission.RECORD_AUDIO) || ("video".equals(call.mediaType) && !hasPermission(Manifest.permission.CAMERA))) {
             showError(R.string.call_permission_denied); endCall(); return;
@@ -413,7 +415,7 @@ public final class CallActivity extends AppCompatActivity {
         startingMedia = true; showProgress(true); setStatus(R.string.call_state_connecting);
         try { androidx.core.content.ContextCompat.startForegroundService(this,
                 CallForegroundService.startIntent(this, "video".equals(call.mediaType))); }
-        catch (RuntimeException serviceError) { startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
+        catch (RuntimeException serviceError) { if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "Foreground service start failed", serviceError); startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
         CallSession callSnapshot = call;
         new AgoraTokenClient().fetch(callSnapshot, new AgoraTokenClient.Callback() {
             @Override public void onToken(String appId, String token, String channel, int uid) {
@@ -430,6 +432,7 @@ public final class CallActivity extends AppCompatActivity {
                         local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
                     }
                 } catch (Exception error) {
+                    if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "RTC initialization failed", error);
                     startingMedia = false; showProgress(false); showError(R.string.call_network_error);
                     repository.updateStatus(callSnapshot.id, "failed", silentCallback());
                 }

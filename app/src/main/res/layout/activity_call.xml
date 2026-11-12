@@ -9,7 +9,7 @@
         app:layout_constraintTop_toTopOf="parent" app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
     <LinearLayout android:id="@+id/call_header" android:layout_width="0dp" android:layout_height="wrap_content"
-        android:orientation="vertical" android:padding="20dp"
+        android:orientation="vertical" android:padding="20dp" android:paddingBottom="36dp" android:background="@drawable/bg_call_header_scrim"
         app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent">
         <TextView android:id="@+id/tv_call_peer" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/call_generic_peer" android:textColor="#FFFFFF" android:textSize="17sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
