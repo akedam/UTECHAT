@@ -47,13 +47,16 @@ public final class AgoraTokenClient {
                 throw new IllegalArgumentException("HTTPS required");
             }
             connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST"); connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("POST"); connection.setConnectTimeout(15_000); connection.setReadTimeout(100_000);
             connection.setRequestProperty("Authorization", "Bearer " + firebaseToken);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setDoOutput(true);
             JSONObject request = new JSONObject(); request.put("callId", call.id);
             try (OutputStream out = connection.getOutputStream()) { out.write(request.toString().getBytes("UTF-8")); }
-            if (connection.getResponseCode() != 200) throw new IllegalStateException("token request failed");
+            int responseCode = connection.getResponseCode();
+            if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Token endpoint status=" + responseCode);
+            if (responseCode != 200) throw new IllegalStateException("token request failed");
             String body = read(connection.getInputStream()); JSONObject response = new JSONObject(body);
             String appId = response.optString("appId", BuildConfig.AGORA_APP_ID);
             String token = response.getString("token"), channel = response.getString("channelName");

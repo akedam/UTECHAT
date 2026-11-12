@@ -28,6 +28,12 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
 
     @Override public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         Map<String, String> data = remoteMessage.getData();
+        if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatPush", "FCM event=" + data.get("eventType")
+                + ", recipientMatches=" + java.util.Objects.equals(FirebaseAuth.getInstance().getUid(),data.get("recipientUid")));
+        if ("call".equals(data.get("eventType"))) {
+            IncomingCallNotification.receive(this, data.get("callId"), data.get("recipientUid"));
+            return;
+        }
         if (!"message".equals(data.get("eventType"))) return;
         String conversationId = data.get("conversationId");
         String messageId = data.get("messageId");

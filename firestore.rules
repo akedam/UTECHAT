@@ -6,9 +6,12 @@ service cloud.firestore {
       return /databases/$(database)/documents/conversations/$(conversationId)/members/$(uid);
     }
     function isMember(conversationId) {
+      let parent = get(/databases/$(database)/documents/conversations/$(conversationId));
+      let member = get(memberPath(conversationId, request.auth.uid));
       return signedIn()
-        && exists(memberPath(conversationId, request.auth.uid))
-        && get(memberPath(conversationId, request.auth.uid)).data.userId == request.auth.uid;
+        && parent.data.get('lifecycle', 'active') == 'active'
+        && request.auth.uid in parent.data.participantIds
+        && member.data.userId == request.auth.uid;
     }
     function isManager(conversationId) {
       return isMember(conversationId)
@@ -222,6 +225,32 @@ service cloud.firestore {
           && request.resource.data.groupName.size() > 0
           && request.resource.data.groupName.size() <= 80;
       }
+      function validCommunityUpgrade() {
+        return resource.data.type == 'group' && isMember(conversationId)
+          && get(memberPath(conversationId, request.auth.uid)).data.role == 'owner'
+          && resource.data.get('isCommunity', false) == false
+          && resource.data.participantIds.size() >= 5
+          && resource.data.participantIds.size() <= 10
+          && request.resource.data.isCommunity == true
+          && request.resource.data.updatedAt is int
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isCommunity','updatedAt']);
+      }
+      function validOwnershipTransfer() {
+        let target = request.resource.data.ownerUid;
+        return resource.data.type == 'group' && isMember(conversationId)
+          && get(memberPath(conversationId, request.auth.uid)).data.role == 'owner'
+          && target is string && target != request.auth.uid && target in resource.data.participantIds
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid','updatedAt'])
+          && request.resource.data.updatedAt is int
+          && get(memberPath(conversationId, target)).data.role in ['admin','member']
+          && getAfter(memberPath(conversationId, request.auth.uid)).data.role == 'admin'
+          && getAfter(memberPath(conversationId, target)).data.role == 'owner';
+      }
+      function initialMemberAt(index) {
+        let ids = request.resource.data.participantIds;
+        return ids.size() <= index || (getAfter(memberPath(conversationId, ids[index])).data.userId == ids[index]
+          && getAfter(memberPath(conversationId, ids[index])).data.role == (index == 0 ? 'owner' : 'member'));
+      }
       function validMembershipChange() {
         let oldIds = resource.data.participantIds.toSet();
         let newIds = request.resource.data.participantIds.toSet();
@@ -231,9 +260,10 @@ service cloud.firestore {
         return resource.data.type == 'group' && isManager(conversationId)
           && changed.hasOnly(['participantIds','participantSummaries','updatedAt','membershipChangeAction','membershipChangeUid'])
           && request.resource.data.updatedAt is int && uid is string && action is string
-          && request.resource.data.participantIds is list && request.resource.data.participantIds.size() <= 100
+          && request.resource.data.participantIds is list
           && newIds.size() == request.resource.data.participantIds.size()
           && ((action == 'add' && !(uid in oldIds) && uid in newIds
+                && newIds.size() <= (resource.data.get('isCommunity', false) == true ? 10 : 5)
                 && newIds.difference(oldIds).size() == 1 && oldIds.difference(newIds).size() == 0
                 && existsAfter(memberPath(conversationId, uid))
                 && getAfter(memberPath(conversationId, uid)).data.role == 'member')
@@ -276,26 +306,53 @@ service cloud.firestore {
         && request.resource.data.updatedAt is int
         && request.resource.data.lastMessageAt is int)
         || (signedIn() && request.resource.data.type == 'group'
+        && !exists(/databases/$(database)/documents/backendGroupDeletions/$(conversationId))
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.participantIds is list
-        && request.resource.data.participantIds.size() >= 1
-        && request.resource.data.participantIds.size() <= 100
+        && request.resource.data.participantIds.size() >= 3
+        && request.resource.data.participantIds.size() <= 5
         && request.resource.data.participantIds.toSet().size() == request.resource.data.participantIds.size()
         && request.resource.data.participantIds[0] == request.auth.uid
+        && request.resource.data.get('ownerUid', request.auth.uid) == request.auth.uid
+        && request.resource.data.get('isCommunity', false) == false
+        && request.resource.data.get('lifecycle', 'active') == 'active'
+        && initialMemberAt(0) && initialMemberAt(1) && initialMemberAt(2)
+        && initialMemberAt(3) && initialMemberAt(4)
         && request.resource.data.groupName is string
         && request.resource.data.groupName.size() > 0
         && request.resource.data.groupName.size() <= 80
         && existsAfter(memberPath(conversationId, request.auth.uid))
         && getAfter(memberPath(conversationId, request.auth.uid)).data.role == 'owner');
-      allow update: if (resource.data.type == 'direct' && directParticipant(resource.data) && validTextSummary())
-        || (resource.data.type == 'group' && isMember(conversationId) && validTextSummary())
-        || validGroupDetailsChange() || validMembershipChange() || validSelfLeave();
-      allow update: if validReadCursor();
+      // Dispatch by the fields being changed before evaluating operation-specific
+      // getAfter/optional fields. This also keeps evaluation below the rules limit.
+      allow update: if signedIn()
+        && ((resource.data.type == 'direct' && directParticipant(resource.data))
+            || (resource.data.type == 'group' && isMember(conversationId)))
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'lastMessage','lastMessageType','lastMessageAt','lastMessageSenderId','lastMessageId','updatedAt']) && validTextSummary())
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readStates']) && validReadCursor())
+            || (resource.data.type == 'group'
+                && ((request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName','groupPhotoUrl']) && validGroupDetailsChange())
+                    || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['participantIds']) && (validMembershipChange() || validSelfLeave()))
+                    || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['isCommunity']) && validCommunityUpgrade())
+                    || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid']) && validOwnershipTransfer()))));
+      // Deletion goes through /api/group-delete: the server checks owner/last
+      // member, freezes writes and removes the roster, history and private media.
       allow delete: if false;
 
       match /members/{memberUid} {
         function parent() { return get(/databases/$(database)/documents/conversations/$(conversationId)); }
         function manager() { return isManager(conversationId); }
+        function validTransferredRole() {
+          let after = getAfter(/databases/$(database)/documents/conversations/$(conversationId));
+          let target = after.data.ownerUid;
+          return after.data.diff(parent().data).affectedKeys().hasAny(['ownerUid'])
+            && target != request.auth.uid && target in parent().data.participantIds
+            && getAfter(memberPath(conversationId, request.auth.uid)).data.role == 'admin'
+            && getAfter(memberPath(conversationId, target)).data.role == 'owner'
+            && ((memberUid == request.auth.uid && resource.data.role == 'owner' && request.resource.data.role == 'admin')
+                || (memberUid == target && resource.data.role in ['admin','member'] && request.resource.data.role == 'owner'));
+        }
         function removedFromConversationAfter() {
           let updatedConversation = getAfter(/databases/$(database)/documents/conversations/$(conversationId));
           return updatedConversation.data.membershipChangeAction == 'remove'
@@ -308,7 +365,7 @@ service cloud.firestore {
               && ((callerRole == 'owner' && resource.data.role != 'owner')
                   || (callerRole == 'admin' && resource.data.role == 'member'))
               && (!(memberUid in parent().data.participantIds) || removedFromConversationAfter()))
-            || (signedIn() && request.auth.uid == memberUid && resource.data.role != 'owner'
+            || (isMember(conversationId) && request.auth.uid == memberUid && resource.data.role != 'owner'
                 && removedFromConversationAfter());
         }
         // A group member may load the member roster as a collection query. Keep
@@ -324,7 +381,9 @@ service cloud.firestore {
           && request.resource.data.joinedAt is int
           && request.resource.data.lastReadAt is int
           && request.resource.data.unreadCount is int
-          && ((existsAfter(/databases/$(database)/documents/conversations/$(conversationId))
+          && ((!exists(/databases/$(database)/documents/conversations/$(conversationId))
+               && existsAfter(/databases/$(database)/documents/conversations/$(conversationId))
+               && getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group'
                && getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.createdBy == request.auth.uid
                && memberUid in getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds
                && (memberUid == request.auth.uid || acceptedFriend(memberUid)))
@@ -335,9 +394,14 @@ service cloud.firestore {
                   && acceptedFriend(memberUid)));
         allow update: if manager()
           && request.resource.data.userId == resource.data.userId
+          && request.resource.data.role in ['owner','admin','member']
+          && request.resource.data.lastReadAt is int && request.resource.data.unreadCount is int
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','joinedAt','lastReadAt','unreadCount'])
           && (request.resource.data.role == resource.data.role
-              || get(memberPath(conversationId, request.auth.uid)).data.role == 'owner')
+              || (get(memberPath(conversationId, request.auth.uid)).data.role == 'owner'
+                  && ((memberUid != request.auth.uid && resource.data.role in ['admin','member']
+                        && request.resource.data.role in ['admin','member'])
+                      || validTransferredRole())))
           && (request.resource.data.joinedAt == resource.data.joinedAt
               || (getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.membershipChangeAction == 'add'
                   && getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data.membershipChangeUid == memberUid));

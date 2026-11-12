@@ -1,6 +1,6 @@
 # UTEChat Agora token endpoint
 
-This small Node endpoint is the trusted boundary between Firebase Authentication, Firestore call signaling, and Agora RTC. It does not send call invitations. Android clients must never contain `AGORA_APP_CERTIFICATE`.
+This Node backend connects Firebase Authentication, Firestore signaling, Agora RTC, FCM delivery and private Supabase images. Android clients must never contain `AGORA_APP_CERTIFICATE`, a Firebase Admin private key or a Supabase service-role key. See [free tester deployment](../../docs/FREE_TEST_BACKEND.md) and the root `render.yaml`.
 
 ## Local setup
 
@@ -23,4 +23,8 @@ This small Node endpoint is the trusted boundary between Firebase Authentication
 
 The endpoint verifies Firebase ID tokens, checks the accepted Firestore call and authenticated membership, and only then issues a 30-minute publisher token. Protect it with HTTPS, network rate limits, monitoring, and a production hosting environment before public use. It uses Firebase Admin ADC; no private key or token is committed.
 
-Incoming-call UI in this build is delivered by a foreground Firestore listener while UTEChat is in the foreground. This repo has no trusted FCM call sender, so incoming calls are not guaranteed while the app is backgrounded or killed. It does not implement group calls or screen sharing.
+The Android sender queues `/api/call-invite` or `/api/message-notify` after its Firestore write. The backend verifies the durable record and sender, looks up current members and private device tokens, then sends data-only FCM with durable deduplication. Foreground calls open the existing call screen; background calls show a tappable incoming-call notification. Force-stop, missing Android notification permission and vendor battery restrictions can prevent delivery. Group calls and screen sharing are not implemented.
+
+`PUT/GET /api/media?path=conversations/CONVERSATION/OWNER/MESSAGE` authenticate Firebase ID tokens, enforce current conversation membership, immutable image bytes, supported signatures and per-user daily upload quota. The private Supabase bucket is never exposed publicly. Existing Firebase Storage objects are not automatically migrated. `GET /healthz` checks loaded configuration only; live authenticated media/RTC checks are still needed.
+
+Run `npm test` for isolated HTTP authorization, RTC membership, notification deduplication, call expiry and private image tests. Tests do not contact your Firebase project.

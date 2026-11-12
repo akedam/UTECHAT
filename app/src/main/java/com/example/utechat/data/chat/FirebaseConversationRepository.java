@@ -78,6 +78,7 @@ public final class FirebaseConversationRepository implements ConversationReposit
         int visibleCount = Math.min(pageSize, documents.size());
         for (int i = 0; i < visibleCount; i++) {
             DocumentSnapshot document = documents.get(i);
+            if ("deleting".equals(document.getString("lifecycle"))) continue;
             try {
                 Conversation item=FirestoreConversationMapper.fromSnapshot(document, userId);
                 new ConversationReadState(context,userId).decorate(item,document.get("readStates"));

@@ -23,6 +23,7 @@ public final class PushTokenRepository {
     private static final String PREFS = "utechat_push_registration";
     private static final String KEY_UID = "registered_uid";
     private static final String KEY_TOKEN_HASH = "registered_token_hash";
+    private static final String KEY_SYNCED_AT = "registered_at";
 
     private PushTokenRepository() { }
 
@@ -45,7 +46,11 @@ public final class PushTokenRepository {
                     .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
             String previousUid = prefs.getString(KEY_UID, null);
             String previousHash = prefs.getString(KEY_TOKEN_HASH, null);
-            if (user.getUid().equals(previousUid) && hash.equals(previousHash)) return;
+            long now=System.currentTimeMillis(),syncedAt=prefs.getLong(KEY_SYNCED_AT,0);
+            // A cached local registration is not proof the server still has it
+            // (invalid-token cleanup, restored app data, or a failed older sync).
+            if (user.getUid().equals(previousUid) && hash.equals(previousHash)
+                    && syncedAt<=now && now-syncedAt<6*60*60_000L) return;
 
             if (user.getUid().equals(previousUid) && previousHash != null && !hash.equals(previousHash)) {
                 FirebaseFirestore.getInstance().collection("users").document(user.getUid())
@@ -60,7 +65,7 @@ public final class PushTokenRepository {
                     .collection("deviceTokens").document(hash).set(data, SetOptions.merge())
                     .addOnSuccessListener(unused -> prefs.edit()
                             .putString(KEY_UID, user.getUid())
-                            .putString(KEY_TOKEN_HASH, hash).apply());
+                            .putString(KEY_TOKEN_HASH, hash).putLong(KEY_SYNCED_AT,now).apply());
         } catch (RuntimeException ignored) {
             // No token or auth data is written to logs; the next app start retries sync.
         }

@@ -21,13 +21,13 @@ import java.util.*;
 
 public class FriendsFragment extends Fragment {
     private FriendsViewModel vm; private FriendsAdapter adapter; private RecyclerView list;
-    private EditText search; private LinearLayout resultRows, requestRows; private TextView empty,error; private ProgressBar progress;
+    private LinearLayout requestRows; private TextView empty,error; private ProgressBar progress;
     private String filter = "all";
     private View root;
     private List<User> friends = Collections.emptyList();
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,@Nullable ViewGroup parent,@Nullable Bundle state){return inflater.inflate(R.layout.fragment_friends,parent,false);}
     @Override public void onViewCreated(@NonNull View v,@Nullable Bundle state){super.onViewCreated(v,state);
-        vm=new ViewModelProvider(this).get(FriendsViewModel.class);list=v.findViewById(R.id.rv_friends);search=v.findViewById(R.id.et_friend_search);resultRows=v.findViewById(R.id.layout_friend_results);requestRows=v.findViewById(R.id.layout_friend_requests);empty=v.findViewById(R.id.empty_state);error=v.findViewById(R.id.tv_friends_error);progress=v.findViewById(R.id.progress_friends);
+        vm=new ViewModelProvider(this).get(FriendsViewModel.class);list=v.findViewById(R.id.rv_friends);requestRows=v.findViewById(R.id.layout_friend_requests);empty=v.findViewById(R.id.empty_state);error=v.findViewById(R.id.tv_friends_error);progress=v.findViewById(R.id.progress_friends);
         v.findViewById(R.id.tv_friends_source).setVisibility(vm.isMock()?View.VISIBLE:View.GONE);
         root=v;
         adapter=new FriendsAdapter(new FriendsAdapter.OnFriendClickListener(){
@@ -38,10 +38,11 @@ public class FriendsFragment extends Fragment {
         v.findViewById(R.id.filter_online).setOnClickListener(x->selectFilter("online"));
         v.findViewById(R.id.filter_requests).setOnClickListener(x->selectFilter("requests"));
         selectFilter("all");
-        v.findViewById(R.id.btn_friend_search).setOnClickListener(x->vm.search(search.getText().toString()));
-        search.setOnEditorActionListener((t,action,event)->{vm.search(search.getText().toString());return true;});
+        View.OnClickListener openSearch=x->startActivity(new Intent(requireContext(),com.example.utechat.feature.search.ui.SearchActivity.class));
+        v.findViewById(R.id.et_friend_search).setOnClickListener(openSearch);
+        v.findViewById(R.id.btn_friend_search).setOnClickListener(openSearch);
+        v.findViewById(R.id.btn_open_friend_search).setOnClickListener(openSearch);
         vm.getFriends().observe(getViewLifecycleOwner(),users->{friends=users==null?Collections.emptyList():users;filterFriends();});
-        vm.getSearchResults().observe(getViewLifecycleOwner(),this::renderSearch);
         vm.getRequests().observe(getViewLifecycleOwner(),this::renderRequests);
         vm.getLoading().observe(getViewLifecycleOwner(),b->progress.setVisibility(Boolean.TRUE.equals(b)?View.VISIBLE:View.GONE));
         vm.getError().observe(getViewLifecycleOwner(),s->{error.setText(s==null?"":s);error.setVisibility(s==null||s.isEmpty()?View.GONE:View.VISIBLE);});
@@ -66,7 +67,6 @@ public class FriendsFragment extends Fragment {
         requestRows.setVisibility(requests?View.VISIBLE:View.GONE);
         root.findViewById(R.id.empty_requests).setVisibility(requests&&requestRows.getChildCount()==0?View.VISIBLE:View.GONE);
     }
-    private void renderSearch(List<User> users){resultRows.removeAllViews();if(users==null)return;for(User u:users){LinearLayout row=row(u.getDisplayName());MaterialButton action=button(R.string.friends_add_button);action.setOnClickListener(v->vm.sendRequest(u));row.addView(action);resultRows.addView(row);}}
     private void renderRequests(List<Friendship> items){requestRows.removeAllViews();if(items==null)return;String me=vm.getCurrentUser()==null?"":vm.getCurrentUser().getUid();
         for(Friendship f:items){User other=f.getOtherUser();String label=other==null?getString(R.string.friends_unknown_user):other.getDisplayName();LinearLayout row=row(label);boolean incoming=me.equals(f.getToUid());
             if(incoming){MaterialButton accept=button(R.string.friends_accept_button);accept.setOnClickListener(v->vm.accept(f));row.addView(accept);MaterialButton decline=button(R.string.friends_decline_button);decline.setOnClickListener(v->vm.decline(f));row.addView(decline);}

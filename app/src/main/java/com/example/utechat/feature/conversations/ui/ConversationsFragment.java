@@ -37,7 +37,6 @@ public class ConversationsFragment extends Fragment {
     private ProgressBar loadMoreProgress;
     private TextView errorMessage;
     private TextView pagingErrorMessage;
-    private android.widget.EditText search;
     private java.util.List<Conversation> loadedItems = java.util.Collections.emptyList();
 
     @Override
@@ -90,12 +89,10 @@ public class ConversationsFragment extends Fragment {
         divider.setDrawable(java.util.Objects.requireNonNull(
                 androidx.appcompat.content.res.AppCompatResources.getDrawable(requireContext(), R.drawable.conversation_divider)));
         recyclerView.addItemDecoration(divider);
-        search = view.findViewById(R.id.et_conversation_search);
-        search.addTextChangedListener(new android.text.TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            public void onTextChanged(CharSequence s, int start, int before, int count) { filterConversations(); }
-            public void afterTextChanged(android.text.Editable s) {}
-        });
+        View.OnClickListener openSearch = v -> startActivity(new Intent(requireContext(),
+                com.example.utechat.feature.search.ui.SearchActivity.class));
+        view.findViewById(R.id.et_conversation_search).setOnClickListener(openSearch);
+        view.findViewById(R.id.btn_open_conversation_search).setOnClickListener(openSearch);
         view.findViewById(R.id.btn_new_chat).setOnClickListener(v ->
                 ((com.example.utechat.feature.main.ui.MainActivity) requireActivity()).openFriends());
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -155,11 +152,9 @@ public class ConversationsFragment extends Fragment {
     }
 
     private void filterConversations() {
-        String query = search.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
         ArrayList<Conversation> matches = new ArrayList<>();
         for (Conversation item : loadedItems) {
-            String title = new com.example.utechat.feature.chat.ui.ChatPreferences(requireContext(), item.getId()).title(item.getTitle());
-            if (query.isEmpty() || (title != null && title.toLowerCase(java.util.Locale.ROOT).contains(query))) matches.add(item);
+            matches.add(item);
         }
         // Stable sorting retains activity order inside each device-local priority level.
         matches.sort(java.util.Comparator.comparingInt((Conversation item) -> {
@@ -168,9 +163,8 @@ public class ConversationsFragment extends Fragment {
         }));
         adapter.submitList(matches);
         ViewGroup emptyContent = (ViewGroup) emptyState;
-        ((TextView) emptyContent.getChildAt(0)).setText(query.isEmpty()
-                ? R.string.empty_conversations_title : R.string.ui_no_search_results);
-        emptyContent.getChildAt(1).setVisibility(query.isEmpty() ? View.VISIBLE : View.GONE);
+        ((TextView) emptyContent.getChildAt(0)).setText(R.string.empty_conversations_title);
+        emptyContent.getChildAt(1).setVisibility(View.VISIBLE);
         if (errorState.getVisibility() != View.VISIBLE && initialProgress.getVisibility() != View.VISIBLE) {
             recyclerView.setVisibility(matches.isEmpty() ? View.GONE : View.VISIBLE);
             emptyState.setVisibility(matches.isEmpty() ? View.VISIBLE : View.GONE);

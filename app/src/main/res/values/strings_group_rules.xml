@@ -1,0 +1,22 @@
+<resources>
+    <string name="groups_set_deputy">Bổ nhiệm phó nhóm</string>
+    <string name="groups_unset_deputy">Bãi nhiệm phó nhóm</string>
+    <string name="groups_confirm_deputy">Thay đổi vai trò của thành viên này?</string>
+    <string name="groups_upgrade">Nâng cấp thành cộng đồng</string>
+    <string name="groups_upgrade_hint">Nhóm cần từ 5 đến 10 thành viên để nâng cấp. Hiện có %1$d người.</string>
+    <string name="groups_confirm_upgrade">Nâng cấp nhóm thành cộng đồng? Các thành viên và lịch sử trò chuyện sẽ được giữ lại.</string>
+    <string name="groups_upgrade_error">Chỉ trưởng nhóm được nâng cấp khi nhóm có từ 5 đến 10 thành viên.</string>
+    <string name="groups_full">nhóm đã đạt thành viên tối đa, hãy nâng lên cộng đồng</string>
+    <string name="groups_community_full">Cộng đồng đã đạt tối đa 10 thành viên.</string>
+    <string name="groups_type_group_title">Nhóm</string>
+    <string name="groups_type_community_title">Cộng đồng</string>
+    <string name="groups_type_group">Nhóm · %1$d thành viên</string>
+    <string name="groups_type_community">Cộng đồng · %1$d thành viên</string>
+    <string name="groups_delete">Xóa nhóm</string>
+    <string name="groups_delete_title">Xóa nhóm vĩnh viễn?</string>
+    <string name="groups_confirm_delete">Nhóm, thành viên, tin nhắn và ảnh trong nhóm sẽ bị xóa đối với tất cả mọi người. Không thể hoàn tác.</string>
+    <string name="groups_delete_error">Chưa xóa xong nhóm. Chỉ trưởng nhóm hoặc thành viên cuối cùng được xóa. Nếu nhóm đang xóa, hãy nhấn “Tiếp tục xóa” để thử lại.</string>
+    <string name="groups_deleting">Đang xóa nhóm…</string>
+    <string name="groups_delete_retry">Tiếp tục xóa</string>
+    <string name="groups_single_leave">Nhóm chỉ còn bạn. Hãy chọn Xóa nhóm trong phần Thành viên để kết thúc nhóm.</string>
+</resources>

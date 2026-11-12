@@ -1,0 +1,70 @@
+<resources>
+    <color name="community_action">#0864C4</color>
+    <color name="community_action_soft">#EAF3FF</color>
+    <color name="community_border">#D9E3EF</color>
+    <color name="community_muted">#526477</color>
+    <color name="community_danger">#B42332</color>
+    <color name="community_disabled">#E2E8F0</color>
+    <style name="CommunityPrimaryButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingLeft">14dp</item>
+        <item name="android:paddingRight">14dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="backgroundTint">@color/community_primary_background</item>
+        <item name="android:textColor">@color/community_primary_text</item>
+        <item name="iconTint">@color/community_primary_text</item>
+        <item name="iconPadding">8dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+    <style name="CommunitySecondaryButton" parent="CommunityPrimaryButton">
+        <item name="backgroundTint">@color/utechat_surface</item>
+        <item name="android:textColor">@color/community_action</item>
+        <item name="iconTint">@color/community_action</item>
+        <item name="strokeColor">@color/community_border</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+    <style name="CommunityDangerButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:textColor">@color/community_danger</item>
+        <item name="iconTint">@color/community_danger</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+    <style name="CommunityPrimaryOverlay" parent=""><item name="materialButtonStyle">@style/CommunityPrimaryButton</item></style>
+    <style name="CommunitySecondaryOverlay" parent=""><item name="materialButtonStyle">@style/CommunitySecondaryButton</item></style>
+    <style name="CommunityDangerOverlay" parent=""><item name="materialButtonStyle">@style/CommunityDangerButton</item></style>
+    <style name="CommunityDialogOverlay" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/utechat_surface</item>
+        <item name="colorOnSurface">@color/utechat_on_surface</item>
+        <item name="android:textColorPrimary">@color/utechat_on_surface</item>
+        <item name="android:textColorSecondary">@color/community_muted</item>
+        <item name="colorPrimary">@color/community_action</item>
+        <item name="colorControlActivated">@color/community_action</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="android:checkedTextViewStyle">@style/CommunityCheckedText</item>
+        <item name="checkedTextViewStyle">@style/CommunityCheckedText</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/CommunityDialogBodyText</item>
+    </style>
+    <style name="CommunityCheckedText" parent="Widget.Material3.CheckedTextView">
+        <item name="android:textColor">@color/utechat_on_surface</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="CommunityDialogBodyText" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/utechat_on_surface</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+</resources>

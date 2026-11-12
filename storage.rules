@@ -10,6 +10,7 @@ service firebase.storage {
     function isParticipant(conversationId) {
       return request.auth != null
         && firestore.exists(conversationPath(conversationId))
+        && firestore.get(conversationPath(conversationId)).data.get('lifecycle', 'active') == 'active'
         && request.auth.uid in firestore.get(conversationPath(conversationId)).data.participantIds
         && ((firestore.get(conversationPath(conversationId)).data.type == 'direct'
              && firestore.get(conversationPath(conversationId)).data.participantIds.size() == 2)

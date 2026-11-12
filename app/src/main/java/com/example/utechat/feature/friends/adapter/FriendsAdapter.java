@@ -107,7 +107,7 @@ public class FriendsAdapter extends ListAdapter<User, FriendsAdapter.ViewHolder>
                 tvStatus.setText(R.string.status_last_seen_unknown);
             }
 
-            itemView.setOnClickListener(v -> listener.onFriendClick(user));
+            itemView.findViewById(R.id.friend_row).setOnClickListener(v -> listener.onFriendClick(user));
             itemView.findViewById(R.id.btn_friend_call).setOnClickListener(v -> listener.onFriendCall(user, "audio"));
             itemView.findViewById(R.id.btn_friend_video).setOnClickListener(v -> listener.onFriendCall(user, "video"));
         }

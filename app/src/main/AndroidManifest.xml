@@ -48,6 +48,7 @@
         <activity android:name=".feature.auth.ui.RegisterActivity" android:exported="false" />
         <activity android:name=".feature.auth.ui.LoginActivity" android:exported="false" />
         <activity android:name=".feature.main.ui.MainActivity" android:exported="false" />
+        <activity android:name=".feature.search.ui.SearchActivity" android:exported="false" android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
         <activity android:name=".feature.auth.ui.SplashActivity" android:exported="true" android:theme="@style/Theme.UTEChat.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

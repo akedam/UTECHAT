@@ -44,6 +44,7 @@ public final class CallActivity extends AppCompatActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ActivityResultLauncher<String[]> permissionRequest;
     private Runnable timeout;
+    private Runnable callPoll;
     private CallRepository repository;
     private CallSession call;
     private AgoraCallController rtc;
@@ -61,6 +62,7 @@ public final class CallActivity extends AppCompatActivity {
     private boolean finishingScheduled;
     private android.media.Ringtone ringtone;
     private boolean peerLoaded;
+    private boolean preparingBackend;
 
     public static Intent outgoingIntent(Context context, String conversationId, String title, String mediaType) {
         return new Intent(context, CallActivity.class).putExtra(EXTRA_MODE, "outgoing")
@@ -90,6 +92,7 @@ public final class CallActivity extends AppCompatActivity {
             if (incoming) acceptCall(); else createOutgoing();
         });
         timeout = this::handleTimeout;
+        callPoll = this::refreshWhileConnecting;
         setContentView(R.layout.activity_call);
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         View root = findViewById(R.id.call_root);
@@ -103,6 +106,7 @@ public final class CallActivity extends AppCompatActivity {
         repository = CallRepositoryProvider.get(this);
         incoming = "incoming".equals(getIntent().getStringExtra(EXTRA_MODE));
         callId = getIntent().getStringExtra(EXTRA_CALL_ID);
+        com.example.utechat.feature.notifications.IncomingCallNotification.cancel(this, callId);
         mediaType = getIntent().getStringExtra(EXTRA_MEDIA);
         if (!"video".equals(mediaType)) mediaType = "audio";
         speakerEnabled = "video".equals(mediaType);
@@ -110,6 +114,7 @@ public final class CallActivity extends AppCompatActivity {
         peerTitle = getIntent().getStringExtra(EXTRA_TITLE);
         conversationId = getIntent().getStringExtra(EXTRA_CONVERSATION_ID);
         if (!UteChatApplication.claimActiveCall(callId == null ? "pending-outgoing" : callId)) {
+            if (incoming && callId != null) repository.updateStatus(callId, "busy", silentCallback());
             Toast.makeText(this, R.string.call_state_busy, Toast.LENGTH_LONG).show(); finish(); return;
         }
         ((TextView) findViewById(R.id.tv_call_title)).setText(getString(
@@ -146,8 +151,14 @@ public final class CallActivity extends AppCompatActivity {
         if (call != null && "ringing".equals(call.status) && !endingRequested) {
             endingRequested = true;
             setStatus(R.string.call_state_missed);
-            repository.updateStatus(call.id, incoming ? "missed" : "ended", new CallRepository.Callback() {
-                @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) finishSoon(); }
+            repository.expireRinging(call.id, new CallRepository.Callback() {
+                @Override public void onSuccess(CallSession current) {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (current != null && "accepted".equals(current.status)) {
+                        endingRequested = false;
+                        applyCall(current);
+                    } else finishSoon();
+                }
                 @Override public void onError(String error) {
                     endingRequested = false;
                     if (!isFinishing() && !isDestroyed()) {
@@ -186,6 +197,24 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void createOutgoing() {
+        if (preparingBackend || endingRequested) return;
+        preparingBackend = true;
+        setStatus(R.string.call_state_waking_backend); showProgress(true);
+        com.example.utechat.data.backend.BackendClient.warmUp(new com.example.utechat.data.backend.BackendClient.ReadyCallback() {
+            @Override public void onReady() {
+                preparingBackend = false;
+                if (!isFinishing() && !isDestroyed() && !endingRequested) createOutgoingReady();
+            }
+            @Override public void onError() {
+                preparingBackend = false;
+                if (!isFinishing() && !isDestroyed() && !endingRequested) {
+                    showProgress(false); showError(R.string.call_network_error); setStatus(R.string.call_state_failed); finishSoon();
+                }
+            }
+        });
+    }
+
+    private void createOutgoingReady() {
         setStatus(R.string.call_state_preparing); showProgress(true);
         repository.createOutgoing(conversationId, mediaType, new CallRepository.Callback() {
             @Override public void onSuccess(CallSession created) {
@@ -222,10 +251,28 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void observeCall(String id) {
+        handler.removeCallbacks(callPoll);
+        handler.postDelayed(callPoll, 3000L);
         repository.listen(id, (updated, error) -> {
             if (isFinishing() || isDestroyed()) return;
             if (error != null) { showError(R.string.call_network_error); return; }
             if (updated == null) { showError(R.string.call_network_error); return; }
+            applyCall(updated);
+        });
+    }
+
+    private void refreshWhileConnecting() {
+        if (callId == null || connected || endingRequested || isFinishing() || isDestroyed()) return;
+        repository.refresh(callId, (updated, error) -> {
+            if (endingRequested || isFinishing() || isDestroyed()) return;
+            if (updated != null) applyCall(updated);
+            if (!connected && !endingRequested) handler.postDelayed(callPoll, 3000L);
+        });
+    }
+
+    private void applyCall(CallSession updated) {
+            if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Signal state=" + updated.status + ", incoming=" + incoming + ", ending=" + endingRequested);
+            if (call != null && "accepted".equals(call.status) && "ringing".equals(updated.status)) return;
             call = updated; mediaType = updated.mediaType;
             if (!peerLoaded) {
                 peerLoaded = true;
@@ -265,7 +312,6 @@ public final class CallActivity extends AppCompatActivity {
             else if ("ended".equals(updated.status) || "failed".equals(updated.status)) {
                 setStatus("ended".equals(updated.status) ? R.string.call_state_ended : R.string.call_state_failed); finishSoon();
             }
-        });
     }
 
     private void acceptCall() {
@@ -358,6 +404,7 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void startMediaOnce() {
+        if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Start media: starting=" + startingMedia + ", connected=" + connected + ", ending=" + endingRequested);
         if (startingMedia || connected || endingRequested || call == null) return;
         if (!hasPermission(Manifest.permission.RECORD_AUDIO) || ("video".equals(call.mediaType) && !hasPermission(Manifest.permission.CAMERA))) {
             showError(R.string.call_permission_denied); endCall(); return;
@@ -368,7 +415,7 @@ public final class CallActivity extends AppCompatActivity {
         startingMedia = true; showProgress(true); setStatus(R.string.call_state_connecting);
         try { androidx.core.content.ContextCompat.startForegroundService(this,
                 CallForegroundService.startIntent(this, "video".equals(call.mediaType))); }
-        catch (RuntimeException serviceError) { startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
+        catch (RuntimeException serviceError) { if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "Foreground service start failed", serviceError); startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
         CallSession callSnapshot = call;
         new AgoraTokenClient().fetch(callSnapshot, new AgoraTokenClient.Callback() {
             @Override public void onToken(String appId, String token, String channel, int uid) {
@@ -385,6 +432,7 @@ public final class CallActivity extends AppCompatActivity {
                         local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
                     }
                 } catch (Exception error) {
+                    if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "RTC initialization failed", error);
                     startingMedia = false; showProgress(false); showError(R.string.call_network_error);
                     repository.updateStatus(callSnapshot.id, "failed", silentCallback());
                 }
@@ -438,7 +486,7 @@ public final class CallActivity extends AppCompatActivity {
     private void finishSoon() {
         if (finishingScheduled) return;
         finishingScheduled = true; endingRequested = true;
-        handler.removeCallbacks(timeout); stopRingtone(); showProgress(false);
+        handler.removeCallbacks(timeout); handler.removeCallbacks(callPoll); stopRingtone(); showProgress(false);
         findViewById(R.id.incoming_actions).setVisibility(View.GONE);
         findViewById(R.id.in_call_actions).setVisibility(View.GONE);
         findViewById(R.id.btn_end_call).setEnabled(false);

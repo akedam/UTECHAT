@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp"
+    android:layout_marginBottom="12dp" android:background="@drawable/bg_community_card">
+    <LinearLayout android:id="@+id/community_group_identity" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical"
+        android:clickable="true" android:focusable="true" android:background="?attr/selectableItemBackground">
+        <FrameLayout android:layout_width="48dp" android:layout_height="48dp">
+            <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/bg_community_icon"
+                android:src="@drawable/ic_chat_group" android:tint="@color/community_action" android:padding="12dp" android:contentDescription="@null" />
+            <ImageView android:id="@+id/iv_community_group" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:contentDescription="@null" android:visibility="gone" />
+        </FrameLayout>
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
+            <TextView android:id="@+id/tv_community_group_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textSize="17sp" android:textStyle="bold" android:textColor="@color/utechat_on_surface" android:maxLines="2" android:ellipsize="end" />
+            <TextView android:id="@+id/tv_community_group_members" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="4dp" android:textSize="13sp" android:textColor="@color/community_muted" />
+        </LinearLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/tv_community_group_preview" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp"
+        android:textSize="14sp" android:textColor="@color/community_muted" android:maxLines="1" android:ellipsize="end" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="horizontal">
+        <com.google.android.material.button.MaterialButton android:id="@+id/btn_community_open" style="@style/CommunityPrimaryButton"
+            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:layout_marginEnd="8dp" android:text="@string/groups_open_chat" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/btn_community_members" style="@style/CommunitySecondaryButton"
+            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1" android:text="@string/groups_members" />
+    </LinearLayout>
+    <com.google.android.material.button.MaterialButton android:id="@+id/btn_community_leave" style="@style/CommunityDangerButton"
+        android:layout_width="wrap_content" android:layout_height="48dp" android:layout_gravity="end" android:layout_marginTop="4dp" android:text="@string/groups_leave" />
+</LinearLayout>

@@ -83,9 +83,15 @@ public final class AgoraCallController {
             }
             @Override public void onConnectionStateChanged(int state, int reason) {
                 if (state == Constants.CONNECTION_STATE_RECONNECTING) events.onReconnecting();
-                if (state == Constants.CONNECTION_STATE_FAILED) events.onError();
+                if (state == Constants.CONNECTION_STATE_FAILED) {
+                    if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.w("UTEChatRTC", "Connection failed, reason=" + reason);
+                    events.onError();
+                }
             }
-            @Override public void onError(int errorCode) { events.onError(); }
+            @Override public void onError(int errorCode) {
+                if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.w("UTEChatRTC", "RTC error=" + errorCode);
+                events.onError();
+            }
             @Override public void onTokenPrivilegeWillExpire(String token) { events.onTokenRefresh(); }
             @Override public void onRequestToken() { events.onTokenRefresh(); }
         };
