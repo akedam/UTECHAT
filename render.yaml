@@ -1,0 +1,29 @@
+# All resources are free; secrets are configured only in Render.
+services:
+  - type: web
+    name: utechat-test-backend
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: server/call-token
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: FIREBASE_PROJECT_ID
+        value: utechat-ab9d8
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/firebase-admin.json
+      - key: AGORA_APP_ID
+        sync: false
+      - key: AGORA_APP_CERTIFICATE
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: utechat-media

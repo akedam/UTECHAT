@@ -2,9 +2,9 @@
   "name": "utechat-call-token-server",
   "private": true,
   "version": "1.0.0",
-  "description": "Development token endpoint for UTEChat one-to-one Agora calls",
+  "description": "UTEChat test backend: Agora tokens, FCM notifications and private images",
   "main": "server.js",
-  "scripts": { "start": "node --env-file-if-exists=.env server.js", "check": "node --check server.js" },
+  "scripts": { "start": "node --env-file-if-exists=.env server.js", "check": "node --check server.js && node --check backend.js && node --check supabase-storage.js", "test": "node --test test/*.test.js" },
   "engines": { "node": ">=22" },
   "dependencies": {
     "agora-token": "2.0.7",

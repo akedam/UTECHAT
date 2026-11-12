@@ -17,6 +17,12 @@ val agoraAppId = providers.gradleProperty("utechatAgoraAppId")
     .orElse(agoraLocal.getProperty("utechatAgoraAppId", "")).get()
 val agoraTokenServerUrl = providers.gradleProperty("utechatAgoraTokenServerUrl")
     .orElse(agoraLocal.getProperty("utechatAgoraTokenServerUrl", "")).get()
+val useBackendMedia = providers.gradleProperty("utechatUseBackendMedia")
+    .orElse(agoraLocal.getProperty("utechatUseBackendMedia", "false")).get().toBooleanStrict()
+val testerSigning = Properties().apply {
+    val settings = rootProject.file("tester-signing.local.properties")
+    if (settings.isFile) settings.inputStream().use { load(it) }
+}
 
 // Apply only when the developer has supplied their own Firebase app configuration.
 if (file("google-services.json").exists()) {
@@ -43,13 +49,25 @@ android {
         buildConfigField("int", "AUTH_EMULATOR_PORT", authEmulatorPort.toString())
         buildConfigField("String", "AGORA_APP_ID", "\"${agoraAppId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "AGORA_TOKEN_SERVER_URL", "\"${agoraTokenServerUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("boolean", "USE_BACKEND_MEDIA", useBackendMedia.toString())
     }
 
+    signingConfigs {
+        if (testerSigning.getProperty("storeFile") != null) {
+            create("tester") {
+                storeFile = rootProject.file(testerSigning.getProperty("storeFile"))
+                storePassword = testerSigning.getProperty("storePassword")
+                keyAlias = testerSigning.getProperty("keyAlias")
+                keyPassword = testerSigning.getProperty("keyPassword")
+            }
+        }
+    }
     buildTypes {
         debug {
             buildConfigField("boolean", "USE_STORAGE_EMULATOR", useStorageEmulator.toString())
         }
         release {
+            if (testerSigning.getProperty("storeFile") != null) signingConfig = signingConfigs.getByName("tester")
             // Never ship a release APK pointed at the developer's local emulator.
             buildConfigField("boolean", "USE_STORAGE_EMULATOR", "false")
             optimization {

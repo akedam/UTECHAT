@@ -25,3 +25,5 @@ server/call-token/.env
 agora.local.properties
 server/call-token/node_modules/
 server/call-token/service-account*.json
+/.private/
+/tester-signing.local.properties

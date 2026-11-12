@@ -47,7 +47,8 @@ public final class AgoraTokenClient {
                 throw new IllegalArgumentException("HTTPS required");
             }
             connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("POST"); connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("POST"); connection.setConnectTimeout(15_000); connection.setReadTimeout(100_000);
             connection.setRequestProperty("Authorization", "Bearer " + firebaseToken);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setDoOutput(true);

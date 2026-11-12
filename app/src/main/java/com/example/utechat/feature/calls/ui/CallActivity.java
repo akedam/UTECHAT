@@ -61,6 +61,7 @@ public final class CallActivity extends AppCompatActivity {
     private boolean finishingScheduled;
     private android.media.Ringtone ringtone;
     private boolean peerLoaded;
+    private boolean preparingBackend;
 
     public static Intent outgoingIntent(Context context, String conversationId, String title, String mediaType) {
         return new Intent(context, CallActivity.class).putExtra(EXTRA_MODE, "outgoing")
@@ -103,6 +104,7 @@ public final class CallActivity extends AppCompatActivity {
         repository = CallRepositoryProvider.get(this);
         incoming = "incoming".equals(getIntent().getStringExtra(EXTRA_MODE));
         callId = getIntent().getStringExtra(EXTRA_CALL_ID);
+        com.example.utechat.feature.notifications.IncomingCallNotification.cancel(this, callId);
         mediaType = getIntent().getStringExtra(EXTRA_MEDIA);
         if (!"video".equals(mediaType)) mediaType = "audio";
         speakerEnabled = "video".equals(mediaType);
@@ -186,6 +188,24 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void createOutgoing() {
+        if (preparingBackend || endingRequested) return;
+        preparingBackend = true;
+        setStatus(R.string.call_state_waking_backend); showProgress(true);
+        com.example.utechat.data.backend.BackendClient.warmUp(new com.example.utechat.data.backend.BackendClient.ReadyCallback() {
+            @Override public void onReady() {
+                preparingBackend = false;
+                if (!isFinishing() && !isDestroyed() && !endingRequested) createOutgoingReady();
+            }
+            @Override public void onError() {
+                preparingBackend = false;
+                if (!isFinishing() && !isDestroyed() && !endingRequested) {
+                    showProgress(false); showError(R.string.call_network_error); setStatus(R.string.call_state_failed); finishSoon();
+                }
+            }
+        });
+    }
+
+    private void createOutgoingReady() {
         setStatus(R.string.call_state_preparing); showProgress(true);
         repository.createOutgoing(conversationId, mediaType, new CallRepository.Callback() {
             @Override public void onSuccess(CallSession created) {

@@ -207,6 +207,8 @@
     <string name="call_incoming_audio">Cuộc gọi thoại đến</string>
     <string name="call_incoming_video">Cuộc gọi video đến</string>
     <string name="call_state_preparing">Đang chuẩn bị cuộc gọi…</string>
+    <string name="call_state_waking_backend">Đang chuẩn bị dịch vụ gọi… Có thể mất khoảng một phút ở lần đầu.</string>
+    <string name="call_open_incoming">Nhấn để trả lời cuộc gọi</string>
     <string name="call_state_ringing">Đang gọi…</string>
     <string name="call_state_incoming">Đang đổ chuông</string>
     <string name="call_state_connecting">Đang kết nối…</string>

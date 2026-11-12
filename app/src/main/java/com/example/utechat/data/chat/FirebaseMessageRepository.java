@@ -148,7 +148,10 @@ public final class FirebaseMessageRepository implements MessageRepository {
         com.google.firebase.firestore.WriteBatch batch = firestore.batch();
         batch.set(messageRef, payload);
         batch.set(conversationRef, summary, SetOptions.merge());
-        batch.commit().addOnSuccessListener(ignored -> callback.onSuccess())
+        batch.commit().addOnSuccessListener(ignored -> {
+                    com.example.utechat.data.backend.BackendEvents.message(context, conversationId, message.getId());
+                    callback.onSuccess();
+                })
                 .addOnFailureListener(error -> verifyIdempotentWrite(messageRef, message, image, poll, callback));
     }
 
@@ -199,6 +202,8 @@ public final class FirebaseMessageRepository implements MessageRepository {
                                     && message.getPollOptions().equals(snapshot.get("pollOptions"))
                                 : "text".equals(snapshot.getString("type"))
                                     && message.getContent().equals(snapshot.getString("content")))) {
+                com.example.utechat.data.backend.BackendEvents.message(context,
+                        reference.getParent().getParent().getId(), message.getId());
                 callback.onSuccess();
             } else {
                 callback.onError(context.getString(R.string.chat_send_error));

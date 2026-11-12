@@ -66,9 +66,11 @@ public final class FirebaseCallRepository implements CallRepository {
                     data.put("createdAt", now);
                     data.put("updatedAt", now);
                     data.put("expiresAt", now + RING_TIMEOUT_MS);
-                    ref.set(data).addOnSuccessListener(unused ->
+                    ref.set(data).addOnSuccessListener(unused -> {
+                            com.example.utechat.data.backend.BackendEvents.call(context, ref.getId());
                             callback.onSuccess(new CallSession(ref.getId(), conversationId, user.getUid(), calleeUid,
-                                    ref.getId(), mediaType, "ringing", now, now + RING_TIMEOUT_MS)))
+                                    ref.getId(), mediaType, "ringing", now, now + RING_TIMEOUT_MS));
+                        })
                             .addOnFailureListener(error -> callback.onError(context.getString(R.string.call_network_error)));
                 }).addOnFailureListener(error -> callback.onError(context.getString(R.string.call_network_error)));
     }

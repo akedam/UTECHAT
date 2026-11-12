@@ -48,6 +48,8 @@ public final class UteChatApplication extends Application
     }
 
     public static boolean hasActiveCall() { return ACTIVE_CALL.get() != null; }
+    public boolean isForeground() { return startedActivities > 0; }
+    public void deliverIncomingCall(CallSession call) { onIncomingCall(call); }
     public static boolean setActiveCall(@Nullable String callId) { return callId != null && ACTIVE_CALL.compareAndSet(null, callId); }
     public static boolean claimActiveCall(@Nullable String callId) {
         return callId != null && (ACTIVE_CALL.compareAndSet(null, callId) || callId.equals(ACTIVE_CALL.get()));
@@ -84,6 +86,7 @@ public final class UteChatApplication extends Application
         }
         presenceManager.start(user.getUid());
         PushTokenRepository.refreshCurrentToken(this);
+        com.example.utechat.data.backend.BackendEvents.flush(this);
         if (callRepository != null) callRepository.listenIncoming(user.getUid(), this::onIncomingCall);
     }
 
