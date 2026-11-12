@@ -3,10 +3,10 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Push-Location $repoRoot
 try {
-    & node (Join-Path $PSScriptRoot 'prepare-tester.js') $BackendUrl
+    & node (Join-Path $PSScriptRoot 'prepare-tester.cjs') $BackendUrl
     if ($LASTEXITCODE -ne 0) { throw 'Backend chua san sang. Chua build APK de chia se.' }
     $env:GRADLE_USER_HOME = Join-Path $repoRoot '.gradle-user-home'
-    & .\gradlew.bat assembleRelease testDebugUnitTest --offline
+    & .\gradlew.bat assembleRelease testDebugUnitTest --no-configuration-cache
     if ($LASTEXITCODE -ne 0) { throw 'Build khong thanh cong.' }
     $source = Join-Path $repoRoot 'app/build/outputs/apk/release/app-arm64-v8a-release.apk'
     $target = Join-Path $repoRoot 'build/UTEChat-test.apk'

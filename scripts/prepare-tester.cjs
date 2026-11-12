@@ -1,5 +1,5 @@
 "use strict";
-// Generates one persistent signing identity. Secrets are written only to ignored local files.
+// CommonJS entry point: the repository root uses ESM. Secrets stay in ignored local files.
 const fs=require("node:fs"),path=require("node:path"),crypto=require("node:crypto"),cp=require("node:child_process");
 const root=path.resolve(__dirname,"..");
 const endpoint=process.argv[2];
