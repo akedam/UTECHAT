@@ -40,8 +40,16 @@ function send(res, status, body, type = "application/json; charset=utf-8") {
 function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now, dailyUploadBytes = 32 * 1024 * 1024 }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
   async function member(conversationId, uid) {
-    const snapshot = await db.doc(`conversations/${conversationId}/members/${uid}`).get();
-    requireValue(snapshot.exists && snapshot.data().userId === uid, 403, "forbidden");
+    const parent = await db.doc(`conversations/${conversationId}`).get(), data = parent.data();
+    requireValue(parent.exists && Array.isArray(data.participantIds) && data.participantIds.includes(uid), 403, "forbidden");
+    if (data.type === "direct") {
+      requireValue(data.participantIds.length === 2 && new Set(data.participantIds).size === 2, 403, "forbidden");
+    } else {
+      requireValue(data.type === "group", 403, "forbidden");
+      const snapshot = await db.doc(`conversations/${conversationId}/members/${uid}`).get();
+      requireValue(snapshot.exists && snapshot.data().userId === uid, 403, "forbidden");
+    }
+    return data;
   }
   function rateLimit(uid, kind) {
     const key = `${uid}:${kind}`, time = now();
@@ -58,8 +66,10 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       requireValue(Array.isArray(call.participants) && call.participants.includes(uid)
         && [call.callerUid, call.calleeUid].includes(uid), 403, "forbidden");
       requireValue(call.status === "accepted" && call.channelName === callId, 409, "call-not-ready");
-      const membership = await tx.get(db.doc(`conversations/${call.conversationId}/members/${uid}`));
-      requireValue(membership.exists && membership.data().userId === uid, 403, "forbidden");
+      const parent = await tx.get(db.doc(`conversations/${call.conversationId}`)), conversation = parent.data();
+      requireValue(parent.exists && conversation.type === "direct" && Array.isArray(conversation.participantIds)
+        && conversation.participantIds.length === 2 && conversation.participantIds.includes(call.callerUid)
+        && conversation.participantIds.includes(call.calleeUid), 403, "forbidden");
       if (!call.rtcUidByUser?.[call.callerUid] || !call.rtcUidByUser?.[call.calleeUid]) {
         const rtcUid = (id) => crypto.createHash("sha256").update(id).digest().readUInt32BE(0) % 2147483646 + 1;
         const caller = rtcUid(call.callerUid); let callee = rtcUid(call.calleeUid);
@@ -153,14 +163,19 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     requireValue(parent.exists && message.exists, 404, "not-found"); const data = message.data();
     requireValue(data.senderId === uid, 403, "forbidden");
     requireValue(Number.isFinite(data.sentAt) && data.sentAt >= now() - 24 * 60 * 60_000 && data.sentAt <= now() + 60_000, 409, "event-expired");
-    const members = await ref.collection("members").limit(101).get();
-    requireValue(members.docs.length <= 100, 409, "group-too-large"); const group = parent.data().type === "group";
-    for (const recipient of members.docs) {
-      if (recipient.id === uid || recipient.data().userId !== recipient.id) continue;
-      await pushOnce(`message:${body.conversationId}:${body.messageId}`, recipient.id, {
+    const group = parent.data().type === "group";
+    let recipients = parent.data().participantIds;
+    if (group) {
+      const members = await ref.collection("members").limit(101).get();
+      requireValue(members.docs.length <= 100, 409, "group-too-large");
+      recipients = members.docs.filter(doc => doc.data().userId === doc.id && recipients.includes(doc.id)).map(doc => doc.id);
+    }
+    for (const recipient of recipients) {
+      if (recipient === uid) continue;
+      await pushOnce(`message:${body.conversationId}:${body.messageId}`, recipient, {
         eventType: "message", conversationId: body.conversationId, messageId: body.messageId,
         senderName: String(data.senderName || "UTEChat").slice(0, 80), conversationType: group ? "group" : "direct",
-        conversationTitle: group ? String(parent.data().title || "Nhóm UTEChat").slice(0, 80) : "",
+        conversationTitle: group ? String(parent.data().groupName || "Nhóm UTEChat").slice(0, 80) : "",
         preview: data.type === "image" ? "[Hình ảnh]" : String(data.content || "Tin nhắn mới").slice(0, 300),
       }, 24 * 60 * 60_000);
     }

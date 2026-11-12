@@ -69,7 +69,7 @@ test("token authorization rejects absent/revoked/outsider credentials; RTC UIDs 
   assert.equal((await f.request("/api/rtc-token","alice",{callId:"call1"})).status,409);
 });
 test("membership removal prevents token issuance even for a listed call participant",async(t)=>{
-  const f=await fixture(t);f.db.rows.delete("conversations/chat/members/bob");
+  const f=await fixture(t);await f.db.doc("conversations/chat").update({participantIds:["alice","mallory"]});
   assert.equal((await f.request("/api/rtc-token","bob",{callId:"call1"})).status,403);
 });
 test("push uses stored message and actual members, cannot spoof a sender, and deduplicates retries",async(t)=>{
@@ -105,7 +105,7 @@ test("private images require owner upload, actual message and current membership
   assert.equal((await f.request(route,"bob",{},"GET")).status,403);
   f.db.rows.set("conversations/chat/messages/photo1",{type:"image",senderId:"alice",mediaPath:path});
   assert.deepEqual((await f.request(route,"bob",{},"GET")).body,PNG);
-  f.db.rows.delete("conversations/chat/members/bob");
+  await f.db.doc("conversations/chat").update({participantIds:["alice","mallory"]});
   assert.equal((await f.request(route,"bob",{},"GET")).status,403);
   const changed=Buffer.from(PNG);changed[25]^=1;
   assert.equal((await f.request(route,"alice",changed,"PUT","image/png")).status,409);
@@ -134,4 +134,20 @@ test("Supabase adapter uses private authenticated access and immutable uploads",
   assert.equal(calls[1].init.redirect,"error");
   assert.equal(calls[1].init.headers.Authorization,undefined);
   assert.throws(()=>createStorage({url:"http://evil.example",key:"key"}));
+});
+test("direct conversations need no group member documents; notifications use root participants",async(t)=>{
+  const f=await fixture(t);
+  f.db.rows.delete("conversations/chat/members/alice");f.db.rows.delete("conversations/chat/members/bob");
+  assert.equal((await f.request("/api/rtc-token","alice",{callId:"call1"})).status,200);
+  assert.equal((await f.request("/api/message-notify","alice",{conversationId:"chat",messageId:"msg1"})).status,200);
+  assert.equal(f.pushes[0].data.recipientUid,"bob");
+  assert.equal((await f.request("/api/media?path=conversations/chat/alice/photo","alice",PNG,"PUT","image/png")).status,200);
+});
+test("group images require both root participation and matching member document",async(t)=>{
+  const f=await fixture(t,{rows:{"conversations/chat":{type:"group",participantIds:["alice","bob"],groupName:"Test"}}});
+  f.db.rows.delete("conversations/chat/members/bob");
+  assert.equal((await f.request("/api/media?path=conversations/chat/bob/photo","bob",PNG,"PUT","image/png")).status,403);
+  assert.equal((await f.request("/api/media?path=conversations/chat/alice/photo","alice",PNG,"PUT","image/png")).status,200);
+  assert.equal((await f.request("/api/message-notify","alice",{conversationId:"chat",messageId:"msg1"})).status,200);
+  assert.equal(f.pushes.length,0);
 });
