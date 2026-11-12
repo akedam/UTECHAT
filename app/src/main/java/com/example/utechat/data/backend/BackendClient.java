@@ -43,10 +43,15 @@ public final class BackendClient {
     public static void warmUp(ReadyCallback callback) {
         IO.execute(() -> {
             try {
+                if (BuildConfig.DEBUG) android.util.Log.d("UTEChatBackend", "Warmup started");
                 Response result = request("GET", "/healthz", null, null, false);
+                if (BuildConfig.DEBUG) android.util.Log.d("UTEChatBackend", "Warmup response: " + result.status);
                 if (!result.ok() || !"configured".equals(result.json().optString("status"))) throw new Exception();
                 MAIN.post(callback::onReady);
-            } catch (Exception error) { MAIN.post(callback::onError); }
+            } catch (Exception error) {
+                if (BuildConfig.DEBUG) android.util.Log.w("UTEChatBackend", "Warmup failed: " + error.getClass().getSimpleName());
+                MAIN.post(callback::onError);
+            }
         });
     }
     /** Call from an IO thread. Long read timeout deliberately accommodates Render Free cold starts. */

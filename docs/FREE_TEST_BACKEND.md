@@ -2,6 +2,14 @@
 
 Dung Firebase Spark cho Auth/Firestore/FCM, Render Free cho Node API, Supabase Free cho kho anh **private**, Agora Free cho RTC. Khong bat Blaze, Cloud Run, Cloud Functions hay tai nguyen tra phi trong huong dan nay.
 
+## Cau hinh da trien khai (12/11/2026)
+
+- Backend HTTPS: `https://utechat-test-backend.onrender.com`, health `/healthz`, token `/api/rtc-token`.
+- Render service `utechat-test-backend`, Free, Singapore; nhanh `codex/free-test-backend`, deploy thu cong.
+- Supabase project `UTEChat Test`, Free, Singapore; bucket `utechat-media` private, 8 MiB va JPEG/PNG/WebP.
+- Firebase van dung project `utechat-ab9d8`; da deploy `firestore.indexes.json` cho danh sach hoi thoai va cuoc goi den. Rules khong bi noi long.
+- APK de chia se: `build/UTEChat-test.apk`. **Chi gui APK, khong gui thu muc `.private`, file `.env` hay file signing properties.**
+
 ## Render
 
 - Repo: `https://github.com/akedam/UTECHAT`, nhanh da chua thay doi backend.
@@ -29,6 +37,7 @@ Script kiem tra backend da bat kho anh, giu App ID local, doi sang HTTPS that, b
 - Firebase Storage cu khong duoc chuyen du lieu tu dong sang Supabase. Anh da gui bang Storage Emulator khong co tren backend moi; gui anh moi de thu.
 - App hien ho tro gui anh JPEG/PNG/WebP, khong mo rong thanh gui file tuy y trong thay doi nay.
 - FCM la thong bao data-only duoc backend gui sau khi doc va kiem tra ban ghi Firestore. Phai cap quyen thong bao tren Android. Khi app o nen, nhan thong bao cuoc goi va nhan de mo man hinh tra loi; chua la tich hop Telecom/full-screen ringing. Android force-stop va han che pin cua hang co the ngan thong bao.
+- Foreground dung Activity dang resume de mo man hinh goi, khong danh dau ACTIVE_CALL truoc khi Activity that su duoc tao. Khi dang ket noi, client doc lai call tu server moi 3 giay de bo sung cho listener; dung khi da ket noi/ket thuc. Timeout chi ket thuc neu transaction van thay `ringing`, giu nguyen cuoc goi da duoc tra loi.
 - Outbox thong bao luu local theo tai khoan, thu lai khi con process va khi mo app. Chua co hang doi ben ngoai dam bao giao thong bao khi ben gui bi kill ngay sau commit Firestore.
 - Cuoc goi het han duoc ghi nhan boi timer server va giao dich idempotent; sau Render restart/sleep, duoc khoi phuc luc start hoac yeu cau da xac thuc tiep theo. Khong co scheduler tra phi, nen khong dam bao dung tung giay neu server dung.
 - API anh kiem tra Firebase ID token + membership hien tai; gioi han 8 MiB/anh, 32 MiB/tai khoan/ngay, khong ghi de object. Khong tao URL anh public.

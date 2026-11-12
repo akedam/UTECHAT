@@ -44,6 +44,7 @@ public final class CallActivity extends AppCompatActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ActivityResultLauncher<String[]> permissionRequest;
     private Runnable timeout;
+    private Runnable callPoll;
     private CallRepository repository;
     private CallSession call;
     private AgoraCallController rtc;
@@ -91,6 +92,7 @@ public final class CallActivity extends AppCompatActivity {
             if (incoming) acceptCall(); else createOutgoing();
         });
         timeout = this::handleTimeout;
+        callPoll = this::refreshWhileConnecting;
         setContentView(R.layout.activity_call);
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         View root = findViewById(R.id.call_root);
@@ -112,6 +114,7 @@ public final class CallActivity extends AppCompatActivity {
         peerTitle = getIntent().getStringExtra(EXTRA_TITLE);
         conversationId = getIntent().getStringExtra(EXTRA_CONVERSATION_ID);
         if (!UteChatApplication.claimActiveCall(callId == null ? "pending-outgoing" : callId)) {
+            if (incoming && callId != null) repository.updateStatus(callId, "busy", silentCallback());
             Toast.makeText(this, R.string.call_state_busy, Toast.LENGTH_LONG).show(); finish(); return;
         }
         ((TextView) findViewById(R.id.tv_call_title)).setText(getString(
@@ -148,8 +151,14 @@ public final class CallActivity extends AppCompatActivity {
         if (call != null && "ringing".equals(call.status) && !endingRequested) {
             endingRequested = true;
             setStatus(R.string.call_state_missed);
-            repository.updateStatus(call.id, incoming ? "missed" : "ended", new CallRepository.Callback() {
-                @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) finishSoon(); }
+            repository.expireRinging(call.id, new CallRepository.Callback() {
+                @Override public void onSuccess(CallSession current) {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (current != null && "accepted".equals(current.status)) {
+                        endingRequested = false;
+                        applyCall(current);
+                    } else finishSoon();
+                }
                 @Override public void onError(String error) {
                     endingRequested = false;
                     if (!isFinishing() && !isDestroyed()) {
@@ -242,10 +251,27 @@ public final class CallActivity extends AppCompatActivity {
     }
 
     private void observeCall(String id) {
+        handler.removeCallbacks(callPoll);
+        handler.postDelayed(callPoll, 3000L);
         repository.listen(id, (updated, error) -> {
             if (isFinishing() || isDestroyed()) return;
             if (error != null) { showError(R.string.call_network_error); return; }
             if (updated == null) { showError(R.string.call_network_error); return; }
+            applyCall(updated);
+        });
+    }
+
+    private void refreshWhileConnecting() {
+        if (callId == null || connected || endingRequested || isFinishing() || isDestroyed()) return;
+        repository.refresh(callId, (updated, error) -> {
+            if (endingRequested || isFinishing() || isDestroyed()) return;
+            if (updated != null) applyCall(updated);
+            if (!connected && !endingRequested) handler.postDelayed(callPoll, 3000L);
+        });
+    }
+
+    private void applyCall(CallSession updated) {
+            if (call != null && "accepted".equals(call.status) && "ringing".equals(updated.status)) return;
             call = updated; mediaType = updated.mediaType;
             if (!peerLoaded) {
                 peerLoaded = true;
@@ -285,7 +311,6 @@ public final class CallActivity extends AppCompatActivity {
             else if ("ended".equals(updated.status) || "failed".equals(updated.status)) {
                 setStatus("ended".equals(updated.status) ? R.string.call_state_ended : R.string.call_state_failed); finishSoon();
             }
-        });
     }
 
     private void acceptCall() {
@@ -458,7 +483,7 @@ public final class CallActivity extends AppCompatActivity {
     private void finishSoon() {
         if (finishingScheduled) return;
         finishingScheduled = true; endingRequested = true;
-        handler.removeCallbacks(timeout); stopRingtone(); showProgress(false);
+        handler.removeCallbacks(timeout); handler.removeCallbacks(callPoll); stopRingtone(); showProgress(false);
         findViewById(R.id.incoming_actions).setVisibility(View.GONE);
         findViewById(R.id.in_call_actions).setVisibility(View.GONE);
         findViewById(R.id.btn_end_call).setEnabled(false);

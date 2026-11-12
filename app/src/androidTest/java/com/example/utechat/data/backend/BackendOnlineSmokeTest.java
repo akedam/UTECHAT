@@ -24,6 +24,16 @@ import static org.junit.Assume.assumeTrue;
 
 /** Opt-in only: uses the signed-in test account and leaves one test image in its existing direct chat. */
 public final class BackendOnlineSmokeTest {
+    @Test public void backendWarmupCallbackCompletes() throws Exception {
+        assumeTrue("true".equals(InstrumentationRegistry.getArguments().getString("backendHealth")));
+        CountDownLatch completed=new CountDownLatch(1);java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+        BackendClient.warmUp(new BackendClient.ReadyCallback(){
+            @Override public void onReady(){ready.set(true);completed.countDown();}
+            @Override public void onError(){completed.countDown();}
+        });
+        assertTrue("Backend warmup callback timed out",completed.await(110,TimeUnit.SECONDS));
+        assertTrue("Backend warmup failed",ready.get());
+    }
     @Test public void privateImageAndNotificationRoundTrip() throws Exception {
         assumeTrue("true".equals(InstrumentationRegistry.getArguments().getString("backendOnline")));
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();

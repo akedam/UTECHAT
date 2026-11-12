@@ -36,7 +36,15 @@ public final class IncomingCallNotification {
                     "video".equals(doc.getString("mediaType"))?"video":"audio","ringing",created,expires);
             UteChatApplication application=UteChatApplication.from(app);
             if(application!=null && application.isForeground()){application.deliverIncomingCall(call);return;}
-            if(!NotificationPreferences.markEventSeen(app,"call:"+recipientUid+":"+callId))return;
+            showVerified(app,call);
+        });
+    }
+    public static void showVerified(Context app,CallSession call) {
+            if(call.expiresAt<=System.currentTimeMillis())return;
+            FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
+            if(user==null || !user.getUid().equals(call.calleeUid))return;
+            String callId=call.id;
+            if(!NotificationPreferences.markEventSeen(app,"call:"+call.calleeUid+":"+callId))return;
             NotificationManager manager=app.getSystemService(NotificationManager.class);
             if(manager==null)return;
             manager.createNotificationChannel(new NotificationChannel(CHANNEL,app.getString(R.string.call_notification_channel),NotificationManager.IMPORTANCE_HIGH));
@@ -48,10 +56,9 @@ public final class IncomingCallNotification {
                     .setContentText(app.getString(R.string.call_open_incoming)).setContentIntent(open)
                     .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setAutoCancel(true)
-                    .setTimeoutAfter(Math.max(1,expires-System.currentTimeMillis()));
+                    .setTimeoutAfter(Math.max(1,call.expiresAt-System.currentTimeMillis()));
             try {NotificationManagerCompat.from(app).notify("incoming_call_"+callId,0,notification.build());}
             catch(SecurityException ignored){ }
-        });
     }
     public static void cancel(Context context,String id) {
         if(id!=null)NotificationManagerCompat.from(context).cancel("incoming_call_"+id,0);

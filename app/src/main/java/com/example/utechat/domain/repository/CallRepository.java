@@ -13,6 +13,8 @@ public interface CallRepository {
     void listen(String callId, Listener listener);
     void listenIncoming(String uid, IncomingListener listener);
     void updateStatus(String callId, String status, Callback callback);
+    void expireRinging(String callId, Callback callback);
+    void refresh(String callId, Listener listener);
     void removeListener(String callId);
     void stopIncomingListener();
 }

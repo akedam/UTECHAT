@@ -20,8 +20,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.HashSet;
-import java.util.Set;
+import java.lang.ref.WeakReference;
 
 /** App lifecycle coordination for opt-in presence and notification channels. */
 public final class UteChatApplication extends Application
@@ -32,7 +31,7 @@ public final class UteChatApplication extends Application
     private FirebaseAuth auth;
     private int startedActivities;
     private CallRepository callRepository;
-    private final Set<String> deliveredCallIds = new HashSet<>();
+    private WeakReference<Activity> resumedActivity = new WeakReference<>(null);
 
     public static UteChatApplication from(Context context) {
         Context app = context.getApplicationContext();
@@ -79,6 +78,7 @@ public final class UteChatApplication extends Application
     }
 
     private void syncSignedInSession(FirebaseUser user) {
+        if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Sync call listener: signedIn=" + (user != null) + ", activities=" + startedActivities);
         if (user == null) {
             presenceManager.stop();
             if (callRepository != null) callRepository.stopIncomingListener();
@@ -91,10 +91,8 @@ public final class UteChatApplication extends Application
     }
 
     private void onIncomingCall(CallSession call) {
+        if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Incoming callback: active=" + hasActiveCall() + ", resumed=" + (resumedActivity.get() != null));
         if (call == null || call.id.equals(ACTIVE_CALL.get())) return;
-        synchronized (deliveredCallIds) {
-            if (!deliveredCallIds.add(call.id)) return;
-        }
         if (hasActiveCall()) {
             callRepository.updateStatus(call.id, "busy", new CallRepository.Callback() {
                 @Override public void onSuccess(CallSession ignored) { }
@@ -102,11 +100,20 @@ public final class UteChatApplication extends Application
             });
             return;
         }
-        if (!setActiveCall(call.id)) return;
-        android.content.Intent intent = CallActivity.incomingIntent(this, call);
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        try { startActivity(intent); }
-        catch (RuntimeException launchError) { clearActiveCall(call.id); }
+        Activity visible = resumedActivity.get();
+        if (visible == null || visible.isFinishing() || visible.isDestroyed()) {
+            com.example.utechat.feature.notifications.IncomingCallNotification.showVerified(this, call);
+            return;
+        }
+        // Android can silently block starts from an application/background context.
+        // CallActivity claims ACTIVE_CALL after onCreate; reserving it here could
+        // leave the receiver permanently busy when the launch was never delivered.
+        android.content.Intent intent = CallActivity.incomingIntent(visible, call)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try { visible.startActivity(intent); }
+        catch (RuntimeException launchError) {
+            com.example.utechat.feature.notifications.IncomingCallNotification.showVerified(this, call);
+        }
     }
 
     private void createNotificationChannel() {
@@ -133,8 +140,10 @@ public final class UteChatApplication extends Application
     }
 
     @Override public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle state) { }
-    @Override public void onActivityResumed(@NonNull Activity activity) { }
-    @Override public void onActivityPaused(@NonNull Activity activity) { }
+    @Override public void onActivityResumed(@NonNull Activity activity) { resumedActivity = new WeakReference<>(activity); }
+    @Override public void onActivityPaused(@NonNull Activity activity) {
+        if (resumedActivity.get() == activity) resumedActivity.clear();
+    }
     @Override public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle state) { }
     @Override public void onActivityDestroyed(@NonNull Activity activity) { }
 }

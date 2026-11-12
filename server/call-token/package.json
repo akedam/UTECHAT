@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
-    "check": "node --check server.js && node --check backend.js && node --check supabase-storage.js",
+    "check": "node --check server.js && node --check backend.js && node --check supabase-storage.js && node --check rtc-token.js",
     "test": "node --test test/*.test.js"
   },
   "engines": {

@@ -1,6 +1,7 @@
 "use strict";
 const test=require("node:test"), assert=require("node:assert/strict"), http=require("node:http");
 const {createBackend}=require("../backend"), {createStorage}=require("../supabase-storage");
+const {createTokenMinter}=require("../rtc-token");
 const TIME=1_800_000_000_000;
 const PNG=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=","base64");
 function fakeDb(initial) {
@@ -150,4 +151,12 @@ test("group images require both root participation and matching member document"
   assert.equal((await f.request("/api/media?path=conversations/chat/alice/photo","alice",PNG,"PUT","image/png")).status,200);
   assert.equal((await f.request("/api/message-notify","alice",{conversationId:"chat",messageId:"msg1"})).status,200);
   assert.equal(f.pushes.length,0);
+});
+test("real Agora SDK generates publisher tokens using its exported RtcRole",()=>{
+  const appId="a".repeat(32),certificate="b".repeat(32);
+  const mint=createTokenMinter(appId,certificate);
+  const result=mint({channelName:"test-channel",rtcUidByUser:{alice:12345}},"alice");
+  assert.equal(result.appId,appId);assert.equal(result.uid,12345);assert.equal(result.channelName,"test-channel");
+  assert.match(result.token,/^007[A-Za-z0-9+/=]+$/);assert.ok(result.token.length>100);
+  assert.throws(()=>createTokenMinter("missing","missing"));
 });
