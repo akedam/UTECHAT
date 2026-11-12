@@ -1,7 +1,7 @@
 <resources>
     <string name="community_subtitle">Kết nối và trò chuyện cùng nhóm của bạn</string>
     <string name="community_create_title">Tạo nhóm mới</string>
-    <string name="community_create_hint">Đặt tên nhóm, sau đó chọn bạn bè để bắt đầu.</string>
+    <string name="community_create_hint">Nhóm có từ 3 đến 5 thành viên, tính cả bạn. Chọn từ 2 đến 4 người bạn để bắt đầu.</string>
     <string name="community_choose_members">Chọn thành viên</string>
     <string name="community_your_groups">Nhóm của bạn</string>
     <string name="community_group_count">%1$d nhóm</string>
@@ -10,11 +10,11 @@
     <string name="community_no_messages">Bắt đầu cuộc trò chuyện với mọi người</string>
     <string name="community_friends_action">Đến Bạn bè</string>
     <string name="community_friends_title">Kết bạn để tạo nhóm</string>
-    <string name="community_create_count">Tạo nhóm (%1$d)</string>
+    <string name="community_create_count">Tạo nhóm (%1$d người)</string>
     <string name="community_created">Đã tạo nhóm thành công</string>
     <string name="community_you">%1$s (Bạn)</string>
     <string name="community_leave_title">Rời khỏi nhóm?</string>
     <string name="community_remove_title">Xóa thành viên?</string>
-    <string name="community_transfer_title">Chuyển quyền chủ nhóm?</string>
+    <string name="community_transfer_title">Chuyển quyền trưởng nhóm?</string>
     <string name="community_close">Đóng</string>
 </resources>

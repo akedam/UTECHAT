@@ -77,15 +77,15 @@ public class DiscoverFragment extends Fragment {
         AlertDialog dialog=dialogBuilder().setTitle(R.string.community_choose_members)
                 .setMultiChoiceItems(labels,checked,(d,index,on)->{
                     checked[index]=on;
-                    if(selectedCount(checked)>8){checked[index]=false;((AlertDialog)d).getListView().setItemChecked(index,false);Toast.makeText(requireContext(),R.string.groups_initial_member_limit,Toast.LENGTH_SHORT).show();}
-                    int selected=selectedCount(checked);((AlertDialog)d).getButton(AlertDialog.BUTTON_POSITIVE).setText(getString(R.string.community_create_count,selected));
-                    ((AlertDialog)d).getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(selected>0);
+                    if(selectedCount(checked)>4){checked[index]=false;((AlertDialog)d).getListView().setItemChecked(index,false);Toast.makeText(requireContext(),R.string.groups_initial_member_limit,Toast.LENGTH_SHORT).show();}
+                    int selected=selectedCount(checked);((AlertDialog)d).getButton(AlertDialog.BUTTON_POSITIVE).setText(getString(R.string.community_create_count,selected+1));
+                    ((AlertDialog)d).getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(selected>=2);
                 }).setNegativeButton(R.string.friends_cancel_button,null).setPositiveButton(R.string.groups_create_button,null).create();
         show(dialog,false);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             List<User> picked=new ArrayList<>();for(int i=0;i<friends.size();i++)if(checked[i])picked.add(friends.get(i));
-            if(picked.isEmpty())return;
+            if(picked.size()<2)return;
             dialog.dismiss();
             vm.create(title,picked,new FriendGroupRepository.Result<String>(){
                 public void success(String id){if(!isAdded()||getView()==null)return;name.setText("");name.clearFocus();Toast.makeText(requireContext(),R.string.community_created,Toast.LENGTH_SHORT).show();}
@@ -101,7 +101,7 @@ public class DiscoverFragment extends Fragment {
         for(Conversation group:groups){
             View card=getLayoutInflater().inflate(R.layout.item_community_group,rows,false);
             ((TextView)card.findViewById(R.id.tv_community_group_name)).setText(group.getTitle()==null?getString(R.string.conversation_unknown_title):group.getTitle());
-            String members=group.getParticipantIds()==null?getString(R.string.groups_members):getString(R.string.search_group_members,group.getParticipantIds().size());
+            String members=group.getParticipantIds()==null?getString(R.string.groups_members):getString(group.isCommunity()?R.string.groups_type_community:R.string.groups_type_group,group.getParticipantIds().size());
             ((TextView)card.findViewById(R.id.tv_community_group_members)).setText(members);
             ((TextView)card.findViewById(R.id.tv_community_group_preview)).setText(group.getLastMessage()==null||group.getLastMessage().trim().isEmpty()?getString(R.string.community_no_messages):group.getLastMessage());
             String photo=group.getPhotoUrl();ImageView avatar=card.findViewById(R.id.iv_community_group);
@@ -112,6 +112,14 @@ public class DiscoverFragment extends Fragment {
             card.findViewById(R.id.btn_community_leave).setOnClickListener(v->confirmLeave(group));
             boolean busy=Boolean.TRUE.equals(vm.loading().getValue());
             card.findViewById(R.id.btn_community_members).setEnabled(!busy);card.findViewById(R.id.btn_community_leave).setEnabled(!busy);
+            if(group.isDeleting()){
+                ((TextView)card.findViewById(R.id.tv_community_group_preview)).setText(R.string.groups_deleting);
+                card.findViewById(R.id.community_group_identity).setOnClickListener(null);
+                card.findViewById(R.id.btn_community_open).setEnabled(false);
+                card.findViewById(R.id.btn_community_leave).setVisibility(View.GONE);
+                ((MaterialButton)card.findViewById(R.id.btn_community_members)).setText(R.string.groups_delete_retry);
+                card.findViewById(R.id.btn_community_members).setOnClickListener(v->vm.deleteGroup(group.getId()));
+            }
             rows.addView(card);
         }
     }
@@ -123,10 +131,10 @@ public class DiscoverFragment extends Fragment {
     private void showMembers(Conversation group){
         vm.watchMembers(group.getId());
         vm.members().observe(getViewLifecycleOwner(),new Observer<List<ConversationMember>>(){public void onChanged(List<ConversationMember> items){
-            if(items==null)return;vm.members().removeObserver(this);renderMembers(items);
+            if(items==null)return;vm.members().removeObserver(this);renderMembers(group,items);
         }});
     }
-    private void renderMembers(List<ConversationMember> current){
+    private void renderMembers(Conversation group,List<ConversationMember> current){
         List<ConversationMember> snapshot=new ArrayList<>(current);User me=vm.currentUser();ConversationMember.Role myRole=ConversationMember.Role.MEMBER;
         for(ConversationMember member:snapshot)if(me!=null&&me.getUid().equals(member.getUserId()))myRole=member.getRole();
         boolean canManage=myRole!=ConversationMember.Role.MEMBER;
@@ -144,6 +152,10 @@ public class DiscoverFragment extends Fragment {
             TextView role=text(13,R.color.community_muted);role.setPadding(0,dp(4),0,dp(4));role.setText(roleLabel(member.getRole()));entry.addView(role);
             LinearLayout actions=new LinearLayout(requireContext());actions.setOrientation(LinearLayout.VERTICAL);
             if(myRole==ConversationMember.Role.OWNER&&member.getRole()!=ConversationMember.Role.OWNER){
+                boolean deputy=member.getRole()!=ConversationMember.Role.ADMIN;
+                int action=deputy?R.string.groups_set_deputy:R.string.groups_unset_deputy;
+                MaterialButton roleButton=button(action,false);actions.addView(roleButton,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+                roleButton.setOnClickListener(v->confirm(action,R.string.groups_confirm_deputy,action,false,()->{dialog.dismiss();vm.setDeputy(member.getUserId(),deputy);}));
                 MaterialButton transfer=button(R.string.groups_transfer_owner,false);actions.addView(transfer,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
                 transfer.setOnClickListener(v->confirm(R.string.community_transfer_title,R.string.groups_confirm_transfer,R.string.groups_transfer_owner,false,()->{dialog.dismiss();vm.transferOwnership(member.getUserId());}));
             }
@@ -155,7 +167,21 @@ public class DiscoverFragment extends Fragment {
         }
         if(canManage){MaterialButton add=new MaterialButton(new androidx.appcompat.view.ContextThemeWrapper(requireContext(),R.style.CommunityPrimaryOverlay));add.setText(R.string.community_choose_members);
             LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(48));params.topMargin=dp(16);content.addView(add,params);
-            add.setOnClickListener(v->{dialog.dismiss();chooseAdditionalMember(snapshot);});}
+            add.setOnClickListener(v->{dialog.dismiss();chooseAdditionalMember(group,snapshot);});}
+        if(myRole==ConversationMember.Role.OWNER&&!group.isCommunity()){
+            MaterialButton upgrade=button(R.string.groups_upgrade,false);
+            content.addView(upgrade,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+            int memberCount=group.getParticipantIds()==null?0:group.getParticipantIds().size();
+            boolean canUpgrade=memberCount>=5&&memberCount<=10;
+            upgrade.setEnabled(canUpgrade);
+            if(!canUpgrade){upgrade.setTextColor(color(R.color.community_muted));upgrade.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color(R.color.community_disabled)));}
+            if(!canUpgrade){TextView hint=text(13,R.color.community_muted);hint.setText(getString(R.string.groups_upgrade_hint,memberCount));hint.setPadding(0,dp(4),0,dp(12));content.addView(hint);}
+            upgrade.setOnClickListener(v->confirm(R.string.groups_upgrade,R.string.groups_confirm_upgrade,R.string.groups_upgrade,false,()->{dialog.dismiss();vm.upgrade();}));
+        }
+        if(me!=null&&(myRole==ConversationMember.Role.OWNER||(snapshot.size()==1&&me.getUid().equals(snapshot.get(0).getUserId())))){
+            MaterialButton delete=button(R.string.groups_delete,true);content.addView(delete,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+            delete.setOnClickListener(v->confirm(R.string.groups_delete_title,R.string.groups_confirm_delete,R.string.groups_delete,true,()->{dialog.dismiss();vm.deleteGroup(group.getId());}));
+        }
         show(dialog,false);
         FriendGroupRepository repository=FriendGroupRepositoryProvider.get(requireContext());
         if(repository!=null&&!unknown.isEmpty())repository.loadUsers(unknown,new FriendGroupRepository.Result<List<User>>(){
@@ -164,7 +190,13 @@ public class DiscoverFragment extends Fragment {
         });
     }
     private String memberName(User user,User me){return me!=null&&me.getUid().equals(user.getUid())?getString(R.string.community_you,user.getDisplayName()):user.getDisplayName();}
-    private void chooseAdditionalMember(List<ConversationMember> current){
+    private void chooseAdditionalMember(Conversation group,List<ConversationMember> current){
+        int size=group.getParticipantIds()==null?current.size():group.getParticipantIds().size();
+        if(size>=(group.isCommunity()?10:5)){
+            show(dialogBuilder().setTitle(group.isCommunity()?R.string.groups_type_community_title:R.string.groups_type_group_title)
+                    .setMessage(group.isCommunity()?R.string.groups_community_full:R.string.groups_full)
+                    .setPositiveButton(R.string.community_close,null).create(),false);return;
+        }
         List<User> friends=vm.friends().getValue();if(friends==null)return;
         Set<String> ids=new HashSet<>();for(ConversationMember member:current)ids.add(member.getUserId());
         List<User> eligible=new ArrayList<>();for(User user:friends)if(!ids.contains(user.getUid()))eligible.add(user);
@@ -176,6 +208,7 @@ public class DiscoverFragment extends Fragment {
     private void confirmLeave(Conversation group){
         vm.watchMembers(group.getId());vm.members().observe(getViewLifecycleOwner(),new Observer<List<ConversationMember>>(){public void onChanged(List<ConversationMember> items){
             if(items==null)return;vm.members().removeObserver(this);User me=vm.currentUser();
+            if(items.size()==1){Toast.makeText(requireContext(),R.string.groups_single_leave,Toast.LENGTH_LONG).show();return;}
             for(ConversationMember member:items)if(me!=null&&me.getUid().equals(member.getUserId())&&member.getRole()==ConversationMember.Role.OWNER){Toast.makeText(requireContext(),R.string.groups_owner_transfer_first,Toast.LENGTH_LONG).show();return;}
             confirm(R.string.community_leave_title,R.string.groups_confirm_leave,R.string.groups_leave,true,vm::leave);
         }});

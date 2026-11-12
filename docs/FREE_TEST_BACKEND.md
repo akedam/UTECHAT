@@ -62,3 +62,14 @@ Script kiem tra backend da bat kho anh, giu App ID local, doi sang HTTPS that, b
 Nguon: [Render Free](https://render.com/docs/free), [Firebase pricing](https://firebase.google.com/pricing/), [Firebase Storage billing](https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024), [Supabase pricing](https://supabase.com/pricing), [Agora pricing](https://www.agora.io/en/pricing/video-calling/).
 
 Xu ly thong bao nen theo [Firebase FCM message priority](https://firebase.google.com/docs/cloud-messaging/android-message-priority) va [Android WorkManager](https://developer.android.com/jetpack/androidx/releases/work).
+
+## Quy tac nhom va cong dong (APK 1.0.2)
+
+- Tao nhom can tu 3 den 5 nguoi tinh ca nguoi tao (chon 2 den 4 ban). Nhom day 5 nguoi khong them duoc nua; app hien "nhom đã đạt thành viên tối đa, hãy nâng lên cộng đồng". Firestore kiem tra ca danh sach va ban ghi thanh vien trong cung batch, khong chap nhan danh sach ao hay trung UID, ke ca moi dong thoi.
+- `type: group` duoc giu de tuong thich chat/media/thong bao. Nhom moi co `isCommunity: false`; chi truong nhom duoc doi thanh true khi danh sach hien tai co tu 5 den 10 nguoi. Cong dong toi da 10 nguoi. Khong tu ha cap neu sau do co nguoi roi di; nhom cu qua gioi han van co the bot thanh vien.
+- Ba vai tro: `owner` = Truong nhom, `admin` = Pho nhom, `member` = Thanh vien. Chi truong nhom bo nhiem/bai nhiem pho nhom va chuyen quyen. Chuyen quyen cap nhat ownerUid va hai ban ghi vai tro trong mot transaction; truong nhom cu tro thanh pho nhom. Pho nhom them/thao thanh vien thuong, khong thay vai tro hay xoa nhom dong nguoi.
+- POST `/api/group-delete` yeu cau Firebase ID token con hieu luc. Transaction doc quyen hien tai: chi owner hoac UID duy nhat con trong nhom co ban ghi thanh vien hop le. Khong cho xoa direct chat. Client khong duoc xoa truc tiep document cha.
+- Server dat `lifecycle: deleting` de khoa thao tac, xoa anh private Supabase va backendMedia, recursiveDelete messages/members, roi xoa document nhom. Receipt rieng `backendGroupDeletions` chi Admin doc/ghi giu actor va trang thai de thu lai an toan. Neu gian doan, nguoi da bat dau xoa co nut Tiep tuc xoa; khong doi nguoi xu ly giua chung. Khong tai su dung ID nhom da xoa.
+- Nhom cu duoi 3 nguoi van doc/quan ly duoc; gioi han toi thieu ap dung cho tao moi. Truong nhom khong roi truc tiep: chuyen quyen hoac xoa nhom; khi chi con mot nguoi, giao dien huong dan xoa nhom.
+- Kiem thu: Firebase Emulator tests cho tao nhom 2/3/5/6 nguoi, nang cap 4/5/10/11 nguoi, moi dong thoi, gioi han 5/10, phan quyen; backend tests cho quyen xoa va thu lai cleanup. Khong thay doi hay xoa nhom hien co cua nguoi dung khi kiem tra giao dien.
+- Khi trien khai: deploy backend moi va Firestore rules, cai APK moi cho nguoi thu. APK cu van chat duoc, nhung thao tac tao nhom duoi 3 nguoi hoac chuyen quyen theo giao thuc cu se bi tu choi.

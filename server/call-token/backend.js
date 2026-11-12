@@ -39,9 +39,11 @@ function send(res, status, body, type = "application/json; charset=utf-8") {
 /** Dependency injection keeps authorization tests off live Firebase. */
 function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now, dailyUploadBytes = 32 * 1024 * 1024 }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
+  const groupDeletions = new Map();
   async function member(conversationId, uid) {
     const parent = await db.doc(`conversations/${conversationId}`).get(), data = parent.data();
     requireValue(parent.exists && Array.isArray(data.participantIds) && data.participantIds.includes(uid), 403, "forbidden");
+    requireValue(!data.lifecycle || data.lifecycle === "active", 409, "group-deleting");
     if (data.type === "direct") {
       requireValue(data.participantIds.length === 2 && new Set(data.participantIds).size === 2, 403, "forbidden");
     } else {
@@ -50,6 +52,55 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       requireValue(snapshot.exists && snapshot.data().userId === uid, 403, "forbidden");
     }
     return data;
+  }
+  async function deleteGroup(conversationId, uid) {
+    requireValue(segment(conversationId));
+    const root = db.doc(`conversations/${conversationId}`), receipt = db.doc(`backendGroupDeletions/${conversationId}`);
+    const complete = await db.runTransaction(async (tx) => {
+      const [parent, saved] = await Promise.all([tx.get(root), tx.get(receipt)]);
+      if (saved.exists) {
+        requireValue(saved.data().actorUid === uid, 403, "forbidden");
+        if (saved.data().status === "complete") return true;
+        requireValue(parent.exists && parent.data().lifecycle === "deleting", 409, "invalid-deletion");
+        return false;
+      }
+      requireValue(parent.exists, 404, "not-found");
+      const group = parent.data();
+      requireValue(group.type === "group" && Array.isArray(group.participantIds) && group.participantIds.includes(uid), 403, "forbidden");
+      const membership = await tx.get(root.collection("members").doc(uid));
+      requireValue(membership.exists && membership.data().userId === uid, 403, "forbidden");
+      requireValue(membership.data().role === "owner" || (group.participantIds.length === 1 && group.participantIds[0] === uid), 403, "group-delete-forbidden");
+      requireValue(!group.lifecycle || group.lifecycle === "active", 409, "group-deleting");
+      tx.set(receipt, { actorUid: uid, status: "pending", createdAt: now() });
+      tx.update(root, { lifecycle: "deleting", deletingBy: uid, updatedAt: now() });
+      return false;
+    });
+    if (complete) return;
+    // A durable receipt makes interrupted cleanup retryable after a Free host restarts.
+    // Keep the parent frozen until every child collection and private object is gone.
+    if (!groupDeletions.has(conversationId)) {
+      const cleanup = (async () => {
+        const prefix = `conversations/${conversationId}/`;
+        while (true) {
+          const media = await db.collection("backendMedia").where("path", ">=", prefix).where("path", "<", prefix + "\uf8ff").limit(100).get();
+          if (!media.docs.length) break;
+          requireValue(storage?.remove, 503, "media-not-configured");
+          await storage.remove(media.docs.map(row => row.data().path));
+          const batch = db.batch(); media.docs.forEach(row => batch.delete(row.ref)); await batch.commit();
+        }
+        await db.recursiveDelete(root.collection("messages"));
+        await db.recursiveDelete(root.collection("members"));
+        await db.runTransaction(async tx => {
+          const parent = await tx.get(root), saved = await tx.get(receipt);
+          if (saved.exists && saved.data().status === "complete") return;
+          requireValue(parent.exists && parent.data().lifecycle === "deleting" && parent.data().deletingBy === uid, 409, "invalid-deletion");
+          tx.delete(root); tx.update(receipt, { status: "complete", completedAt: now() });
+        });
+      })();
+      groupDeletions.set(conversationId, cleanup);
+      cleanup.finally(() => groupDeletions.delete(conversationId)).catch(() => {});
+    }
+    await groupDeletions.get(conversationId);
   }
   function rateLimit(uid, kind) {
     const key = `${uid}:${kind}`, time = now();
@@ -188,6 +239,9 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     const quota = db.doc(`backendUsage/${hash(uid)}_${new Date(now()).toISOString().slice(0, 10)}`);
     const existing = await db.runTransaction(async (tx) => {
       const saved = await tx.get(ref), usage = await tx.get(quota);
+      const parent = await tx.get(db.doc(`conversations/${parts.conversationId}`));
+      requireValue(parent.exists && parent.data().participantIds.includes(uid)
+        && (!parent.data().lifecycle || parent.data().lifecycle === "active"), 403, "forbidden");
       if (saved.exists) {
         requireValue(saved.data().sha256 === digest && saved.data().contentType === contentType, 409, "immutable-object"); return saved.data();
       }
@@ -198,7 +252,12 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     });
     if (!existing.ready) {
       if (!await storage.upload(path, bytes, contentType)) requireValue(hash(await storage.download(path)) === digest, 409, "immutable-object");
-      await ref.update({ ready: true });
+      const published = await db.runTransaction(async tx => {
+        const parent = await tx.get(db.doc(`conversations/${parts.conversationId}`)), record = await tx.get(ref);
+        if (!parent.exists || parent.data().lifecycle === "deleting" || !record.exists) return false;
+        tx.update(ref, { ready: true }); return true;
+      });
+      if (!published) { await storage.remove([path]); throw new ApiError(409, "group-deleting"); }
     }
     return { path, size: bytes.length, contentType };
   }
@@ -217,7 +276,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     try {
       const url = new URL(req.url, "http://backend.invalid");
       if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage });
-      const allowed = (req.method === "POST" && ["/api/rtc-token", "/api/call-invite", "/api/message-notify"].includes(url.pathname))
+      const allowed = (req.method === "POST" && ["/api/rtc-token", "/api/call-invite", "/api/message-notify", "/api/group-delete"].includes(url.pathname))
         || (["GET", "PUT"].includes(req.method) && url.pathname === "/api/media");
       requireValue(allowed, 404, "not-found"); const authorization = req.headers.authorization || "";
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
@@ -233,6 +292,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       }
       const body = await readJson(req); requireValue(body && typeof body === "object" && !Array.isArray(body));
       if (url.pathname === "/api/rtc-token") return send(res, 200, mintToken(await acceptedCall(body.callId, user.uid), user.uid));
+      if (url.pathname === "/api/group-delete") { await deleteGroup(body.conversationId, user.uid); return send(res, 200, { ok: true }); }
       if (url.pathname === "/api/call-invite") await invite(body, user.uid); else await notifyMessage(body, user.uid);
       return send(res, 200, { ok: true });
     } catch (error) {

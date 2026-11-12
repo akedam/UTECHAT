@@ -10,6 +10,14 @@ function createStorage({ url, key, bucket = "utechat-media", fetchImpl = fetch }
   const headers = key.startsWith("sb_secret_") ? { apikey: key } : { apikey: key, Authorization: `Bearer ${key}` };
   const endpoint = (path, authenticated = false) => `${base.origin}/storage/v1/object/${authenticated ? "authenticated/" : ""}${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`;
   return {
+    async remove(paths) {
+      const response = await fetchImpl(`${base.origin}/storage/v1/object/${bucket}`, {
+        method: "DELETE", redirect: "error", signal: AbortSignal.timeout(30_000),
+        headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: paths }),
+      });
+      if (!response.ok) throw new Error("Private storage deletion failed.");
+      await response.arrayBuffer();
+    },
     async upload(path, bytes, type) {
       const response = await fetchImpl(endpoint(path), { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
         headers: { ...headers, "Content-Type": type, "x-upsert": "false" }, body: bytes });

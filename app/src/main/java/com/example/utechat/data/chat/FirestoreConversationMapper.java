@@ -22,6 +22,9 @@ public final class FirestoreConversationMapper {
         conversation.setType(Conversation.Type.fromSchemaValue(type));
         conversation.setParticipantIds(stringList(data == null ? null : data.get("participantIds")));
         conversation.setCreatedBy(string(data, "createdBy"));
+        conversation.setCommunity(data != null && Boolean.TRUE.equals(data.get("isCommunity")));
+        conversation.setDeleting("deleting".equals(string(data, "lifecycle")));
+        conversation.setDeletingBy(string(data, "deletingBy"));
 
         Map<String, Object> summaries = map(data == null ? null : data.get("participantSummaries"));
         String title = string(data, "title"); // legacy cached title

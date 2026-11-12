@@ -30,6 +30,9 @@ public class GroupsViewModel extends AndroidViewModel {
     public void addMember(User u){if(repo==null||memberGroup==null)return;loading.setValue(true);repo.addMember(memberGroup,u,result());}
     public void removeMember(String uid){if(repo==null||memberGroup==null)return;loading.setValue(true);repo.removeMember(memberGroup,uid,result());}
     public void transferOwnership(String uid){if(repo==null||memberGroup==null)return;loading.setValue(true);repo.transferOwnership(memberGroup,uid,result());}
+    public void setDeputy(String uid,boolean deputy){if(!isReady()||memberGroup==null||Boolean.TRUE.equals(loading.getValue()))return;loading.setValue(true);repo.setDeputy(memberGroup,uid,deputy,result());}
+    public void upgrade(){if(!isReady()||memberGroup==null||Boolean.TRUE.equals(loading.getValue()))return;loading.setValue(true);repo.upgradeCommunity(memberGroup,result());}
+    public void deleteGroup(String id){if(!isReady()||Boolean.TRUE.equals(loading.getValue()))return;loading.setValue(true);repo.deleteGroup(id,result());}
     public void leave(){if(repo==null||memberGroup==null||me==null)return;loading.setValue(true);repo.leaveGroup(memberGroup,me.getUid(),result());}
     private FriendGroupRepository.Result<Void> result(){return new FriendGroupRepository.Result<Void>(){public void success(Void x){loading.setValue(false);error.setValue(null);}public void error(String s){loading.setValue(false);error.setValue(s);}};}
     @Override protected void onCleared(){if(groupSub!=null)groupSub.remove();if(friendSub!=null)friendSub.remove();if(memberSub!=null)memberSub.remove();super.onCleared();}

@@ -33,6 +33,15 @@ public class Conversation {
     private String createdBy;
     private long createdAt;
     private long updatedAt;
+    private boolean community;
+    private boolean deleting;
+    private String deletingBy;
+    public boolean isCommunity() { return community; }
+    public void setCommunity(boolean value) { community = value; }
+    public boolean isDeleting() { return deleting; }
+    public void setDeleting(boolean value) { deleting = value; }
+    public String getDeletingBy() { return deletingBy; }
+    public void setDeletingBy(String value) { deletingBy = value; }
 
     public Conversation() {}
 

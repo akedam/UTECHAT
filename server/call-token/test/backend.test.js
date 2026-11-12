@@ -11,18 +11,20 @@ function fakeDb(initial) {
     update:async(data)=>rows.set(path,{...rows.get(path),...structuredClone(data)}),
     delete:async()=>rows.delete(path)});
   const snapshot=(path)=>({id:path.split("/").at(-1),ref:doc(path),exists:rows.has(path),data:()=>structuredClone(rows.get(path))});
-  function collection(path,filter=null,max=Infinity) {
-    return {doc:(id)=>doc(`${path}/${id}`),where:(key,operator,value)=>collection(path,[key,value],max),
-      limit:(count)=>collection(path,filter,count),get:async()=>({docs:[...rows.keys()]
+  function collection(path,filters=[],max=Infinity) {
+    return {path,doc:(id)=>doc(`${path}/${id}`),where:(key,operator,value)=>collection(path,[...filters,[key,operator,value]],max),
+      limit:(count)=>collection(path,filters,count),get:async()=>({docs:[...rows.keys()]
         .filter((key)=>key.startsWith(path+"/") && key.split("/").length===path.split("/").length+1)
-        .filter((key)=>!filter || rows.get(key)[filter[0]]===filter[1]).slice(0,max).map(snapshot)})};
+        .filter((key)=>filters.every(([field,op,value])=>op==='>='?rows.get(key)[field]>=value:op==='<'?rows.get(key)[field]<value:rows.get(key)[field]===value)).slice(0,max).map(snapshot)})};
   }
   let pending=Promise.resolve();
-  return {rows,doc,collection,runTransaction(fn){
+  return {rows,doc,collection,batch(){const refs=[];return{delete(ref){refs.push(ref);},async commit(){refs.forEach(ref=>rows.delete(ref.path));}};},
+    async recursiveDelete(ref){for(const path of rows.keys())if(path.startsWith(ref.path+'/'))rows.delete(path);},runTransaction(fn){
     const task=pending.then(async()=>{
       const writes=[];
       const value=await fn({get:(ref)=>ref.get(),set:(ref,data)=>writes.push(()=>rows.set(ref.path,structuredClone(data))),
-        update:(ref,data)=>writes.push(()=>rows.set(ref.path,{...rows.get(ref.path),...structuredClone(data)}))});
+        update:(ref,data)=>writes.push(()=>rows.set(ref.path,{...rows.get(ref.path),...structuredClone(data)})),
+        delete:(ref)=>writes.push(()=>rows.delete(ref.path))});
       writes.forEach((write)=>write());return value;
     });pending=task.catch(()=>{});return task;
   }};
@@ -44,7 +46,7 @@ async function fixture(t,options={}) {
     messaging:{async sendEachForMulticast(data){pushes.push(data);return{responses:data.tokens.map(()=>({success:true}))};}},
     mintToken(call,uid){tokenCalls++;return{token:"test-rtc-token",uid:call.rtcUidByUser[uid]};},
     storage:{async upload(path,bytes){if(objects.has(path))return false;objects.set(path,Buffer.from(bytes));return true;},
-      async download(path){return objects.get(path);}},...options.backend,
+      async download(path){return objects.get(path);},async remove(paths){for(const path of paths)objects.delete(path);}},...options.backend,
   });
   const server=http.createServer(backend.handle);await new Promise((resolve)=>server.listen(0,"127.0.0.1",resolve));
   t.after(()=>{backend.close();server.closeAllConnections();return new Promise((resolve)=>server.close(resolve));});
@@ -130,10 +132,14 @@ test("Supabase adapter uses private authenticated access and immutable uploads",
   }});
   assert.equal(await storage.upload("conversations/chat/alice/photo",PNG,"image/png"),false);
   assert.deepEqual(await storage.download("conversations/chat/alice/photo"),PNG);
+  await storage.remove(["conversations/chat/alice/photo"]);
   assert.equal(calls[0].init.headers["x-upsert"],"false");
   assert.match(calls[1].url,/\/object\/authenticated\/utechat-media\//);
   assert.equal(calls[1].init.redirect,"error");
   assert.equal(calls[1].init.headers.Authorization,undefined);
+  assert.equal(calls[2].init.method,"DELETE");
+  assert.equal(calls[2].url,"https://testing.supabase.co/storage/v1/object/utechat-media");
+  assert.deepEqual(JSON.parse(calls[2].init.body),{prefixes:["conversations/chat/alice/photo"]});
   assert.throws(()=>createStorage({url:"http://evil.example",key:"key"}));
 });
 test("direct conversations need no group member documents; notifications use root participants",async(t)=>{
@@ -159,4 +165,44 @@ test("real Agora SDK generates publisher tokens using its exported RtcRole",()=>
   assert.equal(result.appId,appId);assert.equal(result.uid,12345);assert.equal(result.channelName,"test-channel");
   assert.match(result.token,/^007[A-Za-z0-9+/=]+$/);assert.ok(result.token.length>100);
   assert.throws(()=>createTokenMinter("missing","missing"));
+});
+
+test("only leader or sole actual member deletes a group; cleanup includes messages, members and private media",async(t)=>{
+  const f=await fixture(t,{rows:{
+    "conversations/group":{type:"group",participantIds:["alice","bob","mallory"]},
+    "conversations/group/members/alice":{userId:"alice",role:"owner"},
+    "conversations/group/members/bob":{userId:"bob",role:"admin"},
+    "conversations/group/members/mallory":{userId:"mallory",role:"member"},
+    "conversations/group/messages/old":{type:"text",content:"Old"},
+    "backendMedia/image":{path:"conversations/group/alice/image",ready:true},
+    "backendMedia/other":{path:"conversations/group-other/alice/image",ready:true},
+  }});
+  f.objects.set("conversations/group/alice/image",PNG);
+  for(const uid of ['bob','mallory'])assert.equal((await f.request('/api/group-delete',uid,{conversationId:'group'})).status,403);
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'chat'})).status,403);
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'group'})).status,200);
+  assert.equal([...f.db.rows.keys()].some(key=>key==='conversations/group'||key.startsWith('conversations/group/')),false);
+  assert.equal(f.db.rows.has('backendMedia/image'),false);assert.equal(f.db.rows.has('backendMedia/other'),true);
+  assert.equal(f.objects.size,0);
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'group'})).status,200);
+  assert.equal((await f.request('/api/group-delete','bob',{conversationId:'group'})).status,403);
+  f.db.rows.set('conversations/solo',{type:'group',participantIds:['bob']});
+  f.db.rows.set('conversations/solo/members/bob',{userId:'bob',role:'member'});
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'solo'})).status,403);
+  assert.equal((await f.request('/api/group-delete','bob',{conversationId:'solo'})).status,200);
+});
+test("interrupted deletion freezes writes and can resume with its original authorized actor",async(t)=>{
+  const f=await fixture(t,{rows:{
+    "conversations/group":{type:'group',participantIds:['alice','bob']},
+    "conversations/group/members/alice":{userId:'alice',role:'owner'},
+    "conversations/group/members/bob":{userId:'bob',role:'member'},
+  }});
+  const recursive=f.db.recursiveDelete;f.db.recursiveDelete=async()=>{throw Error('Unavailable');};
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'group'})).status,503);
+  assert.equal(f.db.rows.get('conversations/group').lifecycle,'deleting');
+  assert.equal((await f.request('/api/media?path=conversations/group/alice/new','alice',PNG,'PUT','image/png')).status,409);
+  assert.equal((await f.request('/api/group-delete','bob',{conversationId:'group'})).status,403);
+  f.db.rows.delete('conversations/group/members/alice'); // Partial cleanup must not strand the authorized retry.
+  f.db.recursiveDelete=recursive;
+  assert.equal((await f.request('/api/group-delete','alice',{conversationId:'group'})).status,200);
 });

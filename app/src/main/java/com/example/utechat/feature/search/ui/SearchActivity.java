@@ -122,7 +122,7 @@ public final class SearchActivity extends AppCompatActivity implements SearchRes
         matching.sort((a,b)->normalize(a.getDisplayName()).compareTo(normalize(b.getDisplayName())));
         if(!matching.isEmpty()){rows.add(SearchResultsAdapter.Entry.section(getString(R.string.friends_title)));for(User user:matching)rows.add(SearchResultsAdapter.Entry.friend(user));}
         List<Conversation> matchingGroups=new ArrayList<>();
-        for(Conversation group:groups)if(normalize(group.getTitle()).contains(term))matchingGroups.add(group);
+        for(Conversation group:groups)if(!group.isDeleting()&&normalize(group.getTitle()).contains(term))matchingGroups.add(group);
         if(!matchingGroups.isEmpty()){
             rows.add(SearchResultsAdapter.Entry.section(getString(R.string.search_groups)));
             for(Conversation group:matchingGroups)rows.add(SearchResultsAdapter.Entry.group(group));

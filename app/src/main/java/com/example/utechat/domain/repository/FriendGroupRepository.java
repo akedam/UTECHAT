@@ -28,6 +28,9 @@ public interface FriendGroupRepository {
     void addMember(String conversationId, User member, Result<Void> callback);
     void removeMember(String conversationId, String memberUid, Result<Void> callback);
     void transferOwnership(String conversationId, String targetUid, Result<Void> callback);
+    void setDeputy(String conversationId, String memberUid, boolean deputy, Result<Void> callback);
+    void upgradeCommunity(String conversationId, Result<Void> callback);
+    void deleteGroup(String conversationId, Result<Void> callback);
     void leaveGroup(String conversationId, String uid, Result<Void> callback);
     boolean isMock();
 }
