@@ -435,6 +435,7 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         if (optionsDialog != null) optionsDialog.dismiss();
+        if (rvMessages != null) rvMessages.setAdapter(null);
         super.onDestroy();
     }
 }

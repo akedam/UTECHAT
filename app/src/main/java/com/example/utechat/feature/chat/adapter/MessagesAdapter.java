@@ -188,11 +188,37 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             String path=m.getMediaUrl();if(path==null||path.trim().isEmpty()){image.setImageResource(R.drawable.bg_bubble_received);error.setVisibility(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED?View.VISIBLE:View.GONE);return;}
             File cached=media.getImageCacheFile(path);if(cached!=null&&cached.isFile()&&cached.length()>0){showFile(cached);return;}
             progress.setVisibility(View.VISIBLE);image.setImageResource(R.drawable.bg_bubble_received);
-            download=media.downloadImage(path,media.getImageCacheFile(path),new MediaRepository.DownloadListener(){@Override public void onSuccess(File file){if(!isCurrent())return;progress.setVisibility(View.GONE);showFile(file);}@Override public void onError(String message){if(!isCurrent())return;progress.setVisibility(View.GONE);error.setText(R.string.image_download_error);error.setVisibility(View.VISIBLE);}});
+            String requestKey = boundKey;
+            download = media.downloadImage(path, cached, new MediaRepository.DownloadListener() {
+                @Override public void onSuccess(File file) {
+                    if (!isCurrent(requestKey)) return;
+                    progress.setVisibility(View.GONE);
+                    showFile(file);
+                }
+                @Override public void onError(String message) {
+                    if (!isCurrent(requestKey)) return;
+                    progress.setVisibility(View.GONE);
+                    error.setText(R.string.image_download_error);
+                    error.setVisibility(View.VISIBLE);
+                }
+            });
         }
-        private boolean isCurrent(){return boundKey!=null&&boundKey.equals(image.getTag());}
+        private boolean isCurrent(String requestKey) {
+            if (requestKey == null || !requestKey.equals(boundKey)) return false;
+            android.content.Context context = image.getContext();
+            while (context instanceof android.content.ContextWrapper) {
+                if (context instanceof android.app.Activity) {
+                    android.app.Activity activity = (android.app.Activity) context;
+                    return !activity.isFinishing() && !activity.isDestroyed();
+                }
+                android.content.Context base = ((android.content.ContextWrapper) context).getBaseContext();
+                if (base == context) break;
+                context = base;
+            }
+            return true;
+        }
         private void showFile(File file){if(file==null||!file.isFile()){error.setVisibility(View.VISIBLE);return;}Glide.with(image).load(file).override(560,560).centerInside().placeholder(R.drawable.bg_bubble_received).error(R.drawable.bg_bubble_received).into(image);error.setVisibility(View.GONE);}
-        void clear(){cancelDownload();Glide.with(image).clear(image);image.setTag(null);boundKey=null;}
+        void clear(){cancelDownload();Glide.with(image.getContext().getApplicationContext()).clear(image);image.setTag(null);boundKey=null;}
         private void cancelDownload(){if(download!=null){download.cancel();download=null;}}
     }
 }
