@@ -29,7 +29,12 @@ public final class BackendOnlineSmokeTest {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         String uid=FirebaseAuth.getInstance().getUid();assertNotNull(uid);
         com.google.firebase.messaging.FirebaseMessaging messaging=com.google.firebase.messaging.FirebaseMessaging.getInstance();
-        if("true".equals(InstrumentationRegistry.getArguments().getString("resetPush")))Tasks.await(messaging.deleteToken(),30,TimeUnit.SECONDS);
+        if ("true".equals(InstrumentationRegistry.getArguments().getString("resetPush"))) {
+            Tasks.await(messaging.deleteToken(), 30, TimeUnit.SECONDS);
+            // Copied AVDs can retain the same Firebase installation even after an FCM token refresh.
+            Tasks.await(com.google.firebase.installations.FirebaseInstallations.getInstance().delete(),
+                    30, TimeUnit.SECONDS);
+        }
         String token=Tasks.await(messaging.getToken(),30,TimeUnit.SECONDS);
         com.example.utechat.data.notifications.PushTokenRepository.syncToken(context,token);
         java.security.MessageDigest sha=java.security.MessageDigest.getInstance("SHA-256");

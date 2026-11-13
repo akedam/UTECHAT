@@ -14,11 +14,14 @@ import android.view.Window;
 import android.widget.*;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
+import androidx.lifecycle.Observer;
 import com.bumptech.glide.Glide;
 import com.example.utechat.R;
 import com.example.utechat.app.MediaRepositoryProvider;
 import com.example.utechat.domain.model.Message;
 import com.example.utechat.domain.repository.MediaRepository;
+import com.example.utechat.core.common.Resource;
+import com.example.utechat.feature.chat.viewmodel.ChatViewModel;
 import com.example.utechat.feature.main.ui.MainActivity;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -27,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Full-screen conversation options. Unavailable backend features remain explicitly disabled. */
+/** Full-screen controls for the current conversation. */
 final class ChatOptionsDialog extends Dialog {
     private final ChatActivity host;
     private final ChatPreferences prefs;
@@ -69,40 +72,31 @@ final class ChatOptionsDialog extends Dialog {
         title.setGravity(Gravity.CENTER); title.setPadding(0, dp(14), 0, dp(24)); identity.addView(title);
         LinearLayout shortcuts = new LinearLayout(host); shortcuts.setGravity(Gravity.TOP);
         shortcut(shortcuts, R.drawable.ic_search_outline, R.string.chat_search_messages, this::searchMessages);
-        shortcut(shortcuts, R.drawable.ic_nav_profile, R.string.chat_peer_profile, this::profile);
         shortcut(shortcuts, R.drawable.ic_chat_pin, R.string.chat_wallpaper, this::wallpaper);
         final TextView muteLabel = shortcut(shortcuts, R.drawable.ic_bell_outline, R.string.chat_mute, null);
         LinearLayout muteButton = (LinearLayout) muteLabel.getParent();
         muteButton.setSelected(prefs.enabled("muted"));
+        muteLabel.setText(prefs.enabled("muted") ? R.string.chat_unmute : R.string.chat_mute);
         muteLabel.setTextColor(color(prefs.enabled("muted") ? R.color.utechat_primary : R.color.utechat_on_surface));
         muteButton.setOnClickListener(v -> {
             boolean muted = !prefs.enabled("muted"); prefs.setEnabled("muted", muted);
             muteButton.setSelected(muted); muteLabel.setTextColor(color(muted ? R.color.utechat_primary : R.color.utechat_on_surface));
+            muteLabel.setText(muted ? R.string.chat_unmute : R.string.chat_mute);
             if (muted) androidx.core.app.NotificationManagerCompat.from(host).cancel("utechat_conversation_" + host.conversationId(), 0);
         });
         identity.addView(shortcuts); body.addView(identity);
         gap(); row(R.drawable.ic_edit_outline, R.string.chat_nickname, this::nickname);
         toggle(R.drawable.ic_chat_star, R.string.chat_favorite, "favorite");
-        unavailable(R.drawable.ic_chat_clock, R.string.chat_shared_diary, false);
         gap(); row(R.drawable.ic_chat_gallery, R.string.chat_media, this::media);
         mediaPreview();
-        gap(); row(R.drawable.ic_chat_group, R.string.chat_create_group, () -> {
+        gap(); row(R.drawable.ic_chat_group, R.string.chat_open_community, () -> {
             host.startActivity(new Intent(host, MainActivity.class).putExtra("open_community", true)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
             dismiss(); host.finish();
         });
-        unavailable(R.drawable.ic_chat_group, R.string.chat_add_group, false);
-        unavailable(R.drawable.ic_chat_group, R.string.chat_common_groups, false);
-        gap(); unavailable(R.drawable.ic_chat_translate, R.string.chat_translate, false);
         toggle(R.drawable.ic_chat_pin, R.string.chat_pin, "pinned");
-        unavailable(R.drawable.ic_chat_hide, R.string.chat_hide, true);
-        unavailable(R.drawable.ic_phone_outline, R.string.chat_incoming_calls, true);
-        row(R.drawable.ic_settings_outline, R.string.chat_personal_settings, this::wallpaper);
         row(R.drawable.ic_shield_outline, R.string.chat_protection, () -> info(R.string.chat_protection, host.getString(R.string.chat_protection_summary)));
-        gap(); unavailable(R.drawable.ic_chat_warning, R.string.chat_report, false);
-        unavailable(R.drawable.ic_chat_block, R.string.chat_block, false);
         row(R.drawable.ic_chat_storage, R.string.chat_storage, this::storage);
-        unavailable(R.drawable.ic_chat_trash, R.string.chat_delete_history, false);
         setContentView(root);
         setOnDismissListener(ignored -> {
             for (MediaRepository.Transfer download : downloads) download.cancel();
@@ -146,13 +140,6 @@ final class ChatOptionsDialog extends Dialog {
         control.setOnCheckedChangeListener((button, checked) -> prefs.setEnabled(key, checked));
         r.setOnClickListener(v -> control.setChecked(!control.isChecked()));
     }
-    private void unavailable(int icon, int text, boolean toggle) {
-        LinearLayout r = row(icon, text, null);
-        TextView note = label(host.getString(R.string.chat_unavailable), 11);
-        note.setTextColor(color(R.color.utechat_on_surface_variant)); r.addView(note);
-        if (toggle) { SwitchMaterial sw = new SwitchMaterial(host); styleSwitch(sw); sw.setEnabled(false); sw.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); r.addView(sw); }
-        r.setContentDescription(host.getString(text) + ", " + host.getString(R.string.chat_unavailable));
-    }
     private void styleSwitch(SwitchMaterial control) {
         control.setUseMaterialThemeColors(false);
         control.setThumbTintList(android.content.res.ColorStateList.valueOf(color(R.color.white)));
@@ -169,14 +156,13 @@ final class ChatOptionsDialog extends Dialog {
         if (action != null) box.setOnClickListener(v -> action.run()); box.setFocusable(true);
         parent.addView(box, new LinearLayout.LayoutParams(0,-2,1)); return caption;
     }
-    private void info(int heading, String text) { new MaterialAlertDialogBuilder(host).setTitle(heading).setMessage(text).setPositiveButton(android.R.string.ok,null).show(); }
-    private void profile() { info(R.string.chat_peer_profile, host.getString(R.string.chat_profile_summary, originalTitle)); }
+    private void info(int heading, String text) { new MaterialAlertDialogBuilder(host).setTitle(heading).setMessage(text).setPositiveButton(R.string.community_close,null).show(); }
     private void nickname() {
         EditText input = new EditText(host); input.setSingleLine(true); input.setText(prefs.title(originalTitle));
         input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
         new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_nickname).setMessage(R.string.chat_local_setting).setView(input)
-                .setNegativeButton(android.R.string.cancel,null).setNeutralButton("Mặc định",(d,w)->{prefs.setTitle("");title.setText(originalTitle);host.applyConversationAppearance();})
-                .setPositiveButton(android.R.string.ok,(d,w)->{prefs.setTitle(input.getText().toString());title.setText(prefs.title(originalTitle));host.applyConversationAppearance();}).show();
+                .setNegativeButton(R.string.friends_cancel_button,null).setNeutralButton("Mặc định",(d,w)->{prefs.setTitle("");title.setText(originalTitle);host.applyConversationAppearance();})
+                .setPositiveButton(R.string.community_close,(d,w)->{prefs.setTitle(input.getText().toString());title.setText(prefs.title(originalTitle));host.applyConversationAppearance();}).show();
     }
     private void wallpaper() {
         int[] colors = {0xFFE3E8EC,0xFFE8F5FF,0xFFFFF5E6,0xFFFFFFFF};
@@ -184,24 +170,59 @@ final class ChatOptionsDialog extends Dialog {
         int selected = 0; for(int i=0;i<colors.length;i++) if(colors[i]==prefs.wallpaper()) selected=i;
         new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_wallpaper).setSingleChoiceItems(labels,selected,(d,w)->{
             prefs.setWallpaper(colors[w]);host.applyConversationAppearance();d.dismiss();
-        }).setNegativeButton(android.R.string.cancel,null).show();
+        }).setNegativeButton(R.string.friends_cancel_button,null).show();
     }
     private void searchMessages() {
         LinearLayout layout = column(); layout.setPadding(dp(20),0,dp(20),dp(12));
         EditText input = new EditText(host); input.setSingleLine(true); input.setHint(R.string.chat_search_messages); layout.addView(input);
-        TextView scope = label(host.getString(R.string.chat_loaded_scope),12);scope.setPadding(0,dp(8),0,dp(8));layout.addView(scope);
+        TextView scope = label(host.getString(R.string.chat_search_scope), 12);
+        scope.setPadding(0, dp(8), 0, dp(8));
+        layout.addView(scope);
         ScrollView scroll = new ScrollView(host); LinearLayout results = column();scroll.addView(results);layout.addView(scroll,new LinearLayout.LayoutParams(-1,dp(320)));
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_search_messages).setView(layout).setNegativeButton(android.R.string.cancel,null).create();
+        com.google.android.material.button.MaterialButton older = new com.google.android.material.button.MaterialButton(host);
+        layout.addView(older);
+        older.setOnClickListener(v -> host.loadOlderForSearch());
+        TextView status = label("", 12);
+        layout.addView(status);
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(host)
+                .setTitle(R.string.chat_search_messages).setView(layout)
+                .setNegativeButton(R.string.community_close, null).create();
+        ChatViewModel model = host.chatViewModel();
+        Runnable renderPaging = () -> {
+            boolean loading = Boolean.TRUE.equals(model.getLoadingOlder().getValue());
+            boolean hasMore = Boolean.TRUE.equals(model.getHasMoreHistory().getValue());
+            older.setText(loading ? R.string.chat_search_loading : R.string.chat_search_older);
+            older.setEnabled(!loading && hasMore);
+            older.setVisibility(loading || hasMore ? View.VISIBLE : View.GONE);
+            String error = model.getSendError().getValue();
+            status.setText(error != null ? error : !loading && !hasMore
+                    ? host.getString(R.string.chat_search_all_loaded) : "");
+        };
         Runnable refresh = () -> {
             results.removeAllViews();String query=input.getText().toString().trim().toLowerCase(Locale.ROOT);
-            for(Message m:messages) if(!query.isEmpty() && m.getContent()!=null && m.getContent().toLowerCase(Locale.ROOT).contains(query)) {
+            Resource<List<Message>> current = model.getMessages().getValue();
+            List<Message> loaded = current != null && current.getData() != null ? current.getData() : messages;
+            for(Message m:loaded) if(!query.isEmpty() && m.getContent()!=null && m.getContent().toLowerCase(Locale.ROOT).contains(query)) {
                 TextView result=label(m.getContent()+"\n"+android.text.format.DateFormat.format("dd/MM HH:mm",m.getSentAt()),14); result.setMaxLines(4);result.setPadding(0,dp(12),0,dp(12));result.setMinHeight(dp(48));
                 result.setOnClickListener(v->{dialog.dismiss();dismiss();host.scrollToMessage(m.getId());}); results.addView(result);
             }
             if(results.getChildCount()==0 && !query.isEmpty()) results.addView(label(host.getString(R.string.chat_no_results),14));
         };
         input.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){} public void onTextChanged(CharSequence s,int start,int before,int count){refresh.run();} public void afterTextChanged(Editable e){}});
+        Observer<Resource<List<Message>>> messageObserver = ignored -> refresh.run();
+        Observer<Boolean> pagingObserver = ignored -> renderPaging.run();
+        Observer<String> errorObserver = ignored -> renderPaging.run();
+        dialog.setOnDismissListener(ignored -> {
+            model.getMessages().removeObserver(messageObserver);
+            model.getLoadingOlder().removeObserver(pagingObserver);
+            model.getHasMoreHistory().removeObserver(pagingObserver);
+            model.getSendError().removeObserver(errorObserver);
+        });
         dialog.show();
+        model.getMessages().observe(host, messageObserver);
+        model.getLoadingOlder().observe(host, pagingObserver);
+        model.getHasMoreHistory().observe(host, pagingObserver);
+        model.getSendError().observe(host, errorObserver);
     }
     private void mediaPreview() {
         HorizontalScrollView scroll = new HorizontalScrollView(host); scroll.setBackgroundColor(color(R.color.utechat_surface));
@@ -238,7 +259,7 @@ final class ChatOptionsDialog extends Dialog {
         }
         if(count==0)content.addView(label(host.getString(R.string.chat_no_media),14));
         ScrollView scroll=new ScrollView(host);scroll.addView(content);
-        new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_media).setView(scroll).setPositiveButton(android.R.string.ok,null).show();
+        new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_media).setView(scroll).setPositiveButton(R.string.community_close,null).show();
     }
     private void storage(){int images=0;long bytes=0;for(Message m:messages){if(m.getType()==Message.Type.IMAGE)images++;bytes+=Math.max(0,m.getFileSize());}
         info(R.string.chat_storage,host.getString(R.string.chat_storage_summary,messages.size(),images,android.text.format.Formatter.formatShortFileSize(host,bytes)));}

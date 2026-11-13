@@ -93,6 +93,20 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             content.setMaxWidth((int)Math.min(280*density,view.getResources().getDisplayMetrics().widthPixels-88*density));
         }
         void bind(Message m){sender.setText(sent?(currentUserName==null?"":currentUserName):(m.getSenderName()==null?"":m.getSenderName()));content.setText(m.getContent()==null?"":m.getContent());time.setText(formattedTime(m));
+            content.setOnLongClickListener(view -> {
+                String value = content.getText().toString();
+                if (value.isEmpty()) return false;
+                android.content.Context context = view.getContext();
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+                        .setItems(new String[]{context.getString(R.string.chat_copy)}, (dialog, which) -> {
+                            android.content.ClipboardManager clipboard = context.getSystemService(android.content.ClipboardManager.class);
+                            if (clipboard == null) return;
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(context.getString(R.string.app_name), value));
+                            if (android.os.Build.VERSION.SDK_INT < 33)
+                                android.widget.Toast.makeText(context, R.string.chat_copied, android.widget.Toast.LENGTH_SHORT).show();
+                        }).show();
+                return true;
+            });
             sender.setVisibility(!sent && groupConversation ? View.VISIBLE : View.GONE);
             if(!sent){
                 TextView avatar=itemView.findViewById(R.id.tv_message_avatar);String name=m.getSenderName();avatar.setText(name==null||name.trim().isEmpty()?"?":name.trim().substring(0,1).toUpperCase(Locale.ROOT));

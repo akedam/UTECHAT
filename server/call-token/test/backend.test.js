@@ -82,6 +82,20 @@ test("push uses stored message and actual members, cannot spoof a sender, and de
   assert.equal((await f.request("/api/message-notify","alice",{conversationId:"chat",messageId:"msg1"})).status,200);
   assert.equal(f.pushes.length,1);assert.equal(f.pushes[0].data.preview,"Hello");assert.equal(f.pushes[0].data.recipientUid,"bob");
 });
+test("an event with no registered recipient can retry after device registration", async (t) => {
+  const f = await fixture(t);
+  const device = "users/bob/deviceTokens/device";
+  const event = { conversationId: "chat", messageId: "msg1" };
+  f.db.rows.delete(device);
+  const first = await f.request("/api/message-notify", "alice", event);
+  assert.equal(first.status, 503);
+  assert.equal(first.body.error, "recipient-device-unavailable");
+  assert.equal(f.pushes.length, 0);
+  f.db.rows.set(device, { token: "new-device-token" });
+  assert.equal((await f.request("/api/message-notify", "alice", event)).status, 200);
+  assert.equal((await f.request("/api/message-notify", "alice", event)).status, 200);
+  assert.equal(f.pushes.length, 1);
+});
 test("only caller sends an invitation and expired calls cannot ring",async(t)=>{
   const f=await fixture(t);await f.db.doc("calls/call1").update({status:"ringing"});
   assert.equal((await f.request("/api/call-invite","bob",{callId:"call1"})).status,403);

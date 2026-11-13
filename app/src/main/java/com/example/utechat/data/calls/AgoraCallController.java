@@ -4,6 +4,9 @@ import android.content.Context;
 import android.view.TextureView;
 import android.widget.FrameLayout;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import io.agora.rtc2.ChannelMediaOptions;
 import io.agora.rtc2.Constants;
 import io.agora.rtc2.IRtcEngineEventHandler;
@@ -11,126 +14,214 @@ import io.agora.rtc2.RtcEngine;
 import io.agora.rtc2.RtcEngineConfig;
 import io.agora.rtc2.video.VideoCanvas;
 
-/** Owns one Agora engine and its render surfaces for the lifetime of one call screen. */
+/** Keeps blocking SDK calls off the UI thread and serializes access to Agora's singleton. */
 public final class AgoraCallController {
-    private static final Object ENGINE_LOCK = new Object();
-    private static boolean engineDestroying;
+    private static final ExecutorService RTC = Executors.newSingleThreadExecutor();
+    private static AgoraCallController engineOwner;
+
     public interface Events {
-        void onJoined(); void onRemoteJoined(int uid); void onRemoteLeft(); void onReconnecting(); void onTokenRefresh(); void onError();
+        void onJoined();
+        void onRemoteJoined(int uid);
+        void onRemoteLeft();
+        void onReconnecting();
+        void onTokenRefresh();
+        void onError();
         default void onRemoteVideoAvailable(boolean available) { }
     }
-    private final Context viewContext;
+
     private final Context appContext;
     private final Events events;
+    private volatile boolean released;
     private RtcEngine engine;
-    private String channel;
-    private boolean video;
-    private int localUid;
-    private boolean previewAttached;
+    private boolean previewStarted;
+    private boolean localVideoAttached;
+    private boolean joined;
+    private TextureView localView;
 
-    public AgoraCallController(Context context, Events events) { this.viewContext = context; this.appContext = context.getApplicationContext(); this.events = events; }
+    public AgoraCallController(Context context, Events events) {
+        appContext = context.getApplicationContext();
+        this.events = events;
+    }
 
     public void join(String appId, String token, String channelName, int uid, boolean video,
                      boolean speakerEnabled, boolean micMuted, boolean cameraMuted,
-                     FrameLayout localContainer, FrameLayout remoteContainer) throws Exception {
-        this.channel = channelName; this.video = video; this.localUid = uid;
-        ensureEngine(appId);
-        engine.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION);
-        engine.enableAudio();
-        engine.muteLocalAudioStream(micMuted);
-        engine.setEnableSpeakerphone(speakerEnabled);
-        ChannelMediaOptions options = new ChannelMediaOptions();
-        options.clientRoleType = Constants.CLIENT_ROLE_BROADCASTER;
-        options.publishMicrophoneTrack = true;
-        options.autoSubscribeAudio = true;
-        options.autoSubscribeVideo = video;
-        if (video) {
-            engine.enableVideo();
-            if (!cameraMuted) previewLocal(appId, localContainer);
-            engine.enableLocalVideo(!cameraMuted);
-            engine.muteLocalVideoStream(cameraMuted);
-            options.publishCameraTrack = true;
-            engine.setDefaultAudioRoutetoSpeakerphone(speakerEnabled);
-        } else options.publishCameraTrack = false;
-        int result = engine.joinChannel(token, channelName, uid, options);
-        if (result < 0) throw new IllegalStateException("Agora join request failed: " + result);
+                     FrameLayout localContainer) {
+        TextureView local = video ? localSurface(localContainer) : null;
+        run(() -> {
+            ensureEngine(appId);
+            engine.enableAudio();
+            engine.muteLocalAudioStream(micMuted);
+            engine.setEnableSpeakerphone(speakerEnabled);
+            if (video) {
+                prepareVideo(local);
+                engine.enableLocalVideo(!cameraMuted);
+                engine.muteLocalVideoStream(cameraMuted);
+            }
+
+            ChannelMediaOptions options = new ChannelMediaOptions();
+            options.clientRoleType = Constants.CLIENT_ROLE_BROADCASTER;
+            options.publishMicrophoneTrack = true;
+            options.autoSubscribeAudio = true;
+            options.autoSubscribeVideo = video;
+            options.publishCameraTrack = video;
+            check(engine.joinChannel(token, channelName, uid, options), "joinChannel");
+            joined = true;
+        });
     }
 
-    /** Camera-only local preview; doesn't join a channel or publish any media. */
-    public void previewLocal(String appId, FrameLayout container) throws Exception {
-        ensureEngine(appId); video = true;
-        engine.enableVideo();
-        if (!previewAttached) {
-            TextureView local = new TextureView(viewContext);
-            container.removeAllViews(); container.addView(local);
-            engine.setupLocalVideo(new VideoCanvas(local, VideoCanvas.RENDER_MODE_HIDDEN, 0));
-            previewAttached = true;
+    /** Starts local preview at most once, and never restarts it while joining the call. */
+    public void previewLocal(String appId, FrameLayout container) {
+        TextureView local = localSurface(container);
+        run(() -> {
+            ensureEngine(appId);
+            prepareVideo(local);
+            engine.enableLocalVideo(true);
+            if (!joined && !previewStarted) {
+                check(engine.startPreview(), "startPreview");
+                previewStarted = true;
+            }
+        });
+    }
+
+    private TextureView localSurface(FrameLayout container) {
+        if (localView == null) {
+            localView = new TextureView(container.getContext());
+            container.removeAllViews();
+            container.addView(localView);
         }
-        engine.startPreview();
+        return localView;
+    }
+
+    private void prepareVideo(TextureView local) {
+        if (localVideoAttached) return;
+        check(engine.enableVideo(), "enableVideo");
+        check(engine.setupLocalVideo(new VideoCanvas(local, VideoCanvas.RENDER_MODE_HIDDEN, 0)),
+                "setupLocalVideo");
+        localVideoAttached = true;
     }
 
     private void ensureEngine(String appId) throws Exception {
         if (engine != null) return;
-        RtcEngineConfig config = new RtcEngineConfig(); config.mContext = appContext; config.mAppId = appId;
+        if (engineOwner != null) throw new IllegalStateException("An Agora call is already active");
+        RtcEngineConfig config = new RtcEngineConfig();
+        config.mContext = appContext;
+        config.mAppId = appId;
         config.mEventHandler = new IRtcEngineEventHandler() {
-            @Override public void onJoinChannelSuccess(String channel, int uid, int elapsed) { events.onJoined(); }
-            @Override public void onUserJoined(int uid, int elapsed) { events.onRemoteJoined(uid); }
-            @Override public void onUserOffline(int uid, int reason) { events.onRemoteLeft(); }
+            @Override public void onJoinChannelSuccess(String channel, int uid, int elapsed) {
+                if (!released) events.onJoined();
+            }
+            @Override public void onRejoinChannelSuccess(String channel, int uid, int elapsed) {
+                if (!released) events.onJoined();
+            }
+            @Override public void onUserJoined(int uid, int elapsed) {
+                if (!released) events.onRemoteJoined(uid);
+            }
+            @Override public void onUserOffline(int uid, int reason) {
+                if (!released) events.onRemoteLeft();
+            }
             @Override public void onRemoteVideoStateChanged(int uid, int state, int reason, int elapsed) {
+                if (released) return;
                 if (state == Constants.REMOTE_VIDEO_STATE_DECODING) events.onRemoteVideoAvailable(true);
                 else if (state == Constants.REMOTE_VIDEO_STATE_STOPPED || state == Constants.REMOTE_VIDEO_STATE_FAILED)
                     events.onRemoteVideoAvailable(false);
             }
             @Override public void onConnectionStateChanged(int state, int reason) {
+                if (released) return;
                 if (state == Constants.CONNECTION_STATE_RECONNECTING) events.onReconnecting();
-                if (state == Constants.CONNECTION_STATE_FAILED) {
-                    if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.w("UTEChatRTC", "Connection failed, reason=" + reason);
-                    events.onError();
-                }
+                if (state == Constants.CONNECTION_STATE_FAILED) events.onError();
             }
-            @Override public void onError(int errorCode) {
-                if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.w("UTEChatRTC", "RTC error=" + errorCode);
-                events.onError();
+            @Override public void onError(int code) {
+                if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.w("UTEChatRTC", "RTC error=" + code);
+                if (!released) events.onError();
             }
-            @Override public void onTokenPrivilegeWillExpire(String token) { events.onTokenRefresh(); }
-            @Override public void onRequestToken() { events.onTokenRefresh(); }
+            @Override public void onTokenPrivilegeWillExpire(String token) {
+                if (!released) events.onTokenRefresh();
+            }
+            @Override public void onRequestToken() {
+                if (!released) events.onTokenRefresh();
+            }
         };
-        synchronized (ENGINE_LOCK) {
-            while (engineDestroying) {
-                try { ENGINE_LOCK.wait(); }
-                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("Interrupted while releasing prior call"); }
+        engine = RtcEngine.create(config);
+        engineOwner = this;
+        check(engine.setChannelProfile(Constants.CHANNEL_PROFILE_COMMUNICATION), "setChannelProfile");
+    }
+
+    public void attachRemote(int uid, FrameLayout container) {
+        TextureView remote = new TextureView(container.getContext());
+        container.removeAllViews();
+        container.addView(remote);
+        run(() -> {
+            if (engine != null) check(engine.setupRemoteVideo(
+                    new VideoCanvas(remote, VideoCanvas.RENDER_MODE_HIDDEN, uid)), "setupRemoteVideo");
+        });
+    }
+
+    public void muteMic(boolean muted) {
+        run(() -> { if (engine != null) engine.muteLocalAudioStream(muted); });
+    }
+
+    public void muteCamera(boolean muted) {
+        run(() -> {
+            if (engine != null) {
+                engine.enableLocalVideo(!muted);
+                engine.muteLocalVideoStream(muted);
             }
-            engine = RtcEngine.create(config);
+        });
+    }
+
+    public void speaker(boolean enabled) {
+        run(() -> { if (engine != null) engine.setEnableSpeakerphone(enabled); });
+    }
+
+    public void switchCamera() {
+        run(() -> { if (engine != null) engine.switchCamera(); });
+    }
+
+    public void renewToken(String token) {
+        if (token == null || token.isEmpty()) return;
+        run(() -> { if (engine != null) engine.renewToken(token); });
+    }
+
+    public void release() {
+        if (released) return;
+        released = true;
+        localView = null;
+        RTC.execute(this::closeEngine);
+    }
+
+    private void closeEngine() {
+        if (engine == null) return;
+        try {
+            if (joined) engine.leaveChannel();
+        } finally {
+            try {
+                if (previewStarted) engine.stopPreview();
+            } finally {
+                engine = null;
+                engineOwner = null;
+                RtcEngine.destroy();
+            }
         }
     }
 
-    public void attachRemote(int uid, FrameLayout remoteContainer) {
-        if (engine == null || !video) return;
-        TextureView remote = new TextureView(viewContext);
-        remoteContainer.removeAllViews(); remoteContainer.addView(remote);
-        engine.setupRemoteVideo(new VideoCanvas(remote, VideoCanvas.RENDER_MODE_HIDDEN, uid));
+    private void run(RtcAction action) {
+        RTC.execute(() -> {
+            if (released) return;
+            try {
+                action.run();
+            } catch (Exception error) {
+                if (com.example.utechat.BuildConfig.DEBUG)
+                    android.util.Log.w("UTEChatRTC", "Agora operation failed", error);
+                if (!released) events.onError();
+            }
+        });
     }
-    public void muteMic(boolean muted) { if (engine != null) engine.muteLocalAudioStream(muted); }
-    public void muteCamera(boolean muted) {
-        if (engine != null && video) { engine.enableLocalVideo(!muted); engine.muteLocalVideoStream(muted); }
+
+    private static void check(int result, String operation) {
+        if (result < 0) throw new IllegalStateException(operation + " failed: " + result);
     }
-    public void speaker(boolean enabled) { if (engine != null) engine.setEnableSpeakerphone(enabled); }
-    public void switchCamera() { if (engine != null && video) engine.switchCamera(); }
-    public void renewToken(String token) { if (engine != null && token != null && !token.isEmpty()) engine.renewToken(token); }
-    public void release() {
-        previewAttached = false;
-        final RtcEngine old;
-        synchronized (ENGINE_LOCK) {
-            old = engine; engine = null;
-            if (old != null) engineDestroying = true;
-        }
-        if (old != null) {
-            try { old.leaveChannel(); } catch (RuntimeException ignored) { }
-            // Agora requires destroy off the UI thread; serialize it with the next engine create.
-            new Thread(() -> {
-                try { RtcEngine.destroy(); }
-                finally { synchronized (ENGINE_LOCK) { engineDestroying = false; ENGINE_LOCK.notifyAll(); } }
-            }, "utechat-agora-release").start();
-        }
+
+    private interface RtcAction {
+        void run() throws Exception;
     }
 }

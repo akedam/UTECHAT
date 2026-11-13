@@ -40,8 +40,10 @@ public final class CallActivity extends AppCompatActivity {
     private static final String EXTRA_TITLE = "peer_title";
     private static final String EXTRA_MEDIA = "media_type";
     private static final long FINISH_DELAY_MS = 1300L;
+    private static final long MEDIA_TIMEOUT_MS = 30_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable mediaTimeout = this::failMediaConnection;
     private ActivityResultLauncher<String[]> permissionRequest;
     private Runnable timeout;
     private Runnable callPoll;
@@ -63,6 +65,7 @@ public final class CallActivity extends AppCompatActivity {
     private android.media.Ringtone ringtone;
     private boolean peerLoaded;
     private boolean preparingBackend;
+    private boolean failingMedia;
 
     public static Intent outgoingIntent(Context context, String conversationId, String title, String mediaType) {
         return new Intent(context, CallActivity.class).putExtra(EXTRA_MODE, "outgoing")
@@ -186,7 +189,7 @@ public final class CallActivity extends AppCompatActivity {
         int title = "video".equals(mediaType) ? R.string.call_permission_camera_title : R.string.call_permission_mic_title;
         int message = "video".equals(mediaType) ? R.string.call_permission_video_message : R.string.call_permission_mic_message;
         new AlertDialog.Builder(this).setTitle(title).setMessage(message)
-                .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
+                .setNegativeButton(R.string.friends_cancel_button, (dialog, which) -> {
                     if (incoming) findViewById(R.id.incoming_actions).setVisibility(View.VISIBLE); else finish();
                 })
                 .setPositiveButton(R.string.call_accept, (dialog, which) -> permissionRequest.launch(needed)).show();
@@ -223,12 +226,12 @@ public final class CallActivity extends AppCompatActivity {
                     return;
                 }
                 showProgress(false); call = created; callId = created.id;
-                startCameraPreview();
                 UteChatApplication.clearActiveCall("pending-outgoing");
                 UteChatApplication.setActiveCall(callId);
                 observeCall(callId); setStatus(R.string.call_state_ringing);
                 findViewById(R.id.btn_end_call).setVisibility(View.VISIBLE);
                 handler.postDelayed(timeout, Math.max(1, created.expiresAt - System.currentTimeMillis()));
+                startCameraPreview();
             }
             @Override public void onError(String message) {
                 if (isFinishing() || isDestroyed()) return;
@@ -365,10 +368,12 @@ public final class CallActivity extends AppCompatActivity {
         return new AgoraCallController(CallActivity.this, new AgoraCallController.Events() {
                         @Override public void onJoined() { runOnUiThread(() -> {
                             if (isFinishing() || isDestroyed() || endingRequested) return;
+                            if (connected) handler.removeCallbacks(mediaTimeout);
                             showProgress(false); setStatus(connected ? R.string.call_state_connected : R.string.call_state_connecting);
                         }); }
                         @Override public void onRemoteJoined(int remoteUid) { runOnUiThread(() -> {
                             if (isFinishing() || isDestroyed() || endingRequested) return;
+                            handler.removeCallbacks(mediaTimeout);
                             connected = true;
                             setStatus(R.string.call_state_connected);
                             if ("video".equals(call.mediaType)) {
@@ -382,22 +387,25 @@ public final class CallActivity extends AppCompatActivity {
                             findViewById(R.id.tv_call_header_status).setVisibility(available ? View.VISIBLE : View.GONE);
                         }); }
                         @Override public void onRemoteLeft() { runOnUiThread(() -> {
-                            if (isFinishing() || isDestroyed()) return;
+                            if (isFinishing() || isDestroyed() || endingRequested) return;
                             findViewById(R.id.audio_peer_state).setVisibility(View.VISIBLE);
                             findViewById(R.id.tv_call_header_status).setVisibility(View.GONE);
                             remote.setVisibility(View.GONE);
                             connected = false;
                             setStatus(R.string.call_state_connecting);
+                            scheduleMediaTimeout();
                         }); }
                         @Override public void onReconnecting() { runOnUiThread(() -> {
-                            if (!isFinishing() && !isDestroyed()) setStatus(R.string.call_state_connecting);
+                            if (!isFinishing() && !isDestroyed() && !endingRequested) {
+                                setStatus(R.string.call_state_connecting);
+                                scheduleMediaTimeout();
+                            }
                         }); }
                         @Override public void onTokenRefresh() { runOnUiThread(() -> refreshRtcToken(call)); }
                         @Override public void onError() { runOnUiThread(() -> {
-                            if (!isFinishing() && !isDestroyed() && !endingRequested) {
-                                showProgress(false); showError(R.string.call_network_error);
-                                repository.updateStatus(call.id, "failed", silentCallback());
-                            }
+                            if (isFinishing() || isDestroyed() || endingRequested) return;
+                            if (startingMedia) failMediaConnection();
+                            else if (!endingRequested) showError(R.string.call_camera_preview_unavailable);
                         }); }
                     });
 
@@ -405,7 +413,7 @@ public final class CallActivity extends AppCompatActivity {
 
     private void startMediaOnce() {
         if (BuildConfig.DEBUG) android.util.Log.d("UTEChatRTC", "Start media: starting=" + startingMedia + ", connected=" + connected + ", ending=" + endingRequested);
-        if (startingMedia || connected || endingRequested || call == null) return;
+        if (startingMedia || connected || endingRequested || failingMedia || call == null) return;
         if (!hasPermission(Manifest.permission.RECORD_AUDIO) || ("video".equals(call.mediaType) && !hasPermission(Manifest.permission.CAMERA))) {
             showError(R.string.call_permission_denied); endCall(); return;
         }
@@ -413,6 +421,7 @@ public final class CallActivity extends AppCompatActivity {
             showError(R.string.call_service_unconfigured); repository.updateStatus(call.id, "failed", silentCallback()); return;
         }
         startingMedia = true; showProgress(true); setStatus(R.string.call_state_connecting);
+        scheduleMediaTimeout();
         try { androidx.core.content.ContextCompat.startForegroundService(this,
                 CallForegroundService.startIntent(this, "video".equals(call.mediaType))); }
         catch (RuntimeException serviceError) { if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "Foreground service start failed", serviceError); startingMedia = false; showProgress(false); showError(R.string.call_network_error); repository.updateStatus(call.id, "failed", silentCallback()); return; }
@@ -422,23 +431,33 @@ public final class CallActivity extends AppCompatActivity {
                 if (isFinishing() || isDestroyed() || endingRequested || call == null || !call.id.equals(callSnapshot.id)) return;
                 try {
                     FrameLayout local = findViewById(R.id.local_video_container);
-                    FrameLayout remote = findViewById(R.id.remote_video_container);
                     if (rtc == null) rtc = createRtcController();
                     rtc.join(appId, token, channel, uid, "video".equals(callSnapshot.mediaType),
-                            speakerEnabled, micMuted, cameraMuted, local, remote);
-                    rtc.muteMic(micMuted);
+                            speakerEnabled, micMuted, cameraMuted, local);
                     if ("video".equals(callSnapshot.mediaType)) {
-                        rtc.muteCamera(cameraMuted);
                         local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
                     }
                 } catch (Exception error) {
                     if (BuildConfig.DEBUG) android.util.Log.e("UTEChatRTC", "RTC initialization failed", error);
-                    startingMedia = false; showProgress(false); showError(R.string.call_network_error);
-                    repository.updateStatus(callSnapshot.id, "failed", silentCallback());
+                    failMediaConnection();
                 }
             }
-            @Override public void onError() { startingMedia = false; showProgress(false); showError(R.string.call_service_unconfigured); repository.updateStatus(callSnapshot.id, "failed", silentCallback()); }
+            @Override public void onError() { failMediaConnection(); }
         });
+    }
+
+    private void scheduleMediaTimeout() {
+        handler.removeCallbacks(mediaTimeout);
+        handler.postDelayed(mediaTimeout, MEDIA_TIMEOUT_MS);
+    }
+
+    private void failMediaConnection() {
+        if (call == null || failingMedia || endingRequested || isFinishing() || isDestroyed()) return;
+        failingMedia = true;
+        showError(R.string.call_network_error);
+        setStatus(R.string.call_state_failed);
+        repository.updateStatus(call.id, "failed", silentCallback());
+        finishSoon();
     }
 
     private void refreshRtcToken(CallSession callSnapshot) {
@@ -486,7 +505,10 @@ public final class CallActivity extends AppCompatActivity {
     private void finishSoon() {
         if (finishingScheduled) return;
         finishingScheduled = true; endingRequested = true;
-        handler.removeCallbacks(timeout); handler.removeCallbacks(callPoll); stopRingtone(); showProgress(false);
+        handler.removeCallbacks(timeout);
+        handler.removeCallbacks(callPoll);
+        handler.removeCallbacks(mediaTimeout);
+        stopRingtone(); showProgress(false);
         findViewById(R.id.incoming_actions).setVisibility(View.GONE);
         findViewById(R.id.in_call_actions).setVisibility(View.GONE);
         findViewById(R.id.btn_end_call).setEnabled(false);

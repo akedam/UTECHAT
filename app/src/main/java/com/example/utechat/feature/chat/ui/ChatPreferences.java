@@ -26,4 +26,11 @@ public final class ChatPreferences {
     }
     public int wallpaper() { return preferences.getInt(prefix + "wallpaper", 0xFFE3E8EC); }
     public void setWallpaper(int color) { preferences.edit().putInt(prefix + "wallpaper", color).apply(); }
+
+    public String draft() { return preferences.getString(prefix + "draft", ""); }
+
+    public void setDraft(String text) {
+        if (text.trim().isEmpty()) preferences.edit().remove(prefix + "draft").apply();
+        else preferences.edit().putString(prefix + "draft", text).apply();
+    }
 }
