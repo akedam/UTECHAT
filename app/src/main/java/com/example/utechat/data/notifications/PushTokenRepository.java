@@ -47,25 +47,29 @@ public final class PushTokenRepository {
             String previousUid = prefs.getString(KEY_UID, null);
             String previousHash = prefs.getString(KEY_TOKEN_HASH, null);
             long now=System.currentTimeMillis(),syncedAt=prefs.getLong(KEY_SYNCED_AT,0);
-            // A cached local registration is not proof the server still has it
-            // (invalid-token cleanup, restored app data, or a failed older sync).
+            // Refresh after an upgrade so registrations removed by the server are repaired.
+            long registeredVersion = prefs.getLong("registered_version", 0);
             if (user.getUid().equals(previousUid) && hash.equals(previousHash)
-                    && syncedAt<=now && now-syncedAt<6*60*60_000L) return;
-
-            if (user.getUid().equals(previousUid) && previousHash != null && !hash.equals(previousHash)) {
-                FirebaseFirestore.getInstance().collection("users").document(user.getUid())
-                        .collection("deviceTokens").document(previousHash).delete();
-            }
+                    && registeredVersion == com.example.utechat.BuildConfig.VERSION_CODE
+                    && syncedAt <= now && now - syncedAt < 15 * 60_000L) return;
 
             Map<String, Object> data = new HashMap<>();
             data.put("token", token);
             data.put("platform", "android");
             data.put("updatedAt", System.currentTimeMillis());
-            FirebaseFirestore.getInstance().collection("users").document(user.getUid())
-                    .collection("deviceTokens").document(hash).set(data, SetOptions.merge())
-                    .addOnSuccessListener(unused -> prefs.edit()
-                            .putString(KEY_UID, user.getUid())
-                            .putString(KEY_TOKEN_HASH, hash).putLong(KEY_SYNCED_AT,now).apply());
+            var devices = FirebaseFirestore.getInstance().collection("users").document(user.getUid())
+                    .collection("deviceTokens");
+            var batch = FirebaseFirestore.getInstance().batch();
+            batch.set(devices.document(hash), data, SetOptions.merge());
+            if (user.getUid().equals(previousUid) && previousHash != null && !hash.equals(previousHash)) {
+                batch.delete(devices.document(previousHash));
+            }
+            batch.commit().addOnSuccessListener(unused -> {
+                if (!user.getUid().equals(FirebaseAuth.getInstance().getUid())) return;
+                prefs.edit().putString(KEY_UID, user.getUid())
+                        .putString(KEY_TOKEN_HASH, hash).putLong(KEY_SYNCED_AT, now)
+                        .putLong("registered_version", com.example.utechat.BuildConfig.VERSION_CODE).apply();
+            });
         } catch (RuntimeException ignored) {
             // No token or auth data is written to logs; the next app start retries sync.
         }

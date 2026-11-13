@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="conversation_draft_preview">Bản nháp: %1$s</string>
+    <string name="chat_search_older">Tải thêm tin nhắn cũ</string>
+    <string name="chat_search_loading">Đang tải tin nhắn cũ…</string>
+    <string name="chat_search_all_loaded">Đã tải hết lịch sử trò chuyện.</string>
+    <string name="chat_search_scope">Tìm trong các tin đã tải. Bạn có thể tải thêm tin cũ ngay tại đây.</string>
+    <string name="chat_open_community">Đến trang Cộng đồng</string>
+    <string name="chat_unmute">Bật thông báo</string>
+    <string name="chat_copy">Sao chép tin nhắn</string>
+    <string name="chat_copied">Đã sao chép tin nhắn</string>
     <color name="chat_canvas">#E3E8EC</color>
     <color name="chat_sent_fill">#D2F1FD</color>
     <color name="chat_sent_stroke">#BBD9E2</color>

@@ -177,19 +177,27 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     try {
       const devices = await db.collection(`users/${recipientUid}/deviceTokens`).limit(20).get();
       const valid = devices.docs.filter((doc) => typeof doc.data().token === "string");
+      let acceptedDevices = 0;
       if (valid.length) {
         const result = await messaging.sendEachForMulticast({ tokens: valid.map((doc) => doc.data().token),
           data: { ...data, recipientUid }, android: { priority: "high", ttl } });
         let retry = false;
         for (let i = 0; i < result.responses.length; i++) {
-          const response = result.responses[i]; if (response.success) continue;
+          const response = result.responses[i];
+          if (response.success) {
+            acceptedDevices++;
+            continue;
+          }
           if (["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(response.error?.code))
             await valid[i].ref.delete(); else retry = true;
         }
         if (retry) throw new ApiError(503, "push-unavailable");
       }
+      requireValue(acceptedDevices > 0, 503, "recipient-device-unavailable");
       await db.runTransaction(async (tx) => {
-        const current = await tx.get(ref); if (current.data()?.attemptId === attemptId) tx.set(ref, { sentAt: now() });
+        const current = await tx.get(ref);
+        if (current.data()?.attemptId !== attemptId) return;
+        tx.set(ref, { sentAt: now(), acceptedDevices });
       });
     } catch (error) {
       await db.runTransaction(async (tx) => {
@@ -221,15 +229,21 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       requireValue(members.docs.length <= 100, 409, "group-too-large");
       recipients = members.docs.filter(doc => doc.data().userId === doc.id && recipients.includes(doc.id)).map(doc => doc.id);
     }
+    let retryError;
     for (const recipient of recipients) {
       if (recipient === uid) continue;
-      await pushOnce(`message:${body.conversationId}:${body.messageId}`, recipient, {
+      try {
+        await pushOnce(`message:${body.conversationId}:${body.messageId}`, recipient, {
         eventType: "message", conversationId: body.conversationId, messageId: body.messageId,
         senderName: String(data.senderName || "UTEChat").slice(0, 80), conversationType: group ? "group" : "direct",
         conversationTitle: group ? String(parent.data().groupName || "Nhóm UTEChat").slice(0, 80) : "",
         preview: data.type === "image" ? "[Hình ảnh]" : String(data.content || "Tin nhắn mới").slice(0, 300),
-      }, 24 * 60 * 60_000);
+        }, 24 * 60 * 60_000);
+      } catch (error) {
+        retryError = error;
+      }
     }
+    if (retryError) throw retryError;
   }
   async function upload(path, uid, bytes, contentType) {
     requireValue(storage, 503, "media-not-configured"); const parts = mediaPath(path);

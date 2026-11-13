@@ -96,7 +96,9 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             if (prefs.enabled("pinned")) safeTitle = "⌁ " + safeTitle;
             else if (prefs.enabled("favorite")) safeTitle = "☆ " + safeTitle;
             title.setText(safeTitle);
-            preview.setText(previewText(conversation));
+            String draft = prefs.draft();
+            preview.setText(draft.isEmpty() ? previewText(conversation)
+                    : itemView.getContext().getString(R.string.conversation_draft_preview, draft.trim()));
             String formattedTime = formatTime(conversation.getLastMessageAt());
             time.setText(formattedTime);
 

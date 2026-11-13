@@ -122,6 +122,9 @@ public class ChatActivity extends AppCompatActivity {
         rvMessages.setAdapter(adapter);
         chatNotice.setVisibility(viewModel.isMock() ? View.VISIBLE : View.GONE);
         setupListeners();
+        String draft = chatPreferences.draft();
+        etMessage.setText(draft);
+        etMessage.setSelection(etMessage.length());
         observeViewModel();
     }
 
@@ -146,7 +149,7 @@ public class ChatActivity extends AppCompatActivity {
                 new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_more)
                         .setItems(new String[]{getString(R.string.cd_attach_image), getString(R.string.chat_create_poll)},
                                 (dialog, which) -> { if (which == 0) btnAttachImage.performClick(); else showCreatePollDialog(); })
-                        .setNegativeButton(android.R.string.cancel, null).show());
+                        .setNegativeButton(R.string.friends_cancel_button, null).show());
         findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
             String[] emojis = {"😀", "😂", "❤️", "👍", "🥰", "🎉", "😢", "🙏", "🔥", "😊", "🤔", "👋"};
             new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_emoji_title).setItems(emojis, (d, which) -> {
@@ -171,7 +174,9 @@ public class ChatActivity extends AppCompatActivity {
                 btnSend.setEnabled(s != null && s.toString().trim().length() > 0);
                 btnSend.setVisibility(btnSend.isEnabled() ? View.VISIBLE : View.GONE);
             }
-            @Override public void afterTextChanged(Editable s) { }
+            @Override public void afterTextChanged(Editable s) {
+                chatPreferences.setDraft(s.toString());
+            }
         });
         btnSend.setEnabled(false);
         btnSend.setVisibility(View.GONE);
@@ -209,7 +214,9 @@ public class ChatActivity extends AppCompatActivity {
     private void sendCurrentText() {
         String text = etMessage.getText() == null ? "" : etMessage.getText().toString();
         forceScrollToBottom = true;
-        if (viewModel.sendText(text)) etMessage.setText("");
+        if (viewModel.sendText(text)) {
+            etMessage.setText("");
+        }
         else forceScrollToBottom = false;
     }
 
@@ -255,6 +262,20 @@ public class ChatActivity extends AppCompatActivity {
             if (id.equals(adapter.getMessageAt(i).getId())) return i;
         }
         return -1;
+    }
+
+    ChatViewModel chatViewModel() {
+        return viewModel;
+    }
+
+    void loadOlderForSearch() {
+        int position = layoutManager.findFirstVisibleItemPosition();
+        View first = layoutManager.findViewByPosition(position);
+        if (first != null && position >= 0 && position < adapter.getItemCount()) {
+            pendingAnchorId = adapter.getMessageAt(position).getId();
+            pendingAnchorOffset = first.getTop();
+        }
+        viewModel.retryHistory();
     }
 
     private void markVisibleMessagesRead() {
@@ -334,7 +355,7 @@ public class ChatActivity extends AppCompatActivity {
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.poll_create_title)
                 .setView(scroll)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(R.string.friends_cancel_button, null)
                 .setPositiveButton(R.string.poll_create_button, null);
         androidx.appcompat.app.AlertDialog dialog = builder.create();
         dialog.setOnShowListener(ignored -> dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
@@ -414,6 +435,7 @@ public class ChatActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         if (optionsDialog != null) optionsDialog.dismiss();
+        if (rvMessages != null) rvMessages.setAdapter(null);
         super.onDestroy();
     }
 }
