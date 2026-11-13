@@ -71,6 +71,10 @@ public final class MockMessageRepository implements MessageRepository {
         mainHandler.post(() -> callback.onError(context.getString(R.string.image_storage_setup_error)));
     }
 
+    @Override public void sendVoice(String conversationId, Message message, SendCallback callback) {
+        mainHandler.post(() -> callback.onError(context.getString(R.string.voice_unavailable)));
+    }
+
     @Override public synchronized void sendPoll(String conversationId, Message message, SendCallback callback) {
         ensureSamples(conversationId, message.getSenderId(), message.getSenderName(),
                 context.getString(R.string.mock_peer_name));

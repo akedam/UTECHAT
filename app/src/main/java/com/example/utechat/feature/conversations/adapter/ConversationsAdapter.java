@@ -144,6 +144,7 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             String message = conversation.getLastMessage();
             String type = conversation.getLastMessageType();
             if ("image".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.conversation_preview_image);
+            if ("voice".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.voice_message);
             if ("file".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.conversation_preview_file);
             if (hasText(message)) return message.trim();
             return itemView.getContext().getString(R.string.conversation_no_preview);

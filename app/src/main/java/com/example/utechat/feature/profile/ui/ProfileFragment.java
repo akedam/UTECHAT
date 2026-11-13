@@ -63,6 +63,9 @@ public class ProfileFragment extends Fragment {
         setupListeners();
         View privacy = view.findViewById(R.id.layout_privacy);
         View notifications = view.findViewById(R.id.layout_notifications);
+        View blocked = view.findViewById(R.id.btn_blocked_people);
+        blocked.setVisibility(AuthRepositoryProvider.isMock(requireContext()) ? View.GONE : View.VISIBLE);
+        blocked.setOnClickListener(v -> com.example.utechat.feature.safety.UserSafety.showBlockedAccounts(requireActivity()));
         privacy.setVisibility(View.GONE);
         notifications.setVisibility(View.GONE);
         view.findViewById(R.id.row_privacy).setOnClickListener(v ->

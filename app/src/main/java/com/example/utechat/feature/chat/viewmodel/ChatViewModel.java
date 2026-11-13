@@ -43,6 +43,7 @@ public class ChatViewModel extends AndroidViewModel {
     private final Set<String> sendingIds = new HashSet<>();
     private final Map<String, Message> localOutgoing = new LinkedHashMap<>();
     private final Map<String, Uri> pendingImageUris = new LinkedHashMap<>();
+    private final Map<String, java.io.File> pendingVoiceFiles = new LinkedHashMap<>();
     private final Map<String, MediaRepository.Transfer> activeUploads = new LinkedHashMap<>();
     private final String currentUserId;
     private final String currentUserName;
@@ -74,6 +75,7 @@ public class ChatViewModel extends AndroidViewModel {
     public LiveData<String> getSendError() { return sendError; }
     public boolean isMock() { return repository.isMock(); }
     public boolean canSendImage() { return mediaRepository.isAvailable() && !repository.isMock(); }
+    public boolean canSendVoice() { return !repository.isMock() && mediaRepository.supportsVoice(); }
     public String getCurrentUserId() { return currentUserId; }
     public String getCurrentUserName() { return currentUserName; }
 
@@ -184,7 +186,7 @@ public class ChatViewModel extends AndroidViewModel {
                 });
     }
 
-    public boolean sendText(String value) {
+    public boolean sendText(String value, Message.Reply reply) {
         if (value == null || value.trim().isEmpty()) return false;
         String text = value.trim();
         if (text.length() > MAX_MESSAGE_LENGTH) {
@@ -208,6 +210,7 @@ public class ChatViewModel extends AndroidViewModel {
         message.setSenderName(currentUserName);
         message.setType(Message.Type.TEXT);
         message.setContent(text);
+        message.setReply(reply);
         message.setSentAt(System.currentTimeMillis());
         message.setCreatedAt(message.getSentAt());
         message.setDeliveryStatus(Message.DeliveryStatus.SENDING);
@@ -274,6 +277,10 @@ public class ChatViewModel extends AndroidViewModel {
                     if (source != null) uploadImage(message, source);
                     else if (message.getMediaUrl() != null) submit(message);
                     else { updateStatus(messageId, Message.DeliveryStatus.FAILED); sendError.setValue(getApplication().getString(R.string.image_upload_error)); }
+                } else if (message.getType() == Message.Type.VOICE && message.getMediaUrl() == null) {
+                    java.io.File source = pendingVoiceFiles.get(messageId);
+                    if (source != null) upload(message, source, null);
+                    else updateStatus(messageId, Message.DeliveryStatus.FAILED);
                 } else submit(message); // reuse the same document ID for an idempotent retry
                 return;
             }
@@ -291,6 +298,10 @@ public class ChatViewModel extends AndroidViewModel {
                     pendingImageUris.remove(message.getId());
                     message.setLocalMediaUri(null);
                 }
+                if (message.getType() == Message.Type.VOICE) {
+                    java.io.File file = pendingVoiceFiles.remove(message.getId());
+                    if (file != null) file.delete();
+                }
                 updateStatus(message.getId(), Message.DeliveryStatus.SENT);
             }
 
@@ -299,9 +310,11 @@ public class ChatViewModel extends AndroidViewModel {
                 if (cleared) return;
                 sendingIds.remove(message.getId());
                 updateStatus(message.getId(), Message.DeliveryStatus.FAILED);
+                sendError.setValue(error);
             }
         };
         if (message.getType() == Message.Type.IMAGE) repository.sendImage(conversationId, message, callback);
+        else if (message.getType() == Message.Type.VOICE) repository.sendVoice(conversationId, message, callback);
         else if (message.getType() == Message.Type.POLL) repository.sendPoll(conversationId, message, callback);
         else repository.sendText(conversationId, message, callback);
     }
@@ -320,9 +333,35 @@ public class ChatViewModel extends AndroidViewModel {
     }
 
     private void uploadImage(Message message, Uri uri) {
+        upload(message, null, uri);
+    }
+
+    public boolean sendVoice(java.io.File source, long durationMs) {
+        if (!canSendVoice() || currentUserId == null || conversationId == null || !source.isFile()
+                || durationMs < 1000 || durationMs > 60_000) return false;
+        Message message = new Message();
+        message.setId(UUID.randomUUID().toString());
+        message.setConversationId(conversationId);
+        message.setSenderId(currentUserId);
+        message.setSenderName(currentUserName);
+        message.setType(Message.Type.VOICE);
+        message.setContent("Tin nhắn thoại");
+        message.setDurationMs(durationMs);
+        message.setSentAt(System.currentTimeMillis());
+        message.setCreatedAt(message.getSentAt());
+        message.setDeliveryStatus(Message.DeliveryStatus.SENDING);
+        pendingVoiceFiles.put(message.getId(), source);
+        localOutgoing.put(message.getId(), message);
+        addOrReplace(latestMessages, message);
+        sendError.setValue(null);
+        publishMessages();
+        upload(message, source, null);
+        return true;
+    }
+
+    private void upload(Message message, java.io.File voice, Uri image) {
         if (cleared || activeUploads.containsKey(message.getId())) return;
-        MediaRepository.Transfer transfer = mediaRepository.uploadImage(uri, conversationId, currentUserId,
-                message.getId(), new MediaRepository.UploadListener() {
+        MediaRepository.UploadListener listener = new MediaRepository.UploadListener() {
                     @Override public void onProgress(int percent) {
                         if (cleared) return;
                         message.setUploadProgress(percent); publishMessages();
@@ -341,7 +380,10 @@ public class ChatViewModel extends AndroidViewModel {
                         sendError.setValue(error == null || error.trim().isEmpty()
                                 ? getApplication().getString(R.string.image_upload_error) : error);
                     }
-                });
+                };
+        MediaRepository.Transfer transfer = voice == null
+                ? mediaRepository.uploadImage(image, conversationId, currentUserId, message.getId(), listener)
+                : mediaRepository.uploadVoice(voice, conversationId, currentUserId, message.getId(), listener);
         activeUploads.put(message.getId(), transfer);
     }
 
@@ -407,6 +449,9 @@ public class ChatViewModel extends AndroidViewModel {
         copy.setPollOptions(source.getPollOptions() == null ? null : new ArrayList<>(source.getPollOptions()));
         copy.setPollVotes(source.getPollVotes() == null ? null : new LinkedHashMap<>(source.getPollVotes()));
         copy.setUploadProgress(source.getUploadProgress());
+        copy.setStoredSenderName(source.getStoredSenderName());
+        copy.setReply(source.getReply());
+        copy.setDurationMs(source.getDurationMs());
         return copy;
     }
 
@@ -423,6 +468,8 @@ public class ChatViewModel extends AndroidViewModel {
         cleared = true;
         for (MediaRepository.Transfer upload : activeUploads.values()) upload.cancel();
         activeUploads.clear(); pendingImageUris.clear();
+        for (java.io.File file : pendingVoiceFiles.values()) file.delete();
+        pendingVoiceFiles.clear();
         removeSubscription();
         super.onCleared();
     }

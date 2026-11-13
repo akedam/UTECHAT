@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function contactAllowed(first, second) {
+      return !exists(/databases/$(database)/documents/users/$(first)/blocked/$(second))
+        && !exists(/databases/$(database)/documents/users/$(second)/blocked/$(first));
+    }
     function memberPath(conversationId, uid) {
       return /databases/$(database)/documents/conversations/$(conversationId)/members/$(uid);
     }
@@ -44,6 +48,14 @@ service cloud.firestore {
       allow create, update: if isOwner() && validProfile();
       allow delete: if false;
 
+      match /blocked/{peerUid} {
+        allow read, delete: if isOwner();
+        allow create: if isOwner() && userId != peerUid
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time
+          && exists(/databases/$(database)/documents/publicProfiles/$(peerUid));
+      }
+
       // FCM registration IDs are private routing data used only by a trusted sender.
       match /deviceTokens/{tokenId} {
         allow read: if false;
@@ -56,6 +68,23 @@ service cloud.firestore {
           && request.resource.data.updatedAt is int;
         allow delete: if isOwner();
       }
+    }
+
+    match /userReports/{reporter}/targets/{target} {
+      function sourceConversation() {
+        return get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId));
+      }
+      allow create: if signedIn() && request.auth.uid == reporter && reporter != target
+        && request.resource.data.keys().hasOnly(['conversationId', 'reason', 'createdAt'])
+        && request.resource.data.conversationId is string
+        && request.resource.data.reason in ['spam', 'abuse', 'other']
+        && request.resource.data.createdAt == request.time
+        && reporter in sourceConversation().data.participantIds
+        && target in sourceConversation().data.participantIds
+        && (sourceConversation().data.type == 'direct'
+          || (sourceConversation().data.type == 'group' && isMember(request.resource.data.conversationId)));
+      allow get: if signedIn() && request.auth.uid == reporter;
+      allow list, update, delete: if false;
     }
 
     // Searchable public card; email and biography remain in the owner-only users document.
@@ -89,6 +118,7 @@ service cloud.firestore {
         && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.toUid is string
         && request.resource.data.toUid != request.auth.uid
+        && contactAllowed(request.auth.uid, request.resource.data.toUid)
         && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.toUid))
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt is int
@@ -97,6 +127,7 @@ service cloud.firestore {
       allow update: if participant()
         && resource.data.status == 'pending'
         && resource.data.toUid == request.auth.uid
+        && contactAllowed(resource.data.fromUid, resource.data.toUid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
         && request.resource.data.status == 'accepted'
         && request.resource.data.updatedAt is int;
@@ -122,6 +153,7 @@ service cloud.firestore {
           && request.resource.data.callerUid == request.auth.uid
           && request.resource.data.calleeUid is string
           && request.resource.data.calleeUid != request.auth.uid
+          && contactAllowed(request.auth.uid, request.resource.data.calleeUid)
           && request.resource.data.participants is list
           && request.resource.data.participants.size() == 2
           && request.resource.data.participants.toSet().size() == 2
@@ -147,7 +179,8 @@ service cloud.firestore {
           && request.resource.data.updatedAt >= resource.data.updatedAt
           && ((oldStatus == 'ringing' && request.auth.uid == resource.data.calleeUid
                 && nextStatus in ['accepted','rejected','busy','missed']
-                && (nextStatus != 'accepted' || request.time.toMillis() < resource.data.expiresAt))
+                && (nextStatus != 'accepted' || (request.time.toMillis() < resource.data.expiresAt
+                  && contactAllowed(resource.data.callerUid, resource.data.calleeUid))))
               || (oldStatus == 'ringing' && request.auth.uid == resource.data.callerUid
                 && nextStatus in ['ended','failed'])
               || (oldStatus == 'accepted' && callerOrCallee()
@@ -165,18 +198,22 @@ service cloud.firestore {
         return signedIn() && data.type == 'direct' && data.participantIds is list
           && data.participantIds.size() == 2 && request.auth.uid in data.participantIds;
       }
+      function conversationCanSend(data) {
+        return data.type == 'group' || (data.type == 'direct' && data.participantIds.size() == 2
+          && contactAllowed(data.participantIds[0], data.participantIds[1]));
+      }
       function groupParticipant(data) {
         return signedIn() && data.type == 'group' && data.participantIds is list
           && request.auth.uid in data.participantIds && isMember(conversationId);
       }
       function validTextSummary() {
         let messagePath = /databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId);
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        return conversationCanSend(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                  'lastMessage','lastMessageType','lastMessageAt','lastMessageSenderId','lastMessageId','updatedAt'])
           && request.resource.data.lastMessage is string
           && request.resource.data.lastMessage.size() > 0
           && request.resource.data.lastMessage.size() <= 5000
-          && request.resource.data.lastMessageType in ['text', 'image', 'poll']
+          && request.resource.data.lastMessageType in ['text', 'image', 'poll', 'voice']
           && (resource.data.type == 'direct' || resource.data.type == 'group')
           && (resource.data.type != 'direct' || resource.data.participantIds.size() == 2)
           && (resource.data.type != 'group' || groupParticipant(resource.data))
@@ -195,6 +232,9 @@ service cloud.firestore {
                 && request.resource.data.lastMessage == 'image'
                 && getAfter(messagePath).data.type == 'image'
                 && getAfter(messagePath).data.mediaPath == 'conversations/' + conversationId + '/' + request.auth.uid + '/' + request.resource.data.lastMessageId)
+              || (request.resource.data.lastMessageType == 'voice'
+                && request.resource.data.lastMessage == 'Tin nhắn thoại'
+                && getAfter(messagePath).data.type == 'voice')
               || (request.resource.data.lastMessageType == 'poll'
                 && getAfter(messagePath).data.type == 'poll'
                 && getAfter(messagePath).data.pollQuestion == request.resource.data.lastMessage))
@@ -299,6 +339,7 @@ service cloud.firestore {
         && request.resource.data.participantIds.size() == 2
         && request.resource.data.participantIds.toSet().size() == 2
         && request.auth.uid in request.resource.data.participantIds
+        && contactAllowed(request.resource.data.participantIds[0], request.resource.data.participantIds[1])
         && acceptedFriend(request.resource.data.participantIds[0] == request.auth.uid
              ? request.resource.data.participantIds[1] : request.resource.data.participantIds[0])
         && request.resource.data.createdBy == request.auth.uid
@@ -416,9 +457,19 @@ service cloud.firestore {
             && ((parent().data.type == 'direct' && parent().data.participantIds.size() == 2)
                 || (parent().data.type == 'group' && isMember(conversationId)));
         }
+        function validReply() {
+          let reply = request.resource.data.reply;
+          let original = get(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(reply.id));
+          return reply is map && reply.keys().hasOnly(['id', 'name', 'text', 'type'])
+            && reply.id is string && reply.id != messageId
+            && reply.name is string && reply.name == original.data.get('senderName', '')
+            && reply.text is string && reply.text == original.data.get('content', '')
+            && reply.type == original.data.type
+            && reply.type in ['text', 'poll', 'image', 'voice'];
+        }
         function validTextMessage() {
           let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);
-          return request.resource.data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy'])
+          return request.resource.data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy','reply'])
             && request.resource.data.keys().hasAll(['senderId','senderName','type','content','sentAt','createdAt','readBy'])
             && request.resource.data.senderId == request.auth.uid
             && exists(profile) && request.resource.data.senderName == get(profile).data.displayName
@@ -428,7 +479,24 @@ service cloud.firestore {
             && request.resource.data.content.size() <= 5000
             && request.resource.data.sentAt is int
             && request.resource.data.createdAt == request.resource.data.sentAt
-            && request.resource.data.readBy == [request.auth.uid];
+            && request.resource.data.readBy == [request.auth.uid]
+            && (!('reply' in request.resource.data) || validReply());
+        }
+        function validVoiceMessage() {
+          let data = request.resource.data;
+          let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);
+          let media = get(/databases/$(database)/documents/backendVoice/$(conversationId)/media/$(messageId));
+          return data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy',
+              'mediaPath','contentType','fileSize','durationMs'])
+            && data.type == 'voice' && data.senderId == request.auth.uid
+            && data.senderName == get(profile).data.displayName
+            && data.content == 'Tin nhắn thoại'
+            && data.sentAt is int && data.createdAt == data.sentAt && data.readBy == [request.auth.uid]
+            && data.mediaPath == 'conversations/' + conversationId + '/' + request.auth.uid + '/' + messageId
+            && data.contentType == 'audio/mp4'
+            && data.fileSize is int && data.fileSize > 0 && data.fileSize <= 524288
+            && data.durationMs is int && data.durationMs > 0 && data.durationMs <= 61000
+            && media.data.path == data.mediaPath && media.data.size == data.fileSize;
         }
         function validImageMessage() {
           let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);
@@ -488,7 +556,8 @@ service cloud.firestore {
             && choice is int && choice >= 0 && choice < resource.data.pollOptions.size();
         }
         allow get, list: if isConversationParticipant();
-        allow create: if isConversationParticipant() && (validTextMessage() || validImageMessage() || validPollMessage());
+        allow create: if isConversationParticipant() && conversationCanSend(parent().data)
+          && (validTextMessage() || validImageMessage() || validPollMessage() || validVoiceMessage());
         allow update: if (isConversationParticipant() && resource.data.senderId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([])) || validPollVote();
         allow delete: if false;

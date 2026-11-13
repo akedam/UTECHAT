@@ -55,6 +55,17 @@ public final class FirebaseAuthRepository implements AuthRepository {
                 .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
     }
 
+    @Override public void resetPassword(String email, Callback<Void> callback) {
+        auth.setLanguageCode("vi");
+        auth.sendPasswordResetEmail(email)
+                .addOnSuccessListener(unused -> callback.onSuccess(null))
+                .addOnFailureListener(error -> {
+                    if (error instanceof com.google.firebase.auth.FirebaseAuthInvalidUserException)
+                        callback.onSuccess(null);
+                    else callback.onError(new AuthException(context.getString(R.string.reset_password_error)));
+                });
+    }
+
     @Override public void register(String displayName, String email, String password, Callback<User> callback) {
         auth.createUserWithEmailAndPassword(email, password)
                 .addOnSuccessListener(result -> {

@@ -211,6 +211,13 @@
                     android:textSize="13sp"
                     android:textColor="@color/utechat_on_surface_variant"
                     android:id="@+id/tv_presence_summary" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_blocked_people"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="@string/blocked_people" />
             </LinearLayout>
             <LinearLayout
                 android:layout_width="match_parent"

@@ -96,6 +96,36 @@ test("an event with no registered recipient can retry after device registration"
   assert.equal((await f.request("/api/message-notify", "alice", event)).status, 200);
   assert.equal(f.pushes.length, 1);
 });
+
+test("voice objects are immutable and a recipient can read only after the voice message is published", async (t) => {
+  const f = await fixture(t);
+  const box = (name, payload) => {
+    const size = Buffer.alloc(4);
+    size.writeUInt32BE(payload.length + 8);
+    return Buffer.concat([size, Buffer.from(name), payload]);
+  };
+  const audio = Buffer.concat([
+    box("ftyp", Buffer.from("isom0000")), box("moov", Buffer.from("sample")), box("mdat", Buffer.from("audio")),
+  ]);
+  const path = "conversations/chat/alice/voice1";
+  const route = "/api/voice?path=" + path;
+  assert.equal((await f.request(route, "alice", PNG, "PUT", "audio/mp4")).status, 400);
+  assert.equal((await f.request(route, "bob", audio, "PUT", "audio/mp4")).status, 403);
+  assert.equal((await f.request(route, "alice", audio, "PUT", "audio/mp4")).status, 200);
+  assert.equal((await f.request(route, "alice", audio, "PUT", "audio/mp4")).status, 200);
+  const modified = Buffer.from(audio);
+  modified[modified.length - 1] ^= 1;
+  assert.equal((await f.request(route, "alice", modified, "PUT", "audio/mp4")).status, 409);
+  assert.equal((await f.request(route, "bob", null, "GET")).status, 403);
+  assert.equal((await f.request(route, "mallory", null, "GET")).status, 403);
+  f.db.rows.set("conversations/chat/messages/voice1", { type: "voice", mediaPath: path, senderId: "alice" });
+  assert.deepEqual((await f.request(route, "bob", null, "GET")).body, audio);
+  f.db.rows.set("users/bob/blocked/alice", { createdAt: TIME });
+  assert.equal((await f.request(route, "alice", audio, "PUT", "audio/mp4")).status, 403);
+  assert.equal((await f.request("/api/rtc-token", "alice", { callId: "call1" })).status, 403);
+  assert.equal((await f.request("/api/message-notify", "alice", { conversationId: "chat", messageId: "msg1" })).status, 200);
+  assert.equal(f.pushes.length, 0);
+});
 test("only caller sends an invitation and expired calls cannot ring",async(t)=>{
   const f=await fixture(t);await f.db.doc("calls/call1").update({status:"ringing"});
   assert.equal((await f.request("/api/call-invite","bob",{callId:"call1"})).status,403);
@@ -136,7 +166,7 @@ test("uploads reject traversal, fake images and over-quota writes",async(t)=>{
 });
 test("health contains no keys and optional unconfigured media fails explicitly",async(t)=>{
   const f=await fixture(t,{backend:{storage:null}});
-  assert.deepEqual((await f.request("/healthz",null,{},"GET")).body,{status:"configured",apiVersion:1,media:false});
+  assert.deepEqual((await f.request("/healthz",null,{},"GET")).body,{status:"configured",apiVersion:1,media:false,voice:true});
   assert.equal((await f.request("/api/media?path=conversations/chat/alice/x","alice",PNG,"PUT","image/png")).status,503);
 });
 test("Supabase adapter uses private authenticated access and immutable uploads",async()=>{

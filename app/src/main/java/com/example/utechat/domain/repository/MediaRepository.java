@@ -19,6 +19,16 @@ public interface MediaRepository {
                         UploadListener listener);
     Transfer downloadImage(String storagePath, File destination, DownloadListener listener);
     File getImageCacheFile(String storagePath);
+    default boolean supportsVoice() { return false; }
+    default Transfer uploadVoice(File source, String conversationId, String uid, String messageId,
+                                 UploadListener listener) {
+        listener.onError(getUnavailableReason());
+        return () -> { };
+    }
+    default Transfer downloadVoice(String path, DownloadListener listener) {
+        listener.onError(getUnavailableReason());
+        return () -> { };
+    }
     boolean isAvailable();
     String getUnavailableReason();
 }

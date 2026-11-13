@@ -97,6 +97,10 @@ final class ChatOptionsDialog extends Dialog {
         toggle(R.drawable.ic_chat_pin, R.string.chat_pin, "pinned");
         row(R.drawable.ic_shield_outline, R.string.chat_protection, () -> info(R.string.chat_protection, host.getString(R.string.chat_protection_summary)));
         row(R.drawable.ic_chat_storage, R.string.chat_storage, this::storage);
+        if (!group && !host.chatViewModel().isMock()) {
+            gap();
+            row(R.drawable.ic_shield_outline, R.string.user_safety, host::showPeerSafety);
+        }
         setContentView(root);
         setOnDismissListener(ignored -> {
             for (MediaRepository.Transfer download : downloads) download.cancel();

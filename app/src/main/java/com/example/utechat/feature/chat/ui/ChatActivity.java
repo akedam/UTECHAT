@@ -54,6 +54,13 @@ public class ChatActivity extends AppCompatActivity {
                 forceScrollToBottom = true;
                 if (!viewModel.sendImage(uri)) forceScrollToBottom = false;
             });
+    private final VoiceDialogs voiceDialogs = new VoiceDialogs(this);
+    private final ActivityResultLauncher<String> microphone = registerForActivityResult(
+            new ActivityResultContracts.RequestPermission(), granted -> {
+                if (isFinishing() || isDestroyed() || this.blockedByMe) return;
+                if (granted) voiceDialogs.record();
+                else Toast.makeText(this, R.string.voice_permission, Toast.LENGTH_LONG).show();
+            });
     private MessagesAdapter adapter;
     private LinearLayoutManager layoutManager;
     private View loadingState;
@@ -74,10 +81,52 @@ public class ChatActivity extends AppCompatActivity {
     private ChatOptionsDialog optionsDialog;
     private com.example.utechat.data.chat.ConversationReadState readState;
     private boolean reading;
+    private Message.Reply replyTo;
+    private boolean blockedByMe;
+    private com.google.firebase.firestore.ListenerRegistration blockListener;
+
+    private void observePeer() {
+        if (!"direct".equalsIgnoreCase(conversationType) || viewModel.isMock() || conversationId == null) return;
+        var db = com.google.firebase.firestore.FirebaseFirestore.getInstance();
+        db.collection("conversations").document(conversationId).get().addOnSuccessListener(this, snapshot -> {
+            Object ids = snapshot.get("participantIds");
+            if (!(ids instanceof List)) return;
+            for (Object id : (List<?>) ids) {
+                if (!(id instanceof String) || id.equals(viewModel.getCurrentUserId())) continue;
+                if (blockListener != null) blockListener.remove();
+                blockListener = com.example.utechat.feature.safety.UserSafety.blockReference(
+                        db, viewModel.getCurrentUserId(), (String) id).addSnapshotListener((block, error) -> {
+                    if (block == null || isDestroyed()) return;
+                    blockedByMe = block.exists();
+                    findViewById(R.id.tv_blocked_chat).setVisibility(blockedByMe ? View.VISIBLE : View.GONE);
+                    findViewById(R.id.chat_composer).setVisibility(blockedByMe ? View.GONE : View.VISIBLE);
+                    findViewById(R.id.reply_composer).setVisibility(blockedByMe || replyTo == null ? View.GONE : View.VISIBLE);
+                    invalidateOptionsMenu();
+                });
+                break;
+            }
+        });
+    }
+
+    void showPeerSafety() {
+        var db = com.google.firebase.firestore.FirebaseFirestore.getInstance();
+        db.collection("conversations").document(conversationId).get()
+                .addOnSuccessListener(this, snapshot -> {
+                    Object ids = snapshot.get("participantIds");
+                    if (ids instanceof List) for (Object id : (List<?>) ids) {
+                        if (id instanceof String && !id.equals(viewModel.getCurrentUserId())) {
+                            com.example.utechat.feature.safety.UserSafety.showActions(
+                                    this, (String) id, conversationTitle, conversationId);
+                            return;
+                        }
+                    }
+                }).addOnFailureListener(this, error ->
+                        Toast.makeText(this, R.string.safety_update_error, Toast.LENGTH_SHORT).show());
+    }
 
     @Override public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.chat_call_menu, menu);
-        boolean direct = "direct".equalsIgnoreCase(conversationType);
+        boolean direct = "direct".equalsIgnoreCase(conversationType) && !blockedByMe;
         menu.findItem(R.id.action_voice_call).setVisible(direct);
         menu.findItem(R.id.action_video_call).setVisible(direct);
         return true;
@@ -113,19 +162,28 @@ public class ChatActivity extends AppCompatActivity {
                 message -> viewModel.retryMessage(message.getId()), viewModel::votePoll,
                 MediaRepositoryProvider.get(this));
         adapter.setGroupConversation("group".equalsIgnoreCase(conversationType));
+        adapter.setMessageActions(this::showMessageActions, this::jumpToOriginal, voiceDialogs::play);
         adapter.setPeerPhoto(getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO));
-        if (!"group".equalsIgnoreCase(conversationType)) adapter.setCallListener(media ->
-                startActivity(CallActivity.outgoingIntent(this, conversationId, conversationTitle, media)));
+        if (!"group".equalsIgnoreCase(conversationType)) adapter.setCallListener(media -> {
+            if (!blockedByMe) startActivity(CallActivity.outgoingIntent(this, conversationId, conversationTitle, media));
+        });
         layoutManager = new LinearLayoutManager(this);
         layoutManager.setStackFromEnd(true);
         rvMessages.setLayoutManager(layoutManager);
         rvMessages.setAdapter(adapter);
         chatNotice.setVisibility(viewModel.isMock() ? View.VISIBLE : View.GONE);
         setupListeners();
+        findViewById(R.id.btn_clear_reply).setOnClickListener(v -> setReply(null));
+        if (savedInstanceState != null && savedInstanceState.containsKey("reply_id")) {
+            setReply(new Message.Reply(savedInstanceState.getString("reply_id"),
+                    savedInstanceState.getString("reply_name"), savedInstanceState.getString("reply_text"),
+                    savedInstanceState.getString("reply_type")));
+        }
         String draft = chatPreferences.draft();
         etMessage.setText(draft);
         etMessage.setSelection(etMessage.length());
         observeViewModel();
+        observePeer();
     }
 
     private void bindViews() {
@@ -145,11 +203,18 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        findViewById(R.id.btn_chat_more).setOnClickListener(v ->
+        findViewById(R.id.btn_chat_more).setOnClickListener(v -> {
+                List<CharSequence> tools = new ArrayList<>();
+                tools.add(getString(R.string.cd_attach_image));
+                tools.add(getString(R.string.chat_create_poll));
+                if (viewModel.canSendVoice()) tools.add(getString(R.string.voice_record));
                 new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_more)
-                        .setItems(new String[]{getString(R.string.cd_attach_image), getString(R.string.chat_create_poll)},
-                                (dialog, which) -> { if (which == 0) btnAttachImage.performClick(); else showCreatePollDialog(); })
-                        .setNegativeButton(R.string.friends_cancel_button, null).show());
+                        .setItems(tools.toArray(new CharSequence[0]), (dialog, which) -> {
+                            if (which == 0) btnAttachImage.performClick();
+                            else if (which == 1) showCreatePollDialog();
+                            else requestRecording();
+                        }).setNegativeButton(R.string.friends_cancel_button, null).show();
+        });
         findViewById(R.id.btn_chat_emoji).setOnClickListener(v -> {
             String[] emojis = {"😀", "😂", "❤️", "👍", "🥰", "🎉", "😢", "🙏", "🔥", "😊", "🤔", "👋"};
             new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_emoji_title).setItems(emojis, (d, which) -> {
@@ -212,12 +277,92 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void sendCurrentText() {
+        if (blockedByMe) return;
         String text = etMessage.getText() == null ? "" : etMessage.getText().toString();
         forceScrollToBottom = true;
-        if (viewModel.sendText(text)) {
+        if (viewModel.sendText(text, replyTo)) {
             etMessage.setText("");
+            setReply(null);
         }
         else forceScrollToBottom = false;
+    }
+
+    private void requestRecording() {
+        if (blockedByMe) return;
+        String permission = android.Manifest.permission.RECORD_AUDIO;
+        if (checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) voiceDialogs.record();
+        else microphone.launch(permission);
+    }
+
+    boolean sendRecordedVoice(java.io.File file, long duration) {
+        if (blockedByMe) return false;
+        forceScrollToBottom = true;
+        if (viewModel.sendVoice(file, duration)) return true;
+        forceScrollToBottom = false;
+        return false;
+    }
+
+    private void showMessageActions(Message message) {
+        boolean copy = message.getType() == Message.Type.TEXT || message.getType() == Message.Type.POLL;
+        boolean reply = !blockedByMe && message.getDeliveryStatus() == Message.DeliveryStatus.SENT;
+        List<CharSequence> labels = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>();
+        if (reply) {
+            labels.add(getString(R.string.message_reply));
+            actions.add(() -> {
+                setReply(new Message.Reply(message.getId(), message.getStoredSenderName(),
+                        message.getContent(), message.getType().name().toLowerCase(java.util.Locale.ROOT)));
+                etMessage.requestFocus();
+                android.view.inputmethod.InputMethodManager keyboard =
+                        getSystemService(android.view.inputmethod.InputMethodManager.class);
+                if (keyboard != null) keyboard.showSoftInput(etMessage,
+                        android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            });
+        }
+        if (copy && message.getContent() != null && !message.getContent().isEmpty()) {
+            labels.add(getString(R.string.chat_copy));
+            actions.add(() -> {
+                android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
+                if (clipboard == null) return;
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText(getString(R.string.app_name), message.getContent()));
+                if (android.os.Build.VERSION.SDK_INT < 33)
+                    Toast.makeText(this, R.string.chat_copied, Toast.LENGTH_SHORT).show();
+            });
+        }
+        if ("group".equalsIgnoreCase(conversationType) && !viewModel.isMock() && message.getSenderId() != null
+                && !java.util.Objects.equals(viewModel.getCurrentUserId(), message.getSenderId())) {
+            labels.add(getString(R.string.user_safety));
+            actions.add(() -> com.example.utechat.feature.safety.UserSafety.showActions(this, message.getSenderId(),
+                    message.getSenderName(), conversationId));
+        }
+        if (!actions.isEmpty()) new MaterialAlertDialogBuilder(this)
+                .setItems(labels.toArray(new CharSequence[0]), (dialog, selected) -> actions.get(selected).run())
+                .setNegativeButton(R.string.friends_cancel_button, null).show();
+    }
+
+    private void setReply(Message.Reply reply) {
+        replyTo = reply;
+        findViewById(R.id.reply_composer).setVisibility(reply == null ? View.GONE : View.VISIBLE);
+        if (reply != null) {
+            String name = reply.name.isEmpty() ? getString(R.string.friends_unknown_user) : reply.name;
+            ((TextView) findViewById(R.id.tv_reply_target)).setText(getString(R.string.message_reply_to, name));
+            ((TextView) findViewById(R.id.tv_reply_preview)).setText(MessagesAdapter.replyPreview(this, reply));
+        }
+    }
+
+    private void jumpToOriginal(String id) {
+        if (findMessage(id) >= 0) scrollToMessage(id);
+        else Toast.makeText(this, R.string.message_reply_missing, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override protected void onSaveInstanceState(@NonNull Bundle state) {
+        if (replyTo != null) {
+            state.putString("reply_id", replyTo.id);
+            state.putString("reply_name", replyTo.name);
+            state.putString("reply_text", replyTo.text);
+            state.putString("reply_type", replyTo.type);
+        }
+        super.onSaveInstanceState(state);
     }
 
     private void observeViewModel() {
@@ -406,6 +551,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override protected void onPause() {
+        voiceDialogs.close();
         reading=false;
         UteChatApplication.setActiveChat(null);
         super.onPause();
@@ -434,6 +580,8 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override protected void onDestroy() {
+        voiceDialogs.close();
+        if (blockListener != null) blockListener.remove();
         if (optionsDialog != null) optionsDialog.dismiss();
         if (rvMessages != null) rvMessages.setAdapter(null);
         super.onDestroy();

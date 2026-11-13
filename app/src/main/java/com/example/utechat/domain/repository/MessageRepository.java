@@ -33,6 +33,7 @@ public interface MessageRepository {
     void sendText(String conversationId, Message message, SendCallback callback);
 
     void sendImage(String conversationId, Message message, SendCallback callback);
+    void sendVoice(String conversationId, Message message, SendCallback callback);
 
     void sendPoll(String conversationId, Message message, SendCallback callback);
 

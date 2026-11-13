@@ -2,7 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, query, where, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, query, where, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 import { get as getDatabaseValue, ref as databaseRef, set as setDatabaseValue } from 'firebase/database';
 
@@ -13,6 +13,62 @@ const firestorePort = Number(process.env.FIRESTORE_EMULATOR_PORT ?? 18080);
 const storagePort = Number(process.env.STORAGE_EMULATOR_PORT ?? 19199);
 const databasePort = Number(process.env.FIREBASE_DATABASE_EMULATOR_PORT ?? 19000);
 let testEnv;
+
+test('replies can quote an actual message in the same conversation only', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+  const path = `conversations/${conversationId}/messages`;
+  const original = { senderId: 'alice', senderName: 'Alice', type: 'text', content: 'Original',
+    sentAt: 1, createdAt: 1, readBy: ['alice'] };
+  await assertSucceeds(setDoc(doc(alice, path, 'reply-original'), original));
+  const reply = { id: 'reply-original', name: 'Alice', text: 'Original', type: 'text' };
+  const response = { ...original, senderId: 'bob', senderName: 'Bob', readBy: ['bob'], content: 'Response', reply };
+  await assertSucceeds(setDoc(doc(bob, path, 'reply-real'), response));
+  await assertFails(setDoc(doc(bob, path, 'reply-fake'), { ...response, reply: { ...reply, text: 'Fake' } }));
+  await assertFails(setDoc(doc(bob, path, 'reply-missing'), { ...response, reply: { ...reply, id: 'missing' } }));
+});
+
+test('a private block prevents direct contact and reports stay private and immutable', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+  const block = doc(alice, 'users/alice/blocked/bob');
+  const report = doc(alice, 'userReports/alice/targets/bob');
+  const message = { senderId: 'bob', senderName: 'Bob', type: 'text', content: 'Contact',
+    sentAt: 1, createdAt: 1, readBy: ['bob'] };
+  await assertFails(setDoc(doc(bob, 'users/alice/blocked/bob'), { createdAt: serverTimestamp() }));
+  await assertSucceeds(setDoc(block, { createdAt: serverTimestamp() }));
+  await assertFails(getDoc(doc(bob, 'users/alice/blocked/bob')));
+  await assertFails(setDoc(doc(bob, `conversations/${conversationId}/messages/blocked`), message));
+  const now = Date.now();
+  await assertFails(setDoc(doc(bob, 'calls/blocked-call'), {
+    conversationId, callerUid: 'bob', calleeUid: 'alice', participants: ['bob','alice'],
+    channelName: 'blocked-call', mediaType: 'audio', status: 'ringing',
+    createdAt: now, updatedAt: now, expiresAt: now + 45000,
+  }));
+  const details = { conversationId, reason: 'spam', createdAt: serverTimestamp() };
+  await assertFails(setDoc(doc(alice, 'userReports/alice/targets/charlie'), details));
+  await assertSucceeds(setDoc(report, details));
+  await assertFails(getDoc(doc(bob, 'userReports/alice/targets/bob')));
+  await assertFails(updateDoc(report, { reason: 'other' }));
+  await assertSucceeds(deleteDoc(block));
+  await assertSucceeds(setDoc(doc(bob, `conversations/${conversationId}/messages/unblocked`), message));
+});
+
+test('voice cannot be published without an immutable server upload', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const path = `conversations/${conversationId}/alice/voice-proof`;
+  const message = { senderId: 'alice', senderName: 'Alice', type: 'voice', content: 'Tin nhắn thoại',
+    sentAt: 1, createdAt: 1, readBy: ['alice'], mediaPath: path, contentType: 'audio/mp4',
+    fileSize: 240, durationMs: 1000 };
+  const document = doc(alice, `conversations/${conversationId}/messages/voice-proof`);
+  const upload = `backendVoice/${conversationId}/media/voice-proof`;
+  await assertFails(setDoc(document, message));
+  await assertFails(setDoc(doc(alice, upload), { path, size: 240 }));
+  await testEnv.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), upload), { path, size: 240 }));
+  await assertFails(getDoc(doc(alice, upload)));
+  await assertFails(setDoc(document, { ...message, fileSize: 241 }));
+  await assertSucceeds(setDoc(document, message));
+});
 
 test('read cursors are owner-only, message-backed, monotonic and preserve other members', async () => {
   const alice=testEnv.authenticatedContext('alice').firestore();

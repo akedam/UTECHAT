@@ -14,6 +14,7 @@ public interface AuthRepository {
     User getCurrentUser();
     void loadCurrentUser(Callback<User> callback);
     void signIn(String email, String password, Callback<User> callback);
+    void resetPassword(String email, Callback<Void> callback);
     void register(String displayName, String email, String password, Callback<User> callback);
     void updateProfile(String displayName, String bio, Callback<User> callback);
     void signOut(Runnable onComplete);
