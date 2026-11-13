@@ -24,13 +24,23 @@ function validVoice(bytes) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 24 || bytes.length > MAX_VOICE_BYTES) return false;
   let header = false, metadata = false, data = false;
   for (let offset = 0; offset < bytes.length;) {
-    if (bytes.length - offset < 8) return false;
-    const length = bytes.readUInt32BE(offset);
-    if (length < 8 || length > bytes.length - offset) return false;
+    const remaining = bytes.length - offset;
+    if (remaining < 8) return false;
+    let length = bytes.readUInt32BE(offset);
+    let headerSize = 8;
+    if (length === 1) {
+      // Android's MediaRecorder writes mdat with an extended size even for short clips.
+      headerSize = 16;
+      if (remaining < headerSize || bytes.readUInt32BE(offset + 8) !== 0) return false;
+      length = bytes.readUInt32BE(offset + 12);
+    } else if (length === 0) {
+      length = remaining;
+    }
+    if (length < headerSize || length > remaining) return false;
     const box = bytes.toString("ascii", offset + 4, offset + 8);
-    if (offset === 0) header = box === "ftyp" && length >= 16;
-    if (box === "moov" && length > 8) metadata = true;
-    if (box === "mdat" && length > 8) data = true;
+    if (offset === 0) header = box === "ftyp" && length >= headerSize + 8;
+    if (box === "moov" && length > headerSize) metadata = true;
+    if (box === "mdat" && length > headerSize) data = true;
     offset += length;
   }
   return header && metadata && data;

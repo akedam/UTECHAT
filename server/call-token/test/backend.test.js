@@ -104,12 +104,16 @@ test("voice objects are immutable and a recipient can read only after the voice 
     size.writeUInt32BE(payload.length + 8);
     return Buffer.concat([size, Buffer.from(name), payload]);
   };
-  const audio = Buffer.concat([
-    box("ftyp", Buffer.from("isom0000")), box("moov", Buffer.from("sample")), box("mdat", Buffer.from("audio")),
-  ]);
+  const mdat = Buffer.alloc(16);
+  mdat.writeUInt32BE(1);
+  mdat.write("mdat", 4);
+  mdat.writeBigUInt64BE(21n, 8);
+  const metadata = Buffer.concat([box("ftyp", Buffer.from("isom0000")), box("moov", Buffer.from("sample"))]);
+  const audio = Buffer.concat([metadata, mdat, Buffer.from("audio")]);
   const path = "conversations/chat/alice/voice1";
   const route = "/api/voice?path=" + path;
   assert.equal((await f.request(route, "alice", PNG, "PUT", "audio/mp4")).status, 400);
+  assert.equal((await f.request(route, "alice", audio.subarray(0, -1), "PUT", "audio/mp4")).status, 400);
   assert.equal((await f.request(route, "bob", audio, "PUT", "audio/mp4")).status, 403);
   assert.equal((await f.request(route, "alice", audio, "PUT", "audio/mp4")).status, 200);
   assert.equal((await f.request(route, "alice", audio, "PUT", "audio/mp4")).status, 200);
