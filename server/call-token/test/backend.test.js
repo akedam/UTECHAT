@@ -42,7 +42,14 @@ async function fixture(t,options={}) {
   });
   const pushes=[],objects=new Map(); let tokenCalls=0;
   const backend=createBackend({db,now:()=>TIME,
-    auth:{async verifyIdToken(token){if(!["alice","bob","mallory"].includes(token))throw Error();return{uid:token};}},
+    auth:{
+      async verifyIdToken(token){
+        if(token==="unverified-alice")return{uid:"alice",email_verified:false};
+        if(!["alice","bob","mallory"].includes(token))throw Error();
+        return{uid:token,email_verified:true};
+      },
+      async getUser(uid){return{emailVerified:!(options.unverifiedRecipients||[]).includes(uid)};},
+    },
     messaging:{async sendEachForMulticast(data){pushes.push(data);return{responses:data.tokens.map(()=>({success:true}))};}},
     mintToken(call,uid){tokenCalls++;return{token:"test-rtc-token",uid:call.rtcUidByUser[uid]};},
     storage:{async upload(path,bytes){if(objects.has(path))return false;objects.set(path,Buffer.from(bytes));return true;},
@@ -59,6 +66,15 @@ async function fixture(t,options={}) {
   }
   return{db,backend,pushes,objects,request,get tokenCalls(){return tokenCalls;}};
 }
+test("email verification gates chat API access and protects notifications on older installations", async t => {
+  const f = await fixture(t, { unverifiedRecipients: ["bob"] });
+  const blocked = await f.request("/api/rtc-token", "unverified-alice", {callId:"call1"});
+  assert.deepEqual(blocked, {status:403,body:{error:"email-unverified"}});
+  assert.equal(f.tokenCalls, 0);
+  assert.equal((await f.request("/api/voice?path=conversations/chat/alice/v1", "unverified-alice", null, "GET")).status, 403);
+  assert.equal((await f.request("/api/message-notify", "alice", {conversationId:"chat",messageId:"msg1"})).status, 200);
+  assert.equal(f.pushes.length, 0);
+});
 test("token authorization rejects absent/revoked/outsider credentials; RTC UIDs stay stable",async(t)=>{
   const f=await fixture(t);
   for(const [uid,status]of [[null,401],["revoked",401],["mallory",403]])

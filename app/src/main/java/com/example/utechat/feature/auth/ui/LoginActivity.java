@@ -8,7 +8,6 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.TextView;
 import android.util.Patterns;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,15 +15,10 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.utechat.R;
 import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
-import com.example.utechat.feature.main.ui.MainActivity;
+import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 
-/**
- * Màn hình đăng nhập.
- *
- * [MOCK] Nút Login chỉ validate input và chuyển sang giao diện chính.
- * Chưa có xác thực hay lưu phiên đăng nhập.
- */
+/** Sign in with email and password or request a password reset link. */
 public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
@@ -64,7 +58,7 @@ public class LoginActivity extends AppCompatActivity {
                     break;
                 case SUCCESS:
                     setLoading(false);
-                    navigateToMain();
+                    AuthGate.openAfterAuth(this);
                     break;
                 case ERROR:
                     setLoading(false);
@@ -82,7 +76,7 @@ public class LoginActivity extends AppCompatActivity {
 
         tvGoToRegister.setOnClickListener(v -> {
             Intent register = new Intent(this, RegisterActivity.class);
-            copyNotificationTarget(getIntent(), register);
+            AuthGate.copyNotificationTarget(getIntent(), register);
             startActivity(register);
         });
     }
@@ -163,20 +157,4 @@ public class LoginActivity extends AppCompatActivity {
         tvGoToRegister.setEnabled(!loading);
     }
 
-    private void navigateToMain() {
-        Intent intent = new Intent(this, MainActivity.class);
-        copyNotificationTarget(getIntent(), intent);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-    }
-
-    private void copyNotificationTarget(Intent source, Intent target) {
-        if (source == null || !source.hasExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID)) return;
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID));
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE));
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE));
-    }
 }

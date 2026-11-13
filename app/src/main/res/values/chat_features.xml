@@ -1,4 +1,13 @@
 <resources>
+    <string name="verify_email_title">Xác minh email</string>
+    <string name="verify_email_instructions">Mở liên kết xác minh trong email, sau đó quay lại UTEChat và nhấn Tôi đã xác minh. Nếu chưa thấy thư, hãy kiểm tra thư rác.</string>
+    <string name="verify_email_sent">Đã gửi liên kết xác minh.</string>
+    <string name="verify_email_send_failed">Chưa gửi được email xác minh. %1$s</string>
+    <string name="verify_email_pending">Email chưa được xác minh. Hãy mở liên kết trong email rồi thử lại.</string>
+    <string name="verify_email_confirm">Tôi đã xác minh</string>
+    <string name="verify_email_resend">Gửi lại email</string>
+    <string name="verify_email_resend_wait">Gửi lại sau %1$d giây</string>
+    <string name="verify_email_sign_out">Đăng xuất</string>
     <string name="forgot_password">Quên mật khẩu?</string>
     <string name="reset_email_label">Email tài khoản</string>
     <string name="reset_password_description">Nhập email đã dùng để đăng ký UTEChat.</string>

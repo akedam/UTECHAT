@@ -14,9 +14,32 @@ const storagePort = Number(process.env.STORAGE_EMULATOR_PORT ?? 19199);
 const databasePort = Number(process.env.FIREBASE_DATABASE_EMULATOR_PORT ?? 19000);
 let testEnv;
 
+function verifiedContext(uid) {
+  return testEnv.authenticatedContext(uid, { email: `${uid}@example.test`, email_verified: true });
+}
+
+test('an unverified account cannot access profiles, chat, presence or media', async () => {
+  const unverified = testEnv.authenticatedContext('alice', { email: 'alice@example.test', email_verified: false });
+  const db = unverified.firestore();
+  await assertFails(getDoc(doc(db, 'users/alice')));
+  await assertFails(getDoc(doc(db, 'publicProfiles/bob')));
+  await assertFails(getDoc(doc(db, `conversations/${conversationId}`)));
+  await assertFails(setDoc(doc(db, 'publicProfiles/alice'), {
+    uid: 'alice', displayName: 'Alice', searchName: 'alice', photoUrl: null, updatedAt: 1,
+  }));
+  const presence = databaseRef(unverified.database(), 'presence/alice/visible');
+  await assertFails(setDatabaseValue(presence, true));
+  await assertFails(getDatabaseValue(presence));
+  const object = ref(unverified.storage(), `conversations/${conversationId}/alice/unverified`);
+  await assertFails(uploadBytes(object, new Uint8Array([1]), {
+    contentType: 'image/png', customMetadata: { ownerUid: 'alice', conversationId, messageId: 'unverified' },
+  }));
+  await assertSucceeds(getDoc(doc(verifiedContext('alice').firestore(), `conversations/${conversationId}`)));
+});
+
 test('replies can quote an actual message in the same conversation only', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
   const path = `conversations/${conversationId}/messages`;
   const original = { senderId: 'alice', senderName: 'Alice', type: 'text', content: 'Original',
     sentAt: 1, createdAt: 1, readBy: ['alice'] };
@@ -29,8 +52,8 @@ test('replies can quote an actual message in the same conversation only', async 
 });
 
 test('a private block prevents direct contact and reports stay private and immutable', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
   const block = doc(alice, 'users/alice/blocked/bob');
   const report = doc(alice, 'userReports/alice/targets/bob');
   const message = { senderId: 'bob', senderName: 'Bob', type: 'text', content: 'Contact',
@@ -55,7 +78,7 @@ test('a private block prevents direct contact and reports stay private and immut
 });
 
 test('voice cannot be published without an immutable server upload', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
+  const alice = verifiedContext('alice').firestore();
   const path = `conversations/${conversationId}/alice/voice-proof`;
   const message = { senderId: 'alice', senderName: 'Alice', type: 'voice', content: 'Tin nhắn thoại',
     sentAt: 1, createdAt: 1, readBy: ['alice'], mediaPath: path, contentType: 'audio/mp4',
@@ -71,9 +94,9 @@ test('voice cannot be published without an immutable server upload', async () =>
 });
 
 test('read cursors are owner-only, message-backed, monotonic and preserve other members', async () => {
-  const alice=testEnv.authenticatedContext('alice').firestore();
-  const bob=testEnv.authenticatedContext('bob').firestore();
-  const outsider=testEnv.authenticatedContext('mallory').firestore();
+  const alice=verifiedContext('alice').firestore();
+  const bob=verifiedContext('bob').firestore();
+  const outsider=verifiedContext('mallory').firestore();
   for(const [id,time] of [['read-cursor-new',1000],['read-cursor-old',900]]) {
     await assertSucceeds(setDoc(doc(alice,'conversations',conversationId,'messages',id),{
       senderId:'alice',senderName:'Alice',type:'text',content:'read cursor fixture',sentAt:time,createdAt:time,readBy:['alice'],
@@ -106,9 +129,9 @@ test('read cursors are owner-only, message-backed, monotonic and preserve other 
 });
 
 test('incoming call fallback remains restricted to participants', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
-  const outsider = testEnv.authenticatedContext('mallory').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
+  const outsider = verifiedContext('mallory').firestore();
   const now = Date.now();
   await assertSucceeds(setDoc(doc(alice, 'calls/rules-incoming'), {
     conversationId, callerUid: 'alice', calleeUid: 'bob', participants: ['alice', 'bob'],
@@ -123,8 +146,8 @@ test('incoming call fallback remains restricted to participants', async () => {
 });
 
 test('ending a call and its chat history commit atomically once even when both peers finish', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
   const now = Date.now();
   const callId = 'rules-call-history';
   const call = doc(alice, 'calls', callId);
@@ -218,8 +241,8 @@ test('Realtime Database presence is owner-writable and opt-in readable', async (
     });
   });
 
-  const alice = testEnv.authenticatedContext('alice').database();
-  const bob = testEnv.authenticatedContext('bob').database();
+  const alice = verifiedContext('alice').database();
+  const bob = verifiedContext('bob').database();
   await assertFails(getDatabaseValue(databaseRef(bob, 'presence/alice')));
   await assertFails(setDatabaseValue(databaseRef(bob, 'presence/alice/lastSeen'), 9999));
   await assertSucceeds(setDatabaseValue(databaseRef(alice, 'presence/alice/visible'), true));
@@ -230,8 +253,8 @@ test('Realtime Database presence is owner-writable and opt-in readable', async (
 });
 
 test('FCM routing tokens are owner-writable but never client-readable', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
   const token = doc(alice, 'users/alice/deviceTokens/device-hash');
   await assertSucceeds(setDoc(token, {
     token: 'a-valid-length-fcm-registration-token-value', platform: 'android', updatedAt: 1234,
@@ -244,16 +267,16 @@ test('FCM routing tokens are owner-writable but never client-readable', async ()
 });
 
 test('an authenticated user can create a canonical friendship request', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
+  const alice = verifiedContext('alice').firestore();
   const request = doc(alice, 'friendships/alice_bob');
   await assertSucceeds(setDoc(request, {
     fromUid: 'alice', toUid: 'bob', status: 'pending', createdAt: 1000, updatedAt: 1000,
   }));
-  await assertFails(getDoc(doc(testEnv.authenticatedContext('mallory').firestore(), 'friendships/alice_bob')));
+  await assertFails(getDoc(doc(verifiedContext('mallory').firestore(), 'friendships/alice_bob')));
 });
 
 test('accepted friends can create a direct conversation without reading a missing document first', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
+  const alice = verifiedContext('alice').firestore();
   await assertSucceeds(setDoc(doc(alice, 'conversations/direct-alice-charlie'), {
     type: 'direct', participantIds: ['alice', 'charlie'], createdBy: 'alice',
     createdAt: 1000, updatedAt: 1000, lastMessageAt: 1000,
@@ -261,8 +284,8 @@ test('accepted friends can create a direct conversation without reading a missin
 });
 
 test('a current group member can list the roster but an outsider cannot', async () => {
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const mallory = testEnv.authenticatedContext('mallory').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const mallory = verifiedContext('mallory').firestore();
   const roster = await assertSucceeds(getDocs(collection(alice, 'conversations/group-alice/members')));
   assert.equal(roster.size, 2);
   await assertFails(getDocs(collection(mallory, 'conversations/group-alice/members')));
@@ -280,7 +303,7 @@ async function seedGroup(id,size,roles={}) {
   return ids;
 }
 test('new groups require 3 to 5 real members and start as a group',async()=>{
-  const db=testEnv.authenticatedContext('alice').firestore();
+  const db=verifiedContext('alice').firestore();
   await testEnv.withSecurityRulesDisabled(async context=>{
     for(const uid of ['bob','charlie','d','e','f','g','h','i'])await setDoc(doc(context.firestore(),`friendships/alice_${uid}`),{fromUid:'alice',toUid:uid,status:'accepted'});
   });
@@ -300,12 +323,12 @@ test('new groups require 3 to 5 real members and start as a group',async()=>{
   await assertFails(create('over-maximum-initial-group',['alice','bob','charlie','d','e','f']));
 });
 test('only the leader upgrades at 5 to 10 members; details cannot bypass the threshold',async()=>{
-  const db=testEnv.authenticatedContext('alice').firestore(),bob=testEnv.authenticatedContext('bob').firestore();
+  const db=verifiedContext('alice').firestore(),bob=verifiedContext('bob').firestore();
   for(const size of [4,5,10,11])await seedGroup(`upgrade-${size}`,size,{bob:'admin'});
   await assertFails(updateDoc(doc(db,'conversations/upgrade-4'),{isCommunity:true,updatedAt:2}));
   await assertFails(updateDoc(doc(db,'conversations/upgrade-4'),{isCommunity:true,groupName:'Bypass',updatedAt:2}));
   await assertFails(updateDoc(doc(bob,'conversations/upgrade-5'),{isCommunity:true,updatedAt:2}));
-  const ordinary=testEnv.authenticatedContext('member0').firestore();
+  const ordinary=verifiedContext('member0').firestore();
   await assertFails(updateDoc(doc(ordinary,'conversations/upgrade-5'),{isCommunity:true,updatedAt:2}));
   await assertSucceeds(updateDoc(doc(db,'conversations/upgrade-5'),{isCommunity:true,updatedAt:2}));
   await assertSucceeds(updateDoc(doc(db,'conversations/upgrade-10'),{isCommunity:true,updatedAt:2}));
@@ -313,7 +336,7 @@ test('only the leader upgrades at 5 to 10 members; details cannot bypass the thr
   await assertFails(updateDoc(doc(db,'conversations/upgrade-5'),{isCommunity:false,updatedAt:3}));
 });
 test('adding members enforces 5 for groups and 10 for communities, including simultaneous invitations',async()=>{
-  const alice=testEnv.authenticatedContext('alice').firestore(),bob=testEnv.authenticatedContext('bob').firestore();
+  const alice=verifiedContext('alice').firestore(),bob=verifiedContext('bob').firestore();
   await testEnv.withSecurityRulesDisabled(async context=>{
     for(const [from,to] of [['alice','charlie'],['bob','d']])await setDoc(doc(context.firestore(),`friendships/${from}_${to}`),{fromUid:from,toUid:to,status:'accepted'});
   });
@@ -341,7 +364,7 @@ test('adding members enforces 5 for groups and 10 for communities, including sim
   await assertFails(setDoc(doc(alice,'conversations/capacity/members/extra'),memberData('extra')));
 });
 test('deputies are assigned by the leader; ownership transfers atomically to exactly one member',async()=>{
-  const db=testEnv.authenticatedContext('alice').firestore(),bob=testEnv.authenticatedContext('bob').firestore();
+  const db=verifiedContext('alice').firestore(),bob=verifiedContext('bob').firestore();
   await seedGroup('roles',3);
   const member=(database,uid)=>doc(database,`conversations/roles/members/${uid}`);
   await assertFails(updateDoc(member(bob,'bob'),{role:'admin'}));
@@ -359,7 +382,7 @@ test('deputies are assigned by the leader; ownership transfers atomically to exa
   await assertFails(deleteDoc(doc(bob,'conversations/roles'))); // Cleanup must use the authorized backend.
 });
 test('deleting or missing group parents block orphan roster and history access',async()=>{
-  await seedGroup('frozen',3);const db=testEnv.authenticatedContext('alice').firestore();
+  await seedGroup('frozen',3);const db=verifiedContext('alice').firestore();
   await testEnv.withSecurityRulesDisabled(async context=>{
     await updateDoc(doc(context.firestore(),'conversations/frozen'),{lifecycle:'deleting',deletingBy:'alice'});
     await setDoc(doc(context.firestore(),'conversations/frozen/messages/old'),{senderId:'alice',type:'text',content:'Old',sentAt:1});
@@ -373,7 +396,7 @@ test('deleting or missing group parents block orphan roster and history access',
 });
 test('group chat, adding/removing members and self-leave remain available with the new role rules',async()=>{
   await seedGroup('group-operations',3,{bob:'admin'});
-  const alice=testEnv.authenticatedContext('alice').firestore(),bob=testEnv.authenticatedContext('bob').firestore();
+  const alice=verifiedContext('alice').firestore(),bob=verifiedContext('bob').firestore();
   const root=database=>doc(database,'conversations/group-operations');
   const send=writeBatch(alice);send.set(doc(alice,'conversations/group-operations/messages/hello'),{
     senderId:'alice',senderName:'Alice',type:'text',content:'Hello group',sentAt:20,createdAt:20,readBy:['alice']});
@@ -393,8 +416,8 @@ test('group chat, adding/removing members and self-leave remain available with t
 
 test('poll votes are limited to the authenticated member’s own choice', async () => {
   await testEnv.withSecurityRulesDisabled(context=>setDoc(doc(context.firestore(),'conversations/direct-poll'),{type:'direct',participantIds:['alice','bob'],lastMessageAt:1}));
-  const alice = testEnv.authenticatedContext('alice').firestore();
-  const bob = testEnv.authenticatedContext('bob').firestore();
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
   const poll = doc(alice, 'conversations/direct-poll/messages/poll-one');
   const batch = writeBatch(alice);
   batch.set(poll, {
@@ -413,7 +436,7 @@ test('poll votes are limited to the authenticated member’s own choice', async 
   await assertFails(updateDoc(doc(bob, 'conversations/direct-poll/messages/poll-one'), {
     'pollVotes.alice': 0,
   }));
-  await assertFails(updateDoc(doc(testEnv.authenticatedContext('mallory').firestore(),
+  await assertFails(updateDoc(doc(verifiedContext('mallory').firestore(),
     'conversations/direct-poll/messages/poll-one'), { 'pollVotes.mallory': 0 }));
   await assertFails(setDoc(doc(alice, 'conversations/direct-poll/messages/poll-bad'), {
     senderId: 'alice', senderName: 'Alice', type: 'poll', content: 'Lunch?', sentAt: 3000,
@@ -427,7 +450,7 @@ after(async () => {
 });
 
 function imageRef(uid, messageId, id = conversationId, ownerUid = uid) {
-  return ref(testEnv.authenticatedContext(uid).storage(), `conversations/${id}/${ownerUid}/${messageId}`);
+  return ref(verifiedContext(uid).storage(), `conversations/${id}/${ownerUid}/${messageId}`);
 }
 
 function imageMetadata(uid, messageId, id = conversationId, contentType = 'image/jpeg') {
@@ -482,7 +505,7 @@ test('Storage Rules reject unsupported MIME types and incorrect path metadata', 
 });
 
 test('Firestore Rules accept an image at 8 MiB and reject invalid type, size, or path', async () => {
-  const db = testEnv.authenticatedContext('alice').firestore();
+  const db = verifiedContext('alice').firestore();
   const base = {
     senderId: 'alice', senderName: 'Alice', type: 'image', content: '', sentAt: 1, createdAt: 1,
     readBy: ['alice'], mediaPath: `conversations/${conversationId}/alice/image-at-limit`,

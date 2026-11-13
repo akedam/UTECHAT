@@ -7,6 +7,7 @@ import com.example.utechat.domain.model.User;
 import com.example.utechat.domain.repository.AuthRepository;
 import com.example.utechat.data.notifications.PushTokenRepository;
 import com.example.utechat.app.UteChatApplication;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
@@ -29,7 +30,15 @@ public final class FirebaseAuthRepository implements AuthRepository {
 
     @Override public User getCurrentUser() {
         FirebaseUser current = auth.getCurrentUser();
-        if (current == null) return null;
+        return current != null && current.isEmailVerified() ? authProfile(current) : null;
+    }
+
+    @Override public String pendingVerificationEmail() {
+        FirebaseUser current = auth.getCurrentUser();
+        return current != null && !current.isEmailVerified() ? current.getEmail() : null;
+    }
+
+    private User authProfile(FirebaseUser current) {
         return new User(current.getUid(), current.getDisplayName() == null ? "" : current.getDisplayName(),
                 current.getEmail() == null ? "" : current.getEmail(),
                 current.getPhotoUrl() == null ? null : current.getPhotoUrl().toString(), "", true,
@@ -38,7 +47,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
 
     @Override public void loadCurrentUser(Callback<User> callback) {
         FirebaseUser current = auth.getCurrentUser();
-        if (current == null) {
+        if (current == null || !current.isEmailVerified()) {
             callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
             return;
         }
@@ -50,9 +59,43 @@ public final class FirebaseAuthRepository implements AuthRepository {
                 .addOnSuccessListener(result -> {
                     FirebaseUser current = result.getUser();
                     if (current == null) callback.onError(new AuthException(context.getString(R.string.auth_account_unavailable)));
-                    else loadProfile(current, callback);
+                    else if (current.isEmailVerified()) loadProfile(current, callback);
+                    else callback.onSuccess(authProfile(current));
                 })
                 .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
+    }
+
+    @Override public void sendVerificationEmail(Callback<Void> callback) {
+        FirebaseUser current = auth.getCurrentUser();
+        if (current == null) {
+            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
+            return;
+        }
+        auth.setLanguageCode("vi");
+        current.sendEmailVerification()
+                .addOnSuccessListener(unused -> callback.onSuccess(null))
+                .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
+    }
+
+    @Override public void confirmEmailVerification(Callback<User> callback) {
+        FirebaseUser current = auth.getCurrentUser();
+        if (current == null) {
+            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
+            return;
+        }
+        current.reload().addOnSuccessListener(unused -> {
+            FirebaseUser refreshed = auth.getCurrentUser();
+            if (refreshed == null || !current.getUid().equals(refreshed.getUid())) {
+                callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
+            } else if (!refreshed.isEmailVerified()) {
+                callback.onError(new AuthException(context.getString(R.string.verify_email_pending)));
+            } else {
+                refreshed.getIdToken(true).addOnSuccessListener(token -> {
+                    if (Boolean.TRUE.equals(token.getClaims().get("email_verified"))) loadProfile(refreshed, callback);
+                    else callback.onError(new AuthException(context.getString(R.string.verify_email_pending)));
+                }).addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
+            }
+        }).addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
     }
 
     @Override public void resetPassword(String email, Callback<Void> callback) {
@@ -76,27 +119,19 @@ public final class FirebaseAuthRepository implements AuthRepository {
                     }
                     UserProfileChangeRequest request = new UserProfileChangeRequest.Builder()
                             .setDisplayName(displayName).build();
-                    current.updateProfile(request).addOnSuccessListener(ignored -> {
-                        User user = new User(current.getUid(), displayName, email, null, "", true,
-                                System.currentTimeMillis());
-                        firestore.collection(USERS).document(current.getUid()).set(profileData(user))
-                                .continueWithTask(task -> {
-                                    if (!task.isSuccessful()) throw task.getException();
-                                    return firestore.collection("publicProfiles").document(current.getUid())
-                                            .set(publicProfileData(user));
-                                })
-                                .addOnSuccessListener(unused -> callback.onSuccess(user))
-                                .addOnFailureListener(error -> callback.onError(new AuthException(
-                                        context.getString(R.string.auth_profile_write_after_register))));
-                    }).addOnFailureListener(error -> callback.onError(new AuthException(
-                            context.getString(R.string.auth_name_write_after_register))));
+                    current.updateProfile(request)
+                            .addOnSuccessListener(unused -> callback.onSuccess(authProfile(current)))
+                            .addOnFailureListener(error -> {
+                                auth.signOut();
+                                callback.onError(new AuthException(context.getString(R.string.auth_name_write_after_register)));
+                            });
                 })
                 .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
     }
 
     @Override public void updateProfile(String displayName, String bio, Callback<User> callback) {
         FirebaseUser current = auth.getCurrentUser();
-        if (current == null) {
+        if (current == null || !current.isEmailVerified()) {
             callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
             return;
         }
@@ -128,14 +163,28 @@ public final class FirebaseAuthRepository implements AuthRepository {
     }
 
     private void loadProfile(FirebaseUser firebaseUser, Callback<User> callback) {
-        firestore.collection(USERS).document(firebaseUser.getUid()).get()
-                .addOnSuccessListener(snapshot -> {
+        var profile = firestore.collection(USERS).document(firebaseUser.getUid());
+        var publicProfile = firestore.collection("publicProfiles").document(firebaseUser.getUid());
+        profile.get().continueWithTask(result -> {
+                    if (!result.isSuccessful()) throw result.getException();
+                    DocumentSnapshot snapshot = result.getResult();
+                    if (!snapshot.exists()) {
+                        return firestore.runTransaction(transaction -> {
+                            DocumentSnapshot latest = transaction.get(profile);
+                            User user = fromSnapshot(firebaseUser, latest);
+                            if (!latest.exists()) {
+                                transaction.set(profile, profileData(user));
+                                transaction.set(publicProfile, publicProfileData(user));
+                            }
+                            return user;
+                        });
+                    }
                     User user = fromSnapshot(firebaseUser, snapshot);
                     // Backfill the safe public card for accounts registered before this schema existed.
-                    firestore.collection("publicProfiles").document(firebaseUser.getUid())
-                            .set(publicProfileData(user), SetOptions.merge())
-                            .addOnCompleteListener(ignored -> callback.onSuccess(user));
+                    publicProfile.set(publicProfileData(user), SetOptions.merge());
+                    return Tasks.forResult(user);
                 })
+                .addOnSuccessListener(callback::onSuccess)
                 .addOnFailureListener(error -> callback.onError(new AuthException(
                         context.getString(R.string.auth_profile_load_failed))));
     }
@@ -167,6 +216,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
         String bio = snapshot.getString("bio");
         String photo = snapshot.getString("photoUrl");
         if (name == null) name = firebaseUser.getDisplayName() == null ? "" : firebaseUser.getDisplayName();
+        if (name.trim().isEmpty()) name = context.getString(R.string.call_generic_peer);
         if (email == null) email = firebaseUser.getEmail() == null ? "" : firebaseUser.getEmail();
         User user = new User(firebaseUser.getUid(), name, email, photo, bio == null ? "" : bio,
                 true, System.currentTimeMillis());

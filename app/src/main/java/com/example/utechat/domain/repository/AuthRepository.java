@@ -12,6 +12,9 @@ public interface AuthRepository {
         public AuthException(String message) { super(message); }
     }
     User getCurrentUser();
+    default String pendingVerificationEmail() { return null; }
+    default void sendVerificationEmail(Callback<Void> callback) { throw new UnsupportedOperationException(); }
+    default void confirmEmailVerification(Callback<User> callback) { throw new UnsupportedOperationException(); }
     void loadCurrentUser(Callback<User> callback);
     void signIn(String email, String password, Callback<User> callback);
     void resetPassword(String email, Callback<Void> callback);

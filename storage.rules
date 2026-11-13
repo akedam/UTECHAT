@@ -8,7 +8,7 @@ service firebase.storage {
       return /databases/(default)/documents/conversations/$(conversationId)/members/$(uid);
     }
     function isParticipant(conversationId) {
-      return request.auth != null
+      return request.auth != null && request.auth.token.email_verified == true
         && firestore.exists(conversationPath(conversationId))
         && firestore.get(conversationPath(conversationId)).data.get('lifecycle', 'active') == 'active'
         && request.auth.uid in firestore.get(conversationPath(conversationId)).data.participantIds

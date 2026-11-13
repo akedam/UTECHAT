@@ -24,7 +24,7 @@ import java.lang.ref.WeakReference;
 
 /** App lifecycle coordination for opt-in presence and notification channels. */
 public final class UteChatApplication extends Application
-        implements Application.ActivityLifecycleCallbacks, FirebaseAuth.AuthStateListener {
+        implements Application.ActivityLifecycleCallbacks, FirebaseAuth.IdTokenListener {
     private static final AtomicReference<String> ACTIVE_CHAT = new AtomicReference<>();
     private static final AtomicReference<String> ACTIVE_CALL = new AtomicReference<>();
     private DevicePresenceManager presenceManager;
@@ -65,7 +65,7 @@ public final class UteChatApplication extends Application
         try {
             auth = FirebaseAuth.getInstance();
             callRepository = CallRepositoryProvider.get(this);
-            auth.addAuthStateListener(this);
+            auth.addIdTokenListener(this);
         } catch (RuntimeException ignored) {
             auth = null;
         }
@@ -73,13 +73,13 @@ public final class UteChatApplication extends Application
 
     public DevicePresenceManager getPresenceManager() { return presenceManager; }
 
-    @Override public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+    @Override public void onIdTokenChanged(@NonNull FirebaseAuth firebaseAuth) {
         if (startedActivities > 0) syncSignedInSession(firebaseAuth.getCurrentUser());
     }
 
     private void syncSignedInSession(FirebaseUser user) {
         if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Sync call listener: signedIn=" + (user != null) + ", activities=" + startedActivities);
-        if (user == null) {
+        if (user == null || !user.isEmailVerified()) {
             presenceManager.stop();
             if (callRepository != null) callRepository.stopIncomingListener();
             return;
@@ -91,6 +91,8 @@ public final class UteChatApplication extends Application
     }
 
     private void onIncomingCall(CallSession call) {
+        FirebaseUser user = auth == null ? null : auth.getCurrentUser();
+        if (user == null || !user.isEmailVerified()) return;
         if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Incoming callback: active=" + hasActiveCall() + ", resumed=" + (resumedActivity.get() != null));
         if (call == null || call.id.equals(ACTIVE_CALL.get())) return;
         if (hasActiveCall()) {

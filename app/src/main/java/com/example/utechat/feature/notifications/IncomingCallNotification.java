@@ -21,7 +21,7 @@ public final class IncomingCallNotification {
         if(callId==null || !callId.matches("[A-Za-z0-9_-]{1,128}"))return;
         Context app=context.getApplicationContext();
         FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
-        if(user==null || !user.getUid().equals(recipientUid))return;
+        if(user==null || !user.isEmailVerified() || !user.getUid().equals(recipientUid))return;
         androidx.work.OneTimeWorkRequest.Builder work=new androidx.work.OneTimeWorkRequest.Builder(IncomingCallWorker.class)
                 .setInputData(new androidx.work.Data.Builder().putString("callId",callId).putString("recipientUid",recipientUid)
                         .putLong("receivedAt",System.currentTimeMillis()).build())
@@ -35,7 +35,7 @@ public final class IncomingCallNotification {
     public static void showVerified(Context app,CallSession call) {
             if(call.expiresAt<=System.currentTimeMillis())return;
             FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
-            if(user==null || !user.getUid().equals(call.calleeUid))return;
+            if(user==null || !user.isEmailVerified() || !user.getUid().equals(call.calleeUid))return;
             String callId=call.id;
             if(!NotificationPreferences.markEventSeen(app,"call:"+call.calleeUid+":"+callId))return;
             NotificationManager manager=app.getSystemService(NotificationManager.class);

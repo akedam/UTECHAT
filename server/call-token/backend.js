@@ -201,6 +201,13 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     }
   }
   async function pushOnce(eventId, recipientUid, data, ttl) {
+    // Device tokens from older APKs can still exist before the recipient verifies.
+    try {
+      if (!(await auth.getUser(recipientUid)).emailVerified) return;
+    } catch (error) {
+      if (error.code === "auth/user-not-found") return;
+      throw error;
+    }
     const ref = db.doc(`backendEvents/${hash(`${eventId}:${recipientUid}`)}`), attemptId = crypto.randomUUID();
     const claimed = await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref), previous = snapshot.data();
@@ -385,6 +392,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }
+      requireValue(user.email_verified === true, 403, "email-unverified");
       rateLimit(user.uid, url.pathname === "/api/media" || voice ? "media" : "api");
       sweep().catch(() => process.stderr.write("Call reconciliation deferred.\n"));
       if (voice) {
