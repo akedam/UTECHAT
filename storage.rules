@@ -19,7 +19,9 @@ service firebase.storage {
     }
 
     match /conversations/{conversationId}/{ownerUid}/{messageId} {
-      allow read: if isParticipant(conversationId);
+      allow read: if isParticipant(conversationId)
+        && (!firestore.exists(/databases/(default)/documents/conversations/$(conversationId)/messages/$(messageId))
+            || firestore.get(/databases/(default)/documents/conversations/$(conversationId)/messages/$(messageId)).data.type != 'recalled');
       allow create: if request.auth != null
         && request.auth.uid == ownerUid
         && isParticipant(conversationId)

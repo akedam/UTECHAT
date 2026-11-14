@@ -264,6 +264,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     const [parent, message] = await Promise.all([ref.get(), ref.collection("messages").doc(body.messageId).get()]);
     requireValue(parent.exists && message.exists, 404, "not-found"); const data = message.data();
     requireValue(data.senderId === uid, 403, "forbidden");
+    if (data.type === "recalled") return;
     requireValue(Number.isFinite(data.sentAt) && data.sentAt >= now() - 24 * 60 * 60_000 && data.sentAt <= now() + 60_000, 409, "event-expired");
     const group = parent.data().type === "group";
     let recipients = parent.data().participantIds;
@@ -326,6 +327,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     const [record, message] = await Promise.all([db.doc(`backendMedia/${hash(path)}`).get(),
       db.doc(`conversations/${parts.conversationId}/messages/${parts.messageId}`).get()]);
     requireValue(record.exists && record.data().ready, 404, "not-found");
+    requireValue(message.data()?.type !== "recalled", 404, "not-found");
     requireValue(uid === parts.ownerUid || (message.exists && message.data().type === "image"
       && message.data().mediaPath === path && message.data().senderId === parts.ownerUid), 403, "forbidden");
     const bytes = await storage.download(path), metadata = record.data();
@@ -375,6 +377,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       db.doc(`conversations/${parts.conversationId}/messages/${parts.messageId}`).get(),
     ]);
     requireValue(record.exists && record.data().path === path, 404, "not-found");
+    requireValue(message.data()?.type !== "recalled", 404, "not-found");
     requireValue(uid === parts.ownerUid || (message.data()?.type === "voice"
       && message.data().mediaPath === path && message.data().senderId === parts.ownerUid), 403, "forbidden");
     const bytes = Buffer.from(record.data().bytes);

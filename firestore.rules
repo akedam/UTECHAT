@@ -56,6 +56,14 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/publicProfiles/$(peerUid));
       }
 
+      match /hiddenMessages/{id} {
+        allow read: if isOwner();
+        allow create, update: if isOwner() && request.resource.data.keys().hasOnly(['conversationId', 'messageId'])
+          && request.resource.data.conversationId is string && request.resource.data.conversationId.size() <= 256
+          && request.resource.data.messageId is string && request.resource.data.messageId.size() <= 150
+          && id == request.resource.data.conversationId + ':' + request.resource.data.messageId;
+      }
+
       // FCM registration IDs are private routing data used only by a trusted sender.
       match /deviceTokens/{tokenId} {
         allow read: if false;
@@ -74,13 +82,19 @@ service cloud.firestore {
       function sourceConversation() {
         return get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId));
       }
+      function hasReportMessage() {
+        let id = request.resource.data.messageId;
+        return id is string && id.size() <= 150
+          && get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)/messages/$(id)).data.senderId == target;
+      }
       allow create: if signedIn() && request.auth.uid == reporter && reporter != target
-        && request.resource.data.keys().hasOnly(['conversationId', 'reason', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['conversationId', 'reason', 'createdAt', 'messageId'])
         && request.resource.data.conversationId is string
         && request.resource.data.reason in ['spam', 'abuse', 'other']
         && request.resource.data.createdAt == request.time
         && reporter in sourceConversation().data.participantIds
         && target in sourceConversation().data.participantIds
+        && (!('messageId' in request.resource.data) || hasReportMessage())
         && (sourceConversation().data.type == 'direct'
           || (sourceConversation().data.type == 'group' && isMember(request.resource.data.conversationId)));
       allow get: if signedIn() && request.auth.uid == reporter;
@@ -240,6 +254,21 @@ service cloud.firestore {
                 && getAfter(messagePath).data.pollQuestion == request.resource.data.lastMessage))
           && getAfter(messagePath).data.sentAt == request.resource.data.lastMessageAt;
       }
+      function validRecalledSummary() {
+        let id = resource.data.get('lastMessageId', '');
+        let message = getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(id)).data;
+        return id != '' && message.type == 'recalled' && message.senderId == request.auth.uid
+          && request.resource.data.lastMessageType == 'recalled'
+          && request.resource.data.lastMessage == 'Tin nhắn đã được thu hồi'
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['pinnedMessageId'])
+              || (resource.data.get('pinnedMessageId', '') == id && !('pinnedMessageId' in request.resource.data)));
+      }
+      function validPin() {
+        let id = request.resource.data.get('pinnedMessageId', '');
+        return !('pinnedMessageId' in request.resource.data) || (conversationCanSend(resource.data)
+          && id is string && id.size() > 0 && id.size() <= 150
+          && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(id)).data.type in ['text','image','voice','poll','file']);
+      }
       function validReadCursor() {
         let before = resource.data.get('readStates', {});
         let after = request.resource.data.readStates;
@@ -372,6 +401,8 @@ service cloud.firestore {
         && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'lastMessage','lastMessageType','lastMessageAt','lastMessageSenderId','lastMessageId','updatedAt']) && validTextSummary())
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readStates']) && validReadCursor())
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage','lastMessageType','pinnedMessageId']) && validRecalledSummary())
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinnedMessageId']) && validPin())
             || (resource.data.type == 'group'
                 && ((request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName','groupPhotoUrl']) && validGroupDetailsChange())
                     || (request.resource.data.diff(resource.data).affectedKeys().hasAny(['participantIds']) && (validMembershipChange() || validSelfLeave()))
@@ -500,7 +531,7 @@ service cloud.firestore {
         }
         function validImageMessage() {
           let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);
-          return request.resource.data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy','mediaPath','contentType','fileSize'])
+          return request.resource.data.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy','mediaPath','contentType','fileSize','reply'])
             && request.resource.data.keys().hasAll(['senderId','senderName','type','content','sentAt','createdAt','readBy','mediaPath','contentType','fileSize'])
             && request.resource.data.senderId == request.auth.uid
             && exists(profile) && request.resource.data.senderName == get(profile).data.displayName
@@ -513,7 +544,8 @@ service cloud.firestore {
             && request.resource.data.fileSize <= 8388608
             && request.resource.data.sentAt is int
             && request.resource.data.createdAt == request.resource.data.sentAt
-            && request.resource.data.readBy == [request.auth.uid];
+            && request.resource.data.readBy == [request.auth.uid]
+            && (!('reply' in request.resource.data) || validReply());
         }
         function validPollOption(options, index) {
           return index >= options.size()
@@ -555,11 +587,38 @@ service cloud.firestore {
             && request.auth.uid in votes.keys()
             && choice is int && choice >= 0 && choice < resource.data.pollOptions.size();
         }
+        function validReaction() {
+          let old = resource.data.get('reactions', {});
+          let next = request.resource.data.get('reactions', {});
+          let emoji = next.get(request.auth.uid, '');
+          return conversationCanSend(parent().data) && resource.data.type != 'recalled'
+            && next is map && next.diff(old).affectedKeys().hasOnly([request.auth.uid])
+            && (!(request.auth.uid in next) || emoji in ['❤️','😆','😮','😢','😡','👍','😂','😍','🔥','👏','🎉','💯','🙌','🙏','👎']);
+        }
+        function validRecall() {
+          let after = request.resource.data;
+          let conversation = parent().data;
+          let next = getAfter(/databases/$(database)/documents/conversations/$(conversationId)).data;
+          return resource.data.senderId == request.auth.uid
+            && resource.data.type in ['text','image','voice','poll','file'] && !messageId.matches('call_.*')
+            && after.type == 'recalled' && after.content == 'Tin nhắn đã được thu hồi'
+            && after.keys().hasOnly(['senderId','senderName','type','content','sentAt','createdAt','readBy'])
+            && after.senderId == resource.data.senderId && after.sentAt == resource.data.sentAt
+            && after.get('senderName', null) == resource.data.get('senderName', null)
+            && after.get('createdAt', null) == resource.data.get('createdAt', null)
+            && after.get('readBy', null) == resource.data.get('readBy', null)
+            && (conversation.get('lastMessageId', '') != messageId
+              || (next.lastMessageType == 'recalled' && next.lastMessage == after.content))
+            && (conversation.get('pinnedMessageId', '') != messageId || !('pinnedMessageId' in next));
+        }
         allow get, list: if isConversationParticipant();
         allow create: if isConversationParticipant() && conversationCanSend(parent().data)
           && (validTextMessage() || validImageMessage() || validPollMessage() || validVoiceMessage());
-        allow update: if (isConversationParticipant() && resource.data.senderId == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([])) || validPollVote();
+        allow update: if isConversationParticipant()
+          && ((resource.data.senderId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly([]))
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pollVotes']) && validPollVote())
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']) && validReaction())
+            || (request.resource.data.type == 'recalled' && validRecall()));
         allow delete: if false;
       }
     }

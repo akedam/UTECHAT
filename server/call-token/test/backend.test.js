@@ -91,6 +91,16 @@ test("membership removal prevents token issuance even for a listed call particip
   const f=await fixture(t);await f.db.doc("conversations/chat").update({participantIds:["alice","mallory"]});
   assert.equal((await f.request("/api/rtc-token","bob",{callId:"call1"})).status,403);
 });
+test("recall suppresses queued notifications and denies attachment fetches", async t => {
+  const f = await fixture(t);
+  const path = "conversations/chat/alice/msg1";
+  const mediaRoute = "/api/media?path=" + path;
+  assert.equal((await f.request(mediaRoute, "alice", PNG, "PUT", "image/png")).status, 200);
+  await f.db.doc("conversations/chat/messages/msg1").update({type:"recalled",content:"Tin nhắn đã được thu hồi"});
+  assert.equal((await f.request(mediaRoute, "alice", null, "GET")).status, 404);
+  assert.equal((await f.request("/api/message-notify", "alice", {conversationId:"chat",messageId:"msg1"})).status, 200);
+  assert.equal(f.pushes.length, 0);
+});
 test("push uses stored message and actual members, cannot spoof a sender, and deduplicates retries",async(t)=>{
   const f=await fixture(t);
   assert.equal((await f.request("/api/message-notify","bob",{conversationId:"chat",messageId:"msg1"})).status,403);

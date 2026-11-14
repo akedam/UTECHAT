@@ -2,7 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, query, where, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField, writeBatch, query, where, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage';
 import { get as getDatabaseValue, ref as databaseRef, set as setDatabaseValue } from 'firebase/database';
 
@@ -17,6 +17,50 @@ let testEnv;
 function verifiedContext(uid) {
   return testEnv.authenticatedContext(uid, { email: `${uid}@example.test`, email_verified: true });
 }
+
+test('message reactions are own-only; only the sender can recall and clear summary and pin atomically', async () => {
+  const id = 'actions-test';
+  const path = `conversations/${id}`;
+  const messageId = 'msg';
+  const original = { senderId: 'alice', senderName: 'Alice', type: 'text', content: 'Original',
+    sentAt: 42, createdAt: 42, readBy: ['alice'] };
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, path), { type: 'direct', participantIds: ['alice', 'bob'],
+      lastMessage: 'Original', lastMessageType: 'text', lastMessageAt: 42, lastMessageId: messageId });
+    await setDoc(doc(db, path, 'messages', messageId), original);
+  });
+  const alice = verifiedContext('alice').firestore(), bob = verifiedContext('bob').firestore();
+  const bobMessage = doc(bob, path, 'messages', messageId), aliceMessage = doc(alice, path, 'messages', messageId);
+  await assertSucceeds(updateDoc(bobMessage, {'reactions.bob': '❤️'}));
+  await assertFails(updateDoc(bobMessage, {'reactions.alice': '👍'}));
+  await assertFails(updateDoc(bobMessage, {'reactions.bob': 'unexpected'}));
+  await assertSucceeds(updateDoc(doc(bob, path), {pinnedMessageId: messageId}));
+  await assertFails(updateDoc(doc(bob, path), {pinnedMessageId: 'missing'}));
+  const tombstone = {...original, type: 'recalled', content: 'Tin nhắn đã được thu hồi'};
+  await assertFails(setDoc(bobMessage, tombstone));
+  await assertFails(setDoc(aliceMessage, tombstone));
+  const batch = writeBatch(alice);
+  batch.set(aliceMessage, tombstone);
+  batch.update(doc(alice, path), {lastMessage: tombstone.content, lastMessageType: 'recalled', pinnedMessageId: deleteField()});
+  await assertSucceeds(batch.commit());
+  const data = (await getDoc(bobMessage)).data();
+  assert.deepEqual(data, tombstone);
+  assert.equal((await getDoc(doc(bob, path))).data().pinnedMessageId, undefined);
+  await assertFails(updateDoc(bobMessage, {'reactions.bob': '👍'}));
+  await assertFails(updateDoc(doc(bob, path), {pinnedMessageId: messageId}));
+});
+
+test('hidden messages are private to the account and leave the shared message intact', async () => {
+  const alice = verifiedContext('alice').firestore(), bob = verifiedContext('bob').firestore();
+  const id = `${conversationId}:private-hide`;
+  const path = `users/alice/hiddenMessages/${id}`;
+  await assertSucceeds(setDoc(doc(alice, path), {conversationId, messageId: 'private-hide'}));
+  await assertSucceeds(getDoc(doc(alice, path)));
+  await assertFails(getDoc(doc(bob, path)));
+  await assertFails(setDoc(doc(bob, path), {conversationId, messageId: 'private-hide'}));
+  await assertFails(setDoc(doc(alice, path), {conversationId, messageId: 'wrong'}));
+});
 
 test('an unverified account cannot access profiles, chat, presence or media', async () => {
   const unverified = testEnv.authenticatedContext('alice', { email: 'alice@example.test', email_verified: false });
