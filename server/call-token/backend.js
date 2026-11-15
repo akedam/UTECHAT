@@ -225,12 +225,23 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     try {
       const devices = await db.collection(`users/${recipientUid}/deviceTokens`).limit(20).get();
       const valid = devices.docs.filter((doc) => typeof doc.data().token === "string");
+      const message = data.eventType === "message";
+      const muted = (device) => message && device.platform === "web" &&
+        Array.isArray(device.mutedChats) && device.mutedChats.includes(data.conversationId);
+      const eligible = valid.filter((doc) => !muted(doc.data()));
+      const privatePreview = (doc) => message && doc.data().platform === "web" && doc.data().showPreview !== true;
+      const { preview, senderName, conversationTitle, ...generic } = data;
+      const deliveries = [
+        { docs: eligible.filter((doc) => !privatePreview(doc)), payload: data },
+        { docs: eligible.filter(privatePreview), payload: generic }
+      ];
       let acceptedDevices = 0;
-      if (valid.length) {
-        const result = await messaging.sendEachForMulticast({ tokens: valid.map((doc) => doc.data().token),
-          data: { ...data, recipientUid }, android: { priority: "high", ttl },
+      let retry = false;
+      for (const { docs, payload } of deliveries) {
+        if (!docs.length) continue;
+        const result = await messaging.sendEachForMulticast({ tokens: docs.map((doc) => doc.data().token),
+          data: { ...payload, recipientUid }, android: { priority: "high", ttl },
           webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)), Urgency: data.eventType === "call" ? "high" : "normal" } } });
-        let retry = false;
         for (let i = 0; i < result.responses.length; i++) {
           const response = result.responses[i];
           if (response.success) {
@@ -238,11 +249,11 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
             continue;
           }
           if (["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(response.error?.code))
-            await valid[i].ref.delete(); else retry = true;
+            await docs[i].ref.delete(); else retry = true;
         }
-        if (retry) throw new ApiError(503, "push-unavailable");
       }
-      requireValue(acceptedDevices > 0, 503, "recipient-device-unavailable");
+      if (retry) throw new ApiError(503, "push-unavailable");
+      requireValue(acceptedDevices > 0 || (valid.length > 0 && eligible.length === 0), 503, "recipient-device-unavailable");
       await db.runTransaction(async (tx) => {
         const current = await tx.get(ref);
         if (current.data()?.attemptId !== attemptId) return;

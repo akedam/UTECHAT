@@ -35,7 +35,13 @@ public final class BackendMediaRepository implements MediaRepository {
                 String type=ImageUploadPolicy.normalizeMimeType(context.getContentResolver().getType(source));
                 byte[] bytes;
                 try(InputStream input=context.getContentResolver().openInputStream(source)) {bytes=readBounded(input);}
+                if ("file".equals(source.getScheme()) && type.isEmpty()) {
+                    for (String candidate : new String[]{"image/jpeg", "image/png", "image/webp"}) {
+                        if (validImage(bytes, candidate)) { type = candidate; break; }
+                    }
+                }
                 if(!validImage(bytes,type))throw new Exception();
+                final String contentType=type;
                 if(!job.active)return;
                 String path="conversations/"+conversationId+"/"+uid+"/"+messageId;
                 main.post(() -> {if(job.active)listener.onProgress(0);});
@@ -44,7 +50,6 @@ public final class BackendMediaRepository implements MediaRepository {
                 org.json.JSONObject result=response.json();
                 if(!path.equals(result.getString("path")) || result.getLong("size")!=bytes.length
                         || !type.equals(result.getString("contentType")))throw new Exception();
-                final String contentType=type;
                 main.post(() -> {if(job.active){job.active=false;listener.onSuccess(path,bytes.length,contentType);}});
             } catch(Exception error) {
                 main.post(() -> {if(job.active){job.active=false;listener.onError(context.getString(R.string.image_upload_error));}});

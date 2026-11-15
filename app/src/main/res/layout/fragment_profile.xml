@@ -29,6 +29,15 @@
             android:layout_weight="1"
             android:paddingStart="6dp" />
         <ImageButton
+            android:id="@+id/btn_profile_qr"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_friend_qr"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/white"
+            android:contentDescription="@string/friend_qr_mine" />
+        <ImageButton
             android:id="@+id/btn_profile_settings"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -287,6 +296,12 @@
                     android:text="@string/notifications_preview_summary"
                     android:textSize="13sp"
                     android:textColor="@color/utechat_on_surface_variant" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_call_full_screen"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/call_full_screen_setting"
+                    android:visibility="gone" />
             </LinearLayout>
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_logout"

@@ -40,8 +40,8 @@ android {
         applicationId = "com.example.utechat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 10
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "STORAGE_EMULATOR_HOST", "\"${storageEmulatorHost.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
@@ -111,6 +111,8 @@ dependencies {
     implementation(libs.lifecycle.livedata)
     implementation(libs.viewpager2)
     implementation(libs.glide)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.4")
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

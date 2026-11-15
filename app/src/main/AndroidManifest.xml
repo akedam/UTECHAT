@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -11,6 +12,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
 
     <application
         android:name=".app.UteChatApplication"
@@ -50,6 +53,12 @@
         <activity android:name=".feature.auth.ui.LoginActivity" android:exported="false" />
         <activity android:name=".feature.main.ui.MainActivity" android:exported="false" />
         <activity android:name=".feature.search.ui.SearchActivity" android:exported="false" android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
+        <activity android:name=".feature.friends.qr.PortraitQrScannerActivity" android:exported="false"
+            android:screenOrientation="portrait" android:theme="@style/zxing_CaptureTheme" />
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.friendqr"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/friend_qr_paths" />
+        </provider>
         <activity android:name=".feature.auth.ui.SplashActivity" android:exported="true" android:theme="@style/Theme.UTEChat.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

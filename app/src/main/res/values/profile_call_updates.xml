@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_choose_photo">Chọn ảnh đại diện</string>
+    <string name="profile_photo_upload_error">Chưa tải được ảnh đại diện. Hãy chọn ảnh khác hoặc thử lại.</string>
+    <string name="profile_view_friend">Xem hồ sơ</string>
+    <string name="profile_send_message">Nhắn tin</string>
+    <string name="profile_remove_friend">Xóa bạn</string>
+    <string name="profile_remove_friend_confirm">Người này sẽ được xóa khỏi danh sách bạn bè của bạn.</string>
+    <string name="profile_removed_friend">Đã xóa bạn.</string>
+    <string name="profile_not_friend">Hai bạn hiện không có trong danh sách bạn bè.</string>
+    <string name="chat_blocked_by_peer">Bạn đã bị chặn</string>
+    <string name="call_full_screen_setting">Cho phép cuộc gọi hiện toàn màn hình</string>
+    <string name="friend_qr_save">Lưu ảnh QR</string>
+    <string name="friend_qr_saved">Đã lưu ảnh QR.</string>
+</resources>

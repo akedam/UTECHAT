@@ -66,7 +66,9 @@ public final class EmailVerificationSmokeTest {
             try (ActivityScenario<SplashActivity> splash = ActivityScenario.launch(SplashActivity.class)) {
                 awaitView(withId(R.id.verify_email_address));
                 onView(withId(R.id.verify_email_address)).check(matches(withText(email)));
-                onView(withId(R.id.btn_verify_sign_out)).perform(click());
+                onView(withId(R.id.btn_verify_other_email)).perform(click());
+                awaitView(withId(R.id.btn_register));
+                onView(withId(R.id.tv_go_to_login)).perform(click());
                 awaitView(withId(R.id.btn_login));
                 onView(withId(R.id.et_email)).perform(replaceText(email));
                 onView(withId(R.id.et_password)).perform(replaceText(password), closeSoftKeyboard());

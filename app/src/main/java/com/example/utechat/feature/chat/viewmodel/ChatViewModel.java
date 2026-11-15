@@ -48,10 +48,14 @@ public class ChatViewModel extends AndroidViewModel {
     private final String currentUserId;
     private final String currentUserName;
     private MessageRepository.Subscription subscription;
+    private MessageRepository.Subscription recallSubscription;
+    private final Map<String, Message> recalls = new LinkedHashMap<>();
+    private Set<String> hidden = Collections.emptySet();
     private List<Message> olderMessages = new ArrayList<>();
     private List<Message> latestMessages = new ArrayList<>();
     private String conversationId;
     private String peerName;
+    private String peerUid;
     private boolean loadingHistory;
     private String failedHistoryCursor;
     private long listenerGeneration;
@@ -78,6 +82,7 @@ public class ChatViewModel extends AndroidViewModel {
     public boolean canSendVoice() { return !repository.isMock() && mediaRepository.supportsVoice(); }
     public String getCurrentUserId() { return currentUserId; }
     public String getCurrentUserName() { return currentUserName; }
+    public void setPeerUid(String uid) { peerUid = uid; }
 
     public void init(String conversationId, String peerName) {
         if (conversationId == null || conversationId.trim().isEmpty()) {
@@ -86,10 +91,13 @@ public class ChatViewModel extends AndroidViewModel {
         }
         if (conversationId.equals(this.conversationId) && subscription != null) return;
         removeSubscription();
+        if (recallSubscription != null) recallSubscription.remove();
         this.conversationId = conversationId;
         this.peerName = peerName == null || peerName.trim().isEmpty()
                 ? getApplication().getString(R.string.conversation_unknown_title) : peerName;
         olderMessages = new ArrayList<>();
+        recalls.clear();
+        hidden = Collections.emptySet();
         latestMessages = new ArrayList<>();
         localOutgoing.clear();
         pendingImageUris.clear();
@@ -99,6 +107,13 @@ public class ChatViewModel extends AndroidViewModel {
         sendError.setValue(null);
         messages.setValue(Resource.loading());
         attachListener();
+        recallSubscription = repository.listenRecalls(conversationId, new MessageRepository.Listener() {
+            @Override public void onMessages(List<Message> items) {
+                for (Message item : items) recalls.put(item.getId(), item);
+                if (messages.getValue() != null && messages.getValue().isSuccess()) publishMessages();
+            }
+            @Override public void onError(String message) { }
+        });
     }
 
     private void attachListener() {
@@ -144,7 +159,7 @@ public class ChatViewModel extends AndroidViewModel {
 
     public void loadOlder() {
         if (loadingHistory || !Boolean.TRUE.equals(hasMoreHistory.getValue())) return;
-        List<Message> current = currentList();
+        List<Message> current = olderMessages.isEmpty() ? latestMessages : olderMessages;
         if (current.isEmpty()) return;
         String cursor = current.get(0).getId();
         if (cursor == null) {
@@ -219,6 +234,27 @@ public class ChatViewModel extends AndroidViewModel {
         publishMessages();
         submit(message);
         return true;
+    }
+
+    public void setHiddenMessages(Set<String> ids) {
+        hidden = new HashSet<>(ids);
+        if (messages.getValue() != null && messages.getValue().isSuccess()) publishMessages();
+    }
+
+    public void hideMessage(String id) {
+        if (currentUserId == null || conversationId == null) return;
+        com.example.utechat.data.chat.HiddenMessages.hide(currentUserId, conversationId, id)
+                .addOnFailureListener(error -> {
+                    if (!cleared) sendError.setValue(getApplication().getString(R.string.message_action_error));
+                });
+    }
+
+    public void recall(Message message, MessageRepository.SendCallback callback) {
+        repository.recall(conversationId, message.getId(), currentUserId, callback);
+    }
+
+    public void react(Message message, String emoji, MessageRepository.SendCallback callback) {
+        repository.react(conversationId, message.getId(), currentUserId, emoji, callback);
     }
 
     public boolean createPoll(String question, List<String> values) {
@@ -310,7 +346,7 @@ public class ChatViewModel extends AndroidViewModel {
                 if (cleared) return;
                 sendingIds.remove(message.getId());
                 updateStatus(message.getId(), Message.DeliveryStatus.FAILED);
-                sendError.setValue(error);
+                reportSendFailure(message.getId(), error);
             }
         };
         if (message.getType() == Message.Type.IMAGE) repository.sendImage(conversationId, message, callback);
@@ -320,12 +356,17 @@ public class ChatViewModel extends AndroidViewModel {
     }
 
     public boolean sendImage(Uri uri) {
+        return sendImage(uri, null);
+    }
+
+    public boolean sendImage(Uri uri, Message.Reply reply) {
         if (uri == null) return false;
         if (!canSendImage()) { sendError.setValue(mediaRepository.getUnavailableReason()); return false; }
         if (currentUserId == null || conversationId == null) { sendError.setValue(getApplication().getString(R.string.chat_send_error)); return false; }
         Message message = new Message();
         message.setId(UUID.randomUUID().toString()); message.setConversationId(conversationId);
         message.setSenderId(currentUserId); message.setSenderName(currentUserName); message.setType(Message.Type.IMAGE);
+        message.setReply(reply);
         message.setContent(""); message.setLocalMediaUri(uri.toString()); message.setSentAt(System.currentTimeMillis());
         message.setCreatedAt(message.getSentAt()); message.setDeliveryStatus(Message.DeliveryStatus.SENDING);
         localOutgoing.put(message.getId(), message); pendingImageUris.put(message.getId(), uri);
@@ -359,6 +400,65 @@ public class ChatViewModel extends AndroidViewModel {
         return true;
     }
 
+    public boolean canForward(Message message) {
+        return !isMock() && (message.getType() == Message.Type.TEXT || message.getType() == Message.Type.POLL
+                || ((message.getType() == Message.Type.IMAGE || message.getType() == Message.Type.VOICE)
+                    && message.getMediaUrl() != null && mediaRepository.isAvailable()));
+    }
+
+    public void forward(Message original, String destination, MessageRepository.SendCallback callback) {
+        if (!canForward(original) || currentUserId == null) {
+            callback.onError(getApplication().getString(R.string.message_action_error));
+            return;
+        }
+        Message message = new Message();
+        message.setId(UUID.randomUUID().toString());
+        message.setConversationId(destination);
+        message.setSenderId(currentUserId);
+        message.setSenderName(currentUserName);
+        message.setContent(original.getContent());
+        message.setSentAt(System.currentTimeMillis());
+        switch (original.getType()) {
+            case POLL:
+                message.setPollOptions(original.getPollOptions());
+                repository.sendPoll(destination, message, callback);
+                return;
+            case IMAGE:
+            case VOICE:
+                forwardMedia(original, destination, message, callback);
+                return;
+            default:
+                repository.sendText(destination, message, callback);
+        }
+    }
+
+    private void forwardMedia(Message original, String destination, Message message, MessageRepository.SendCallback callback) {
+        boolean voice = original.getType() == Message.Type.VOICE;
+        String path = original.getMediaUrl();
+        MediaRepository.DownloadListener download = new MediaRepository.DownloadListener() {
+            @Override public void onSuccess(java.io.File file) {
+                MediaRepository.UploadListener upload = new MediaRepository.UploadListener() {
+                    @Override public void onProgress(int percent) { }
+                    @Override public void onError(String error) { callback.onError(error); }
+                    @Override public void onSuccess(String storagePath, long sizeBytes, String contentType) {
+                        message.setMediaUrl(storagePath);
+                        message.setFileSize(sizeBytes);
+                        message.setContentType(contentType);
+                        if (voice) {
+                            message.setDurationMs(original.getDurationMs());
+                            repository.sendVoice(destination, message, callback);
+                        } else repository.sendImage(destination, message, callback);
+                    }
+                };
+                if (voice) mediaRepository.uploadVoice(file, destination, currentUserId, message.getId(), upload);
+                else mediaRepository.uploadImage(Uri.fromFile(file), destination, currentUserId, message.getId(), upload);
+            }
+            @Override public void onError(String error) { callback.onError(error); }
+        };
+        if (voice) mediaRepository.downloadVoice(path, download);
+        else mediaRepository.downloadImage(path, mediaRepository.getImageCacheFile(path), download);
+    }
+
     private void upload(Message message, java.io.File voice, Uri image) {
         if (cleared || activeUploads.containsKey(message.getId())) return;
         MediaRepository.UploadListener listener = new MediaRepository.UploadListener() {
@@ -377,7 +477,7 @@ public class ChatViewModel extends AndroidViewModel {
                         if (cleared) return;
                         activeUploads.remove(message.getId());
                         updateStatus(message.getId(), Message.DeliveryStatus.FAILED);
-                        sendError.setValue(error == null || error.trim().isEmpty()
+                        reportSendFailure(message.getId(), error == null || error.trim().isEmpty()
                                 ? getApplication().getString(R.string.image_upload_error) : error);
                     }
                 };
@@ -385,6 +485,21 @@ public class ChatViewModel extends AndroidViewModel {
                 ? mediaRepository.uploadImage(image, conversationId, currentUserId, message.getId(), listener)
                 : mediaRepository.uploadVoice(voice, conversationId, currentUserId, message.getId(), listener);
         activeUploads.put(message.getId(), transfer);
+    }
+
+    private void reportSendFailure(String id, String error) {
+        if (peerUid == null || currentUserId == null || repository.isMock()) {
+            sendError.setValue(error);
+            return;
+        }
+        var db = com.google.firebase.firestore.FirebaseFirestore.getInstance();
+        com.example.utechat.feature.safety.UserSafety.blockReference(db, peerUid, currentUserId)
+                .get(com.google.firebase.firestore.Source.SERVER).addOnCompleteListener(result -> {
+                    Message pending = localOutgoing.get(id);
+                    if (cleared || pending == null || pending.getDeliveryStatus() != Message.DeliveryStatus.FAILED) return;
+                    boolean blocked = result.isSuccessful() && result.getResult().exists();
+                    sendError.setValue(blocked ? getApplication().getString(R.string.chat_blocked_by_peer) : error);
+                });
     }
 
     private void updateStatus(String id, Message.DeliveryStatus status) {
@@ -407,9 +522,21 @@ public class ChatViewModel extends AndroidViewModel {
             if (seen.add(item.getId())) merged.add(copyMessage(item));
             else replace(merged, copyMessage(item));
         }
+        for (Message recall : recalls.values()) if (seen.contains(recall.getId())) {
+            replace(merged, copyMessage(recall));
+        }
+        merged.removeIf(message -> hidden.contains(message.getId()));
+        for (Message message : merged) {
+            Message.Reply reply = message.getReply();
+            if (reply != null && (recalls.containsKey(reply.id) || hidden.contains(reply.id))) {
+                message.setReply(new Message.Reply(reply.id, reply.name,
+                        getApplication().getString(R.string.message_unavailable), "text"));
+            }
+        }
         merged.sort(Comparator.comparingLong(Message::getSentAt).thenComparing(
                 item -> item.getId() == null ? "" : item.getId()));
         messages.setValue(Resource.success(merged));
+        if (merged.isEmpty() && !hidden.isEmpty() && failedHistoryCursor == null) loadOlder();
     }
 
     private List<Message> currentList() {
@@ -452,6 +579,7 @@ public class ChatViewModel extends AndroidViewModel {
         copy.setStoredSenderName(source.getStoredSenderName());
         copy.setReply(source.getReply());
         copy.setDurationMs(source.getDurationMs());
+        copy.setReactions(source.getReactions());
         return copy;
     }
 
@@ -466,6 +594,7 @@ public class ChatViewModel extends AndroidViewModel {
     @Override
     protected void onCleared() {
         cleared = true;
+        if (recallSubscription != null) recallSubscription.remove();
         for (MediaRepository.Transfer upload : activeUploads.values()) upload.cancel();
         activeUploads.clear(); pendingImageUris.clear();
         for (java.io.File file : pendingVoiceFiles.values()) file.delete();

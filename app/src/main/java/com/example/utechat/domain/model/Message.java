@@ -6,13 +6,14 @@ package com.example.utechat.domain.model;
 public class Message {
 
     public enum Type {
-        TEXT, IMAGE, FILE, POLL, VOICE;
+        TEXT, IMAGE, FILE, POLL, VOICE, RECALLED;
 
         public static Type fromSchemaValue(String value) {
             if ("image".equalsIgnoreCase(value)) return IMAGE;
             if ("file".equalsIgnoreCase(value)) return FILE;
             if ("poll".equalsIgnoreCase(value)) return POLL;
             if ("voice".equalsIgnoreCase(value)) return VOICE;
+            if ("recalled".equalsIgnoreCase(value)) return RECALLED;
             return TEXT;
         }
     }
@@ -62,6 +63,7 @@ public class Message {
     private Reply reply;
     private String storedSenderName;
     private long durationMs;
+    private java.util.Map<String, String> reactions = java.util.Collections.emptyMap();
     // isFromMe được tính tại UI layer dựa trên currentUserId
 
     public Message() {}
@@ -71,6 +73,8 @@ public class Message {
     public void setStoredSenderName(String name) { storedSenderName = name; }
     public long getDurationMs() { return durationMs; }
     public void setDurationMs(long durationMs) { this.durationMs = durationMs; }
+    public java.util.Map<String, String> getReactions() { return reactions; }
+    public void setReactions(java.util.Map<String, String> reactions) { this.reactions = reactions; }
 
     // Getters & Setters
     public String getId() { return id; }

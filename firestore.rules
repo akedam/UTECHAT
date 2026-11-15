@@ -69,12 +69,17 @@ service cloud.firestore {
       match /deviceTokens/{tokenId} {
         allow read: if false;
         allow create, update: if isOwner()
-          && request.resource.data.keys().hasOnly(['token','platform','updatedAt'])
+          && request.resource.data.keys().hasOnly(['token','platform','updatedAt','showPreview','mutedChats'])
           && request.resource.data.token is string
           && request.resource.data.token.size() >= 20
           && request.resource.data.token.size() <= 4096
           && request.resource.data.platform in ['android', 'web']
-          && request.resource.data.updatedAt is int;
+          && request.resource.data.updatedAt is int
+          && (!('showPreview' in request.resource.data) ||
+            (request.resource.data.platform == 'web' && request.resource.data.showPreview is bool))
+          && (!('mutedChats' in request.resource.data) ||
+            (request.resource.data.platform == 'web' && request.resource.data.mutedChats is list
+              && request.resource.data.mutedChats.size() <= 500));
         allow delete: if isOwner();
       }
     }

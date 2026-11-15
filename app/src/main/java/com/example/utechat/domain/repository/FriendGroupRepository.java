@@ -16,6 +16,7 @@ public interface FriendGroupRepository {
     interface MembersListener { void changed(List<ConversationMember> items, String error); }
 
     void searchUsers(String prefix, Result<List<User>> callback);
+    void findUser(String uid, Result<User> callback);
     void loadUsers(List<String> uids, Result<List<User>> callback);
     Subscription observeFriendships(String uid, FriendshipsListener listener);
     void requestFriend(String fromUid, String toUid, Result<Void> callback);

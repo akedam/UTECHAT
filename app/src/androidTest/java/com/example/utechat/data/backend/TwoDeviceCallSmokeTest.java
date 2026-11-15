@@ -89,7 +89,16 @@ public final class TwoDeviceCallSmokeTest {
                 Thread.sleep(200);
             }
             assertEquals("Both Agora peers must join the same channel", "Đã kết nối",status);
-            if ("video".equals(media)) {
+            boolean upgradeToVideo = "audio".equals(media) && "true".equals(args.getString("rtcUpgrade"));
+            if (upgradeToVideo) {
+                CallActivity active = call;
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                    View camera = active.findViewById(R.id.btn_toggle_camera);
+                    assertTrue("Camera toggle must be enabled during a connected voice call", camera.isEnabled());
+                    camera.performClick();
+                });
+            }
+            if ("video".equals(media) || upgradeToVideo) {
                 long videoDeadline=System.currentTimeMillis()+20_000;
                 while(!videoDecoded(call) && System.currentTimeMillis()<videoDeadline) Thread.sleep(200);
                 assertTrue("Remote camera frames must be decoded, not just channel membership",videoDecoded(call));

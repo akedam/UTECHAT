@@ -40,5 +40,9 @@ public interface MessageRepository {
     void votePoll(String conversationId, String messageId, String voterUid, int optionIndex,
                   SendCallback callback);
 
+    default Subscription listenRecalls(String conversationId, Listener listener) { return () -> {}; }
+    default void recall(String conversationId, String messageId, String senderId, SendCallback callback) { }
+    default void react(String conversationId, String messageId, String uid, String emoji, SendCallback callback) { }
+
     boolean isMock();
 }

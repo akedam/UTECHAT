@@ -21,6 +21,8 @@ import com.example.utechat.feature.auth.ui.LoginActivity;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 import com.example.utechat.app.DevicePresenceManager;
 import com.example.utechat.feature.notifications.NotificationPreferences;
+import com.example.utechat.feature.friends.qr.FriendQrImage;
+import com.example.utechat.domain.model.User;
 
 /**
  * Fragment hiển thị hồ sơ cá nhân và cài đặt.
@@ -34,6 +36,30 @@ public class ProfileFragment extends Fragment {
     private View btnEditProfile, btnLogout;
     private SwitchMaterial switchPresence, switchMessagePreview;
     private TextView tvPresenceSummary;
+    private final androidx.activity.result.ActivityResultLauncher<String> saveQrDocument = registerForActivityResult(
+            new androidx.activity.result.contract.ActivityResultContracts.CreateDocument("image/png"), uri -> {
+                if (uri == null || !isAdded()) return;
+                User user = AuthRepositoryProvider.get(requireContext()).getCurrentUser();
+                if (user == null) return;
+                var context = requireContext().getApplicationContext();
+                new Thread(() -> {
+                    int message;
+                    try (var output = context.getContentResolver().openOutputStream(uri, "w")) {
+                        if (output == null) throw new java.io.IOException("QR destination unavailable");
+                        var bitmap = FriendQrImage.make(user.getUid());
+                        try {
+                            if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output))
+                                throw new java.io.IOException("QR export failed");
+                        } finally { bitmap.recycle(); }
+                        message = R.string.friend_qr_saved;
+                    } catch (java.io.IOException | com.google.zxing.WriterException | RuntimeException failure) {
+                        message = R.string.friend_qr_creation_error;
+                    }
+                    int result = message;
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+                            Toast.makeText(context, result, Toast.LENGTH_SHORT).show());
+                }, "UTEChat QR export").start();
+            });
 
     @Nullable
     @Override
@@ -63,7 +89,17 @@ public class ProfileFragment extends Fragment {
         setupListeners();
         View privacy = view.findViewById(R.id.layout_privacy);
         View notifications = view.findViewById(R.id.layout_notifications);
+        View fullscreen = view.findViewById(R.id.btn_call_full_screen);
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            fullscreen.setVisibility(View.VISIBLE);
+            fullscreen.setOnClickListener(button -> startActivity(new Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                    android.net.Uri.fromParts("package", requireContext().getPackageName(), null))));
+        }
         View blocked = view.findViewById(R.id.btn_blocked_people);
+        View qr = view.findViewById(R.id.btn_profile_qr);
+        qr.setVisibility(AuthRepositoryProvider.isMock(requireContext()) ? View.GONE : View.VISIBLE);
+        qr.setOnClickListener(v -> showMyQr());
         blocked.setVisibility(AuthRepositoryProvider.isMock(requireContext()) ? View.GONE : View.VISIBLE);
         blocked.setOnClickListener(v -> com.example.utechat.feature.safety.UserSafety.showBlockedAccounts(requireActivity()));
         privacy.setVisibility(View.GONE);
@@ -80,6 +116,62 @@ public class ProfileFragment extends Fragment {
         });
         ivAvatar.setOnClickListener(v -> btnEditProfile.performClick());
         tvName.setOnClickListener(v -> btnEditProfile.performClick());
+    }
+
+    private void showMyQr() {
+        User user = viewModel.getCurrentUser().getValue();
+        if (user == null) user = AuthRepositoryProvider.get(requireContext()).getCurrentUser();
+        if (user == null) return;
+        String uid = user.getUid();
+        android.graphics.Bitmap bitmap;
+        try {
+            bitmap = FriendQrImage.make(uid);
+        } catch (com.google.zxing.WriterException | IllegalArgumentException error) {
+            Toast.makeText(requireContext(), R.string.friend_qr_creation_error, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        View card = getLayoutInflater().inflate(R.layout.dialog_friend_qr, null);
+        ((ImageView) card.findViewById(R.id.iv_friend_qr)).setImageBitmap(bitmap);
+        ((TextView) card.findViewById(R.id.tv_friend_qr_name)).setText(user.getDisplayName());
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.friend_qr_mine).setView(card)
+                .setNegativeButton(R.string.community_close, null)
+                .setNeutralButton(R.string.friend_qr_save, (dialog, which) -> saveQrDocument.launch("UTEChat-QR.png"))
+                .setPositiveButton(R.string.friend_qr_share, (dialog, which) -> shareQr(bitmap, uid))
+                .show();
+    }
+
+    private void shareQr(android.graphics.Bitmap bitmap, String uid) {
+        try {
+            android.content.Context context = requireContext();
+            java.io.File directory = new java.io.File(context.getCacheDir(), "friend-qr");
+            if (!directory.isDirectory() && !directory.mkdirs()) throw new java.io.IOException("QR cache unavailable");
+            java.io.File accountDirectory = new java.io.File(directory, uid);
+            if (!accountDirectory.isDirectory() && !accountDirectory.mkdirs()) throw new java.io.IOException("QR cache unavailable");
+            java.io.File image = new java.io.File(accountDirectory, "UTEChat-QR.png");
+            if (!image.isFile()) {
+                java.io.File temporary = java.io.File.createTempFile("qr-", ".png", accountDirectory);
+                try {
+                    try (var output = new java.io.FileOutputStream(temporary)) {
+                        if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) {
+                            throw new java.io.IOException("QR export failed");
+                        }
+                    }
+                    if (!temporary.renameTo(image)) throw new java.io.IOException("QR export failed");
+                } finally {
+                    temporary.delete();
+                }
+            }
+            android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(context,
+                    context.getPackageName() + ".friendqr", image);
+            Intent share = new Intent(Intent.ACTION_SEND).setType("image/png")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            share.setClipData(android.content.ClipData.newRawUri(getString(R.string.friend_qr_mine), uri));
+            startActivity(Intent.createChooser(share, getString(R.string.friend_qr_share)));
+        } catch (java.io.IOException | IllegalArgumentException error) {
+            Toast.makeText(requireContext(), R.string.friend_qr_creation_error, Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override

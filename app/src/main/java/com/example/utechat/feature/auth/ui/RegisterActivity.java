@@ -71,7 +71,10 @@ public class RegisterActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnRegister.setOnClickListener(v -> attemptRegister());
-        tvGoToLogin.setOnClickListener(v -> finish()); // quay lại Login
+        tvGoToLogin.setOnClickListener(v -> {
+            if (isTaskRoot()) AuthGate.replaceTask(this, LoginActivity.class);
+            else finish();
+        });
     }
 
     private void attemptRegister() {

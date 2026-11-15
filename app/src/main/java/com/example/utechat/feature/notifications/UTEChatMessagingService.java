@@ -46,7 +46,10 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         if (currentUser == null || !currentUser.isEmailVerified() || !recipientUid.equals(currentUser.getUid())) return;
         if (new com.example.utechat.feature.chat.ui.ChatPreferences(this, conversationId).enabled("muted")) return;
         if (!NotificationPreferences.markEventSeen(this, conversationId + ":" + messageId)) return;
-        if (UteChatApplication.isChatVisible(conversationId)) return;
+        if (UteChatApplication.isChatVisible(conversationId)) {
+            playMessageSound();
+            return;
+        }
 
         boolean showPreview = NotificationPreferences.showPreview(this);
         String title = getString(R.string.notifications_generic_title);
@@ -62,6 +65,19 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         String type = "group".equals(data.get("conversationType")) ? "group" : "direct";
         postNotification(conversationId, title, body, type,
                 limit(data.get("conversationTitle"), 80));
+    }
+
+    private void playMessageSound() {
+        android.app.NotificationManager manager = getSystemService(android.app.NotificationManager.class);
+        if (manager == null || !manager.areNotificationsEnabled()) return;
+        android.app.NotificationChannel channel = manager.getNotificationChannel(getString(R.string.notifications_channel_id));
+        if (channel == null || channel.getImportance() < android.app.NotificationManager.IMPORTANCE_DEFAULT
+                || channel.getSound() == null) return;
+        android.media.Ringtone sound = android.media.RingtoneManager.getRingtone(this, channel.getSound());
+        if (sound != null) {
+            sound.setAudioAttributes(channel.getAudioAttributes());
+            sound.play();
+        }
     }
 
     private void postNotification(String conversationId, String title, String body,

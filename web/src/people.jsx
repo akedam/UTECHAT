@@ -1,51 +1,62 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDownToLine, Bell, Camera, ChevronRight, CircleUserRound, Copy, ImagePlus,
-  LockKeyhole, LogOut, MessageCircle, Plus, QrCode, Search, Shield, Users, UsersRound
+  Eye, LockKeyhole, LogOut, MessageCircle, Phone, Plus, QrCode, Search, Shield, Users, UsersRound, Video
 } from 'lucide-react'
 import {
-  answerFriend, blockUser, changeMembership, createGroup, deleteGroup, profile, qrPrefix, renameGroup,
-  searchPeople, sendFriend, setDeputy, setVisibility, transferGroup, upgradeGroup, watchMembers
+  answerFriend, blockUser, changeMembership, createGroup, deleteGroup, isOnline, profile, qrPrefix, renameGroup,
+  searchPeople, sendFriend, setDeputy, setVisibility, transferGroup, upgradeGroup, watchMembers, watchPresence
 } from './chat-data'
-import { configureNotifications, disableNotifications, notificationsEnabled } from './notifications'
+import { configureNotifications, disableNotifications, notificationsEnabled, notificationPreferences, saveNotificationPreferences } from './notifications'
 import { Avatar, Empty, IconButton, Modal } from './ui'
 
-export function PersonRow({ person, note, onClick, children }) {
+export function PersonRow({ person, note, onClick, online = false, children }) {
   return <div className="person-row">
     <button className="person-main" onClick={onClick} disabled={!onClick}>
-      <Avatar name={person.displayName} photo={person.photoUrl} />
+      <Avatar name={person.displayName} photo={person.photoUrl} online={online} />
       <span className="row-text"><strong>{person.displayName}</strong>{note && <small>{note}</small>}</span>
     </button>
     {children && <div className="person-actions">{children}</div>}
   </div>
 }
 
-export function Friends({ uid, people, friendships, open, error, setDialog }) {
+export function Friends({ uid, people, friendships, open, call, blocked, error, setDialog }) {
   const [section, setSection] = useState('friends')
+  const [online, setOnline] = useState({})
   const accepted = friendships.filter(row => row.status === 'accepted')
   const pending = friendships.filter(row => row.status === 'pending')
   const incoming = pending.filter(row => row.toUid === uid).length
   const other = row => row.fromUid === uid ? row.toUid : row.fromUid
-  const list = (section === 'friends' ? accepted : pending).slice().sort((a, b) =>
+  const peerIds = accepted.map(other).filter(id => !blocked.includes(id)).sort().join(',')
+  useEffect(() => {
+    const stops = (peerIds ? peerIds.split(',') : []).map(id => watchPresence(id, presence =>
+      setOnline(previous => ({ ...previous, [id]: isOnline(presence) }))))
+    return () => stops.forEach(stop => stop())
+  }, [peerIds])
+  const list = (section === 'requests' ? pending : accepted.filter(row => section !== 'online' ||
+    (online[other(row)] && !blocked.includes(other(row))))).slice().sort((a, b) =>
     (people[other(a)]?.displayName || '').localeCompare(people[other(b)]?.displayName || '', 'vi'))
   return <div className="tab-page">
     <div className="segmented" aria-label="Danh sách bạn bè">
       <button aria-pressed={section === 'friends'} onClick={() => setSection('friends')}>Bạn bè</button>
+      <button aria-pressed={section === 'online'} onClick={() => setSection('online')}>Trực tuyến</button>
       <button aria-pressed={section === 'requests'} onClick={() => setSection('requests')}>Lời mời{incoming > 0 && <span className="mini-badge">{incoming}</span>}</button>
     </div>
     {list.length ? list.map(row => {
       const id = other(row)
       const person = people[id] || { displayName: 'Người dùng UTEChat' }
-      if (row.status === 'accepted') return <PersonRow key={id} person={person} onClick={() => open(id)}>
-        <IconButton icon={MessageCircle} label={`Nhắn tin với ${person.displayName}`} onClick={() => open(id)} />
+      if (row.status === 'accepted') return <PersonRow key={id} person={person}
+        online={!blocked.includes(id) && online[id]} onClick={() => open(id)}>
+        <IconButton icon={Phone} label={`Gọi thoại với ${person.displayName}`} onClick={() => call(id, 'audio')} disabled={blocked.includes(id)} />
+        <IconButton icon={Video} label={`Gọi video với ${person.displayName}`} onClick={() => call(id, 'video')} disabled={blocked.includes(id)} />
       </PersonRow>
       const received = row.toUid === uid
       return <PersonRow key={id} person={person} note={received ? 'Đã gửi lời mời kết bạn' : 'Đang chờ phản hồi'}>
         {received && <button className="primary compact" onClick={() => answerFriend(row.id, true).catch(error)}>Chấp nhận</button>}
         <button className="text-button" onClick={() => answerFriend(row.id, false).catch(error)}>{received ? 'Từ chối' : 'Thu hồi'}</button>
       </PersonRow>
-    }) : <Empty icon={UsersRound} title={section === 'friends' ? 'Chưa có bạn bè' : 'Chưa có lời mời'}
-      description={section === 'friends' ? 'Tìm bạn theo tên hoặc quét mã QR để kết bạn.' : 'Lời mời kết bạn sẽ xuất hiện ở đây.'}
+    }) : <Empty icon={UsersRound} title={section === 'online' ? 'Chưa có bạn trực tuyến' : section === 'friends' ? 'Chưa có bạn bè' : 'Chưa có lời mời'}
+      description={section === 'friends' ? 'Tìm bạn theo tên hoặc quét mã QR để kết bạn.' : undefined}
       action={section === 'friends' && <button className="secondary" onClick={() => setDialog({ type: 'search' })}><Plus size={17} />Tìm bạn</button>} />}
   </div>
 }
@@ -66,7 +77,7 @@ function PersonResult({ person, friendships, uid, open, error, close }) {
   </PersonRow>
 }
 
-export function SearchDialog({ uid, conversations, titleOf, friendships, open, select, close, error }) {
+export function SearchDialog({ uid, conversations, titleOf, friendships, friends, open, select, close, error }) {
   const [value, setValue] = useState('')
   const [found, setFound] = useState([])
   const [loading, setLoading] = useState(false)
@@ -82,19 +93,25 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, open, s
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [entered, error])
-  const matches = entered ? conversations.filter(item => titleOf(item).name.toLowerCase().includes(entered.toLowerCase())) : []
-  return <Modal title="Tìm kiếm" onClose={close} className="search-dialog">
+  const key = entered.toLocaleLowerCase('vi')
+  const matches = key ? conversations.filter(item => titleOf(item).name.toLocaleLowerCase('vi').includes(key)) : []
+  const matchingFriends = key ? friends.filter(person => person.displayName.toLocaleLowerCase('vi').includes(key)) : []
+  const friendIds = new Set(matchingFriends.map(person => person.id))
+  const results = found.filter(person => !friendIds.has(person.id))
+  return <Modal title="Tìm kiếm" onClose={close} onBack={close} className="search-dialog app-screen">
     <div className="search-box"><Search size={20} /><input autoFocus aria-label="Tìm bạn hoặc hội thoại" placeholder="Nhập tên bạn hoặc cuộc trò chuyện"
       value={value} onChange={event => setValue(event.target.value)} /></div>
     {!entered && <Empty icon={Search} title="Tìm bạn và hội thoại" description="Nhập tên để tìm kiếm." />}
+    {matchingFriends.length > 0 && <><h3 className="section-label">Bạn bè</h3>{matchingFriends.map(person =>
+      <PersonResult key={person.id} {...{ person, friendships, uid, open, error, close }} />)}</>}
     {matches.length > 0 && <><h3 className="section-label">Hội thoại</h3>{matches.map(item => {
       const { name, photo } = titleOf(item)
       return <PersonRow key={item.id} person={{ displayName: name, photoUrl: photo }} onClick={() => { close(); select(item.id) }}><ChevronRight size={17} /></PersonRow>
     })}</>}
-    {found.length > 0 && <><h3 className="section-label">Người dùng</h3>{found.map(person =>
+    {results.length > 0 && <><h3 className="section-label">Người dùng</h3>{results.map(person =>
       <PersonResult key={person.id} {...{ person, friendships, uid, open, error, close }} />)}</>}
     {loading && <p className="loader" role="status">Đang tìm…</p>}
-    {entered && !loading && !found.length && !matches.length && <Empty icon={Search} title="Không tìm thấy kết quả" description="Thử tên hiển thị khác." />}
+    {entered && !loading && !results.length && !matches.length && !matchingFriends.length && <Empty icon={Search} title="Không tìm thấy kết quả" description="Thử tên hiển thị khác." />}
   </Modal>
 }
 
@@ -237,7 +254,7 @@ export function QrDialog({ user, friendships, open, error, close }) {
   </Modal>
 }
 
-export function Community({ groups, select, create }) {
+export function Community({ groups, select, create, manage }) {
   const [section, setSection] = useState('groups')
   const list = groups.filter(group => Boolean(group.isCommunity) === (section === 'communities'))
   return <div className="tab-page">
@@ -249,8 +266,15 @@ export function Community({ groups, select, create }) {
     </div>
     <div className="segmented"><button aria-pressed={section === 'groups'} onClick={() => setSection('groups')}>Nhóm</button>
       <button aria-pressed={section === 'communities'} onClick={() => setSection('communities')}>Cộng đồng</button></div>
-    {list.length ? list.map(group => <PersonRow key={group.id} person={{ displayName: group.groupName || 'Nhóm UTEChat', photoUrl: group.groupPhotoUrl }}
-      note={`${group.participantIds.length} thành viên`} onClick={() => select(group.id)}><ChevronRight size={19} /></PersonRow>)
+    {list.length ? list.map(group => <article className="community-card" key={group.id}>
+      <PersonRow person={{ displayName: group.groupName || 'Nhóm UTEChat', photoUrl: group.groupPhotoUrl }}
+        note={`${group.participantIds.length}/${group.isCommunity ? 10 : 5} thành viên`}
+        onClick={() => select(group.id)} />
+      <div className="community-actions">
+        <button className="secondary compact" onClick={() => select(group.id)}><MessageCircle size={17} /> Mở chat</button>
+        <button className="secondary compact" onClick={() => manage(group.id)}><UsersRound size={17} /> Thành viên</button>
+      </div>
+    </article>)
       : <Empty icon={Users} title={section === 'groups' ? 'Chưa có nhóm' : 'Chưa có cộng đồng'}
         description={section === 'groups' ? 'Nhóm bạn tham gia sẽ xuất hiện ở đây.' : 'Cộng đồng có thể có tối đa 10 thành viên.'} />}
   </div>
@@ -297,11 +321,11 @@ export function GroupSettings({ group, uid, people, friends, error, close, confi
     try { await fn() } catch (failure) { error(failure) } finally { setBusy(false) }
   }
   const ask = (heading, description, label, action, danger = false) => confirm({ title: heading, description, label, action, danger })
-  return <Modal title={`Quản lý ${title}`} onClose={close}>
+  return <Modal title={`Quản lý ${title}`} onClose={close} onBack={close} className="app-screen">
     <div className="settings-hero"><Avatar name={group.groupName} photo={group.groupPhotoUrl} size={62} group />
       <strong>{group.groupName}</strong><small>{group.participantIds.length} / {group.isCommunity ? 10 : 5} thành viên</small></div>
     <div className="button-row group-tools">
-      <button className="secondary compact" onClick={search}><Search size={16} /> Tìm tin nhắn</button>
+      {search && <button className="secondary compact" onClick={search}><Search size={16} /> Tìm tin nhắn</button>}
       <button className="secondary compact" onClick={gallery}><ImagePlus size={16} /> Ảnh đã chia sẻ</button>
     </div>
     {manager && <>
@@ -360,7 +384,9 @@ export function GroupSettings({ group, uid, people, friends, error, close, confi
 
 export function Profile({ user, data, presence, blocked, people, setDialog, error, notify, signout }) {
   const [enabled, setEnabled] = useState(() => notificationsEnabled(user.uid))
+  const [preview, setPreview] = useState(() => notificationPreferences(user.uid).showPreview)
   const [busy, setBusy] = useState(false)
+  const [savingPreview, setSavingPreview] = useState(false)
   return <div className="tab-page profile-page">
     <div className="profile-hero"><Avatar name={data.displayName} photo={data.photoUrl} size={76} />
       <h3>{data.displayName}</h3><p>{user.email}</p>{data.bio && <p>{data.bio}</p>}
@@ -375,6 +401,13 @@ export function Profile({ user, data, presence, blocked, people, setDialog, erro
         setBusy(true)
         try { await (on ? configureNotifications(user.uid, true) : disableNotifications(user.uid)); setEnabled(on); notify(on ? 'Đã bật thông báo.' : 'Đã tắt thông báo.') }
         catch (failure) { error(failure) } finally { setBusy(false) }
+      }} /></label>
+    <label className="settings-row"><Eye /><span><strong>Xem trước tin nhắn</strong><small>Hiện nội dung trong thông báo của thiết bị</small></span>
+      <input type="checkbox" role="switch" checked={preview} disabled={savingPreview} onChange={async event => {
+        const value = event.target.checked
+        setSavingPreview(true)
+        try { await saveNotificationPreferences(user.uid, { showPreview: value }); setPreview(value) }
+        catch (failure) { error(failure) } finally { setSavingPreview(false) }
       }} /></label>
     <button className="settings-row" onClick={() => setDialog({ type: 'password' })}><LockKeyhole /><span><strong>Đặt lại mật khẩu</strong><small>Gửi liên kết về email đã xác minh</small></span><ChevronRight /></button>
     <button className="settings-row" onClick={() => setDialog({ type: 'blocked', blocked, people })}><Shield /><span><strong>Danh sách chặn</strong><small>{blocked.length} tài khoản</small></span><ChevronRight /></button>
