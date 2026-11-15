@@ -117,7 +117,9 @@ function Workspace({ user }) {
   useEffect(() => {
     const onPop = () => { setSelected(readChat()); if (readChat()) setTab('messages'); setDialog(null) }
     const onWorker = event => {
-      if (event.data?.type === 'conversation' && event.data.uid === user.uid) setChat(event.data.id)
+      if (event.data?.type !== 'conversation' || event.data.uid !== user.uid) return
+      setChat(event.data.id)
+      event.ports[0]?.postMessage(true)
     }
     window.addEventListener('popstate', onPop)
     navigator.serviceWorker?.addEventListener('message', onWorker)

@@ -1,6 +1,7 @@
 {
   "apiKey": "AIzaSyBXAxjTZsgA-rDpDNRG494JOezcppt76q0",
   "authDomain": "utechat-ab9d8.firebaseapp.com",
+  "webPushPublicKey": "BLY_nLm1uubDQY0XFhse7Cv8r-OManIjJfin0bznDE_-rrHhOF-PPcJcDzszSJObvqMMlxc2isNtlKzADbAStic",
   "databaseURL": "https://utechat-ab9d8-default-rtdb.asia-southeast1.firebasedatabase.app",
   "projectId": "utechat-ab9d8",
   "storageBucket": "utechat-ab9d8.firebasestorage.app",

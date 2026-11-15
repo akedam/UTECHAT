@@ -4,11 +4,14 @@ import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import config from './firebase-config.json'
 
+const { webPushPublicKey, ...firebaseConfig } = config
+export const pushPublicKey = import.meta.env.VITE_FIREBASE_WEB_PUSH_KEY || webPushPublicKey
 const emulator = import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === '1'
+const emulatorProject = import.meta.env.VITE_EMULATOR_PROJECT || 'demo-utechat'
 export const app = initializeApp(emulator ? {
   apiKey: 'emulator', appId: '1:100:web:utechat',
-  projectId: 'demo-utechat', databaseURL: 'https://demo-utechat-default-rtdb.firebaseio.com'
-} : config)
+  projectId: emulatorProject, databaseURL: `https://${emulatorProject}-default-rtdb.firebaseio.com`
+} : firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const presenceDb = getDatabase(app)

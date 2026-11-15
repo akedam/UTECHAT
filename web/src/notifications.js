@@ -1,5 +1,5 @@
 import { deleteDoc, doc, setDoc } from 'firebase/firestore'
-import { app, db } from './firebase'
+import { app, db, pushPublicKey } from './firebase'
 
 const registration = () => navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready)
 const tokenKey = uid => `utechat.web.fcm.${uid}`
@@ -26,8 +26,14 @@ export async function configureNotifications(uid, request = false) {
   const { getMessaging, getToken, isSupported } = await import('firebase/messaging')
   if (!await isSupported()) throw new Error('Trình duyệt này chưa hỗ trợ thông báo UTEChat.')
   const serviceWorkerRegistration = await registration()
-  const vapidKey = import.meta.env.VITE_FIREBASE_WEB_PUSH_KEY
-  const token = await getToken(getMessaging(app), { serviceWorkerRegistration, ...(vapidKey ? { vapidKey } : {}) })
+  let token
+  try {
+    token = await getToken(getMessaging(app), { serviceWorkerRegistration, vapidKey: pushPublicKey })
+  } catch (error) {
+    if (error.code === 'messaging/token-subscribe-failed' || error.name === 'AbortError')
+      throw new Error('Chưa đăng ký được thông báo trên thiết bị này. Hãy mở UTEChat từ màn hình chính rồi thử lại.')
+    throw error
+  }
   const id = await hash(token)
   const previous = localStorage.getItem(tokenKey(uid))
   await setDoc(tokenDoc(uid, id), { token, platform: 'web', updatedAt: Date.now() })

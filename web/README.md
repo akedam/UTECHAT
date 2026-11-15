@@ -22,7 +22,7 @@ npm.cmd --prefix web run build
 firebase.cmd deploy --only hosting --project utechat-ab9d8
 ```
 
-`src/firebase-config.json` gồm thông tin công khai cho Firebase SDK. Dùng `VITE_FIREBASE_WEB_PUSH_KEY` nếu cấu hình khóa **công khai** từ Firebase Console, mục **Cloud Messaging → Web Push certificates**. Firebase Admin JSON, Agora Certificate và khóa lưu trữ chỉ thuộc backend, tuyệt đối không đưa vào các biến `VITE_*`.
+`src/firebase-config.json` gồm thông tin công khai cho Firebase SDK và khóa Web Push của dự án. Khi đổi dự án, lấy khóa **công khai** ở Firebase Console trong **Cloud Messaging → Web Push certificates** rồi cập nhật `webPushPublicKey` hoặc đặt `VITE_FIREBASE_WEB_PUSH_KEY`. Firebase Admin JSON, Agora Certificate và khóa lưu trữ chỉ thuộc backend.
 
 Backend Render chỉ chấp nhận truy cập bằng trình duyệt từ hai miền Firebase Hosting của dự án. Nếu đổi miền, cập nhật `WEB_ORIGINS` trong `server/call-token/backend.js`. Truy cập từ APK tiếp tục dùng API và Firebase ID token như trước.
 
