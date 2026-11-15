@@ -72,7 +72,7 @@ service cloud.firestore {
           && request.resource.data.token is string
           && request.resource.data.token.size() >= 20
           && request.resource.data.token.size() <= 4096
-          && request.resource.data.platform == 'android'
+          && request.resource.data.platform in ['android', 'web']
           && request.resource.data.updatedAt is int;
         allow delete: if isOwner();
       }

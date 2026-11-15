@@ -308,6 +308,13 @@ test('FCM routing tokens are owner-writable but never client-readable', async ()
   await assertFails(setDoc(doc(bob, 'users/alice/deviceTokens/attacker'), {
     token: 'another-valid-length-fcm-registration-token-value', platform: 'android', updatedAt: 1234,
   }));
+  const webToken = doc(alice, 'users/alice/deviceTokens/web-hash');
+  await assertSucceeds(setDoc(webToken, {
+    token: 'a-valid-length-web-registration-token-value', platform: 'web', updatedAt: 1234,
+  }));
+  await assertFails(getDoc(webToken));
+  await assertFails(deleteDoc(doc(bob, 'users/alice/deviceTokens/web-hash')));
+  await assertSucceeds(deleteDoc(webToken));
 });
 
 test('an authenticated user can create a canonical friendship request', async () => {
