@@ -40,7 +40,7 @@ public final class PushTokenRepository {
         if (token == null || token.trim().isEmpty()) return;
         try {
             FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-            if (user == null) return;
+            if (user == null || !user.isEmailVerified()) return;
             String hash = sha256(token);
             SharedPreferences prefs = context.getApplicationContext()
                     .getSharedPreferences(PREFS, Context.MODE_PRIVATE);

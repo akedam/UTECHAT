@@ -46,6 +46,10 @@ public final class MockAuthRepository implements AuthRepository {
                 null, bio, true, System.currentTimeMillis())));
     }
 
+    @Override public void resetPassword(String email, Callback<Void> callback) {
+        callback.onError(new AuthException(appContext.getString(R.string.reset_password_mock)));
+    }
+
     @Override public void register(String displayName, String email, String password, Callback<User> callback) {
         deliver(callback, saveUser(new User("mock_" + UUID.randomUUID(), displayName, email,
                 null, "", true, System.currentTimeMillis())));

@@ -6,17 +6,38 @@ package com.example.utechat.domain.model;
 public class Message {
 
     public enum Type {
-        TEXT, IMAGE, FILE, POLL;
+        TEXT, IMAGE, FILE, POLL, VOICE;
 
         public static Type fromSchemaValue(String value) {
             if ("image".equalsIgnoreCase(value)) return IMAGE;
             if ("file".equalsIgnoreCase(value)) return FILE;
             if ("poll".equalsIgnoreCase(value)) return POLL;
+            if ("voice".equalsIgnoreCase(value)) return VOICE;
             return TEXT;
         }
     }
 
     public enum DeliveryStatus { SENDING, SENT, DELIVERED, READ, FAILED }
+
+    public static final class Reply {
+        public final String id, name, text, type;
+
+        public Reply(String id, String name, String text, String type) {
+            this.id = id;
+            this.name = name;
+            this.text = text;
+            this.type = type;
+        }
+
+        @Override public boolean equals(Object other) {
+            if (!(other instanceof Reply)) return false;
+            Reply reply = (Reply) other;
+            return id.equals(reply.id) && name.equals(reply.name)
+                    && text.equals(reply.text) && type.equals(reply.type);
+        }
+
+        @Override public int hashCode() { return java.util.Objects.hash(id, name, text, type); }
+    }
 
     private String id;
     private String conversationId;
@@ -38,9 +59,18 @@ public class Message {
     private java.util.List<String> pollOptions;
     private java.util.Map<String, Integer> pollVotes;
     private DeliveryStatus deliveryStatus = DeliveryStatus.SENT;
+    private Reply reply;
+    private String storedSenderName;
+    private long durationMs;
     // isFromMe được tính tại UI layer dựa trên currentUserId
 
     public Message() {}
+    public Reply getReply() { return reply; }
+    public void setReply(Reply reply) { this.reply = reply; }
+    public String getStoredSenderName() { return storedSenderName == null ? senderName : storedSenderName; }
+    public void setStoredSenderName(String name) { storedSenderName = name; }
+    public long getDurationMs() { return durationMs; }
+    public void setDurationMs(long durationMs) { this.durationMs = durationMs; }
 
     // Getters & Setters
     public String getId() { return id; }

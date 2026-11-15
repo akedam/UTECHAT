@@ -53,14 +53,70 @@ public final class BackendMediaRepository implements MediaRepository {
         return job;
     }
     @Override public Transfer downloadImage(String path,File destination,DownloadListener listener) {
+        return download(path, destination, false, listener);
+    }
+
+    @Override public boolean supportsVoice() { return isAvailable(); }
+
+    @Override public Transfer uploadVoice(File source, String conversationId, String uid, String messageId,
+                                          UploadListener listener) {
+        Job job = new Job();
+        job.future = IO.submit(() -> {
+            try {
+                if (!segment(conversationId) || !segment(uid) || !segment(messageId)) throw new IllegalArgumentException();
+                byte[] bytes;
+                try (InputStream input = new java.io.FileInputStream(source)) {
+                    bytes = readBounded(input, 512 * 1024);
+                }
+                String path = "conversations/" + conversationId + "/" + uid + "/" + messageId;
+                if (!job.active) return;
+                var response = BackendClient.request("PUT", voiceRoute(path), bytes, "audio/mp4", true);
+                if (!response.ok()) {
+                    failUpload(job, listener, response.status == 404 ? R.string.voice_unavailable
+                            : response.status == 403 ? R.string.contact_unavailable : R.string.voice_upload_error);
+                    return;
+                }
+                var result = response.json();
+                if (!path.equals(result.getString("path")) || result.getLong("size") != bytes.length
+                        || !"audio/mp4".equals(result.getString("contentType"))) throw new IllegalStateException();
+                main.post(() -> {
+                    if (job.active) {
+                        job.active = false;
+                        listener.onSuccess(path, bytes.length, "audio/mp4");
+                    }
+                });
+            } catch (Exception error) {
+                failUpload(job, listener, R.string.voice_upload_error);
+            }
+        });
+        return job;
+    }
+
+    private void failUpload(Job job, UploadListener listener, int error) {
+        main.post(() -> {
+            if (job.active) {
+                job.active = false;
+                listener.onError(context.getString(error));
+            }
+        });
+    }
+
+    @Override public Transfer downloadVoice(String path, DownloadListener listener) {
+        return download(path, cacheFile(path, ".m4a"), true, listener);
+    }
+
+    private Transfer download(String path, File destination, boolean voice, DownloadListener listener) {
         Job job=new Job();
         job.future=IO.submit(() -> {
             File temporary=null;
             try {
                 if(!validPath(path) || destination==null)throw new Exception();
-                BackendClient.Response response=BackendClient.request("GET",route(path),null,null,true);
-                String type=ImageUploadPolicy.normalizeMimeType(response.contentType==null?"":response.contentType.split(";")[0]);
-                if(!response.ok() || !validImage(response.body,type))throw new Exception();
+                BackendClient.Response response=BackendClient.request("GET",voice ? voiceRoute(path) : route(path),null,null,true);
+                String type = response.contentType == null ? "" : response.contentType.split(";")[0];
+                boolean valid = voice ? "audio/mp4".equals(type) && response.body.length > 0
+                        && response.body.length <= 512 * 1024
+                        : validImage(response.body, ImageUploadPolicy.normalizeMimeType(type));
+                if(!response.ok() || !valid)throw new Exception();
                 if(!job.active)return;
                 File parent=destination.getParentFile();
                 if(parent==null || (!parent.isDirectory() && !parent.mkdirs()))throw new Exception();
@@ -72,31 +128,40 @@ public final class BackendMediaRepository implements MediaRepository {
                 main.post(() -> {if(job.active){job.active=false;listener.onSuccess(destination);}});
             } catch(Exception error) {
                 if(temporary!=null)temporary.delete();
-                main.post(() -> {if(job.active){job.active=false;listener.onError(context.getString(R.string.image_download_error));}});
+                main.post(() -> {if(job.active){job.active=false;listener.onError(context.getString(
+                        voice ? R.string.voice_play_error : R.string.image_download_error));}});
             }
         });
         return job;
     }
     @Override public File getImageCacheFile(String path) {
+        return cacheFile(path, ".image");
+    }
+
+    private File cacheFile(String path, String extension) {
         if(!validPath(path))return null;
         try {
             String uid=FirebaseAuth.getInstance().getUid();if(uid==null)return null;
             File directory=new File(context.getCacheDir(),"backend-media-"+digest(uid));
             if(!directory.isDirectory() && !directory.mkdirs())return null;
-            return new File(directory,digest(path)+".image");
+            return new File(directory,digest(path)+extension);
         } catch(Exception ignored){return null;}
     }
     private static String route(String path) throws Exception {return "/api/media?path="+URLEncoder.encode(path,"UTF-8");}
+    private static String voiceRoute(String path) throws Exception {return "/api/voice?path="+URLEncoder.encode(path,"UTF-8");}
     private static boolean segment(String value) {return value!=null && value.matches("[A-Za-z0-9_-]{1,128}");}
     private static boolean validPath(String value) {
         if(value==null)return false;String[] parts=value.split("/",-1);
         return parts.length==4 && "conversations".equals(parts[0]) && segment(parts[1]) && segment(parts[2]) && segment(parts[3]);
     }
     private static byte[] readBounded(InputStream input) throws Exception {
+        return readBounded(input, ImageUploadPolicy.MAX_IMAGE_BYTES);
+    }
+    private static byte[] readBounded(InputStream input, long limit) throws Exception {
         if(input==null)throw new Exception();ByteArrayOutputStream output=new ByteArrayOutputStream();
         byte[] buffer=new byte[32768];int count;
         while((count=input.read(buffer))!=-1){
-            if(output.size()+count>ImageUploadPolicy.MAX_IMAGE_BYTES)throw new Exception();output.write(buffer,0,count);
+            if(output.size()+count>limit)throw new Exception();output.write(buffer,0,count);
         }
         return output.toByteArray();
     }

@@ -27,3 +27,8 @@ server/call-token/node_modules/
 server/call-token/service-account*.json
 /.private/
 /tester-signing.local.properties
+/web/node_modules/
+/web/dist/
+/web/.env.local
+/web/.env.*.local
+/.firebase/

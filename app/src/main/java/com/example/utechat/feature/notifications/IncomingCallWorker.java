@@ -21,12 +21,12 @@ public final class IncomingCallWorker extends Worker {
         String callId=getInputData().getString("callId"),recipient=getInputData().getString("recipientUid");
         long received=getInputData().getLong("receivedAt",0);
         FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
-        if(user==null||!user.getUid().equals(recipient)||callId==null||!callId.matches("[A-Za-z0-9_-]{1,128}")
+        if(user==null||!user.isEmailVerified()||!user.getUid().equals(recipient)||callId==null||!callId.matches("[A-Za-z0-9_-]{1,128}")
                 ||System.currentTimeMillis()-received>45_000)return Result.success();
         try{
             DocumentSnapshot doc=Tasks.await(FirebaseFirestore.getInstance().collection("calls").document(callId).get(Source.SERVER),15,TimeUnit.SECONDS);
             FirebaseUser current=FirebaseAuth.getInstance().getCurrentUser();
-            if(current==null||!current.getUid().equals(recipient)||!doc.exists()||!recipient.equals(doc.getString("calleeUid"))
+            if(current==null||!current.isEmailVerified()||!current.getUid().equals(recipient)||!doc.exists()||!recipient.equals(doc.getString("calleeUid"))
                     ||!"ringing".equals(doc.getString("status")))return Result.success();
             Long expires=doc.getLong("expiresAt"),created=doc.getLong("createdAt");
             String conversation=doc.getString("conversationId"),caller=doc.getString("callerUid");

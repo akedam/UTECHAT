@@ -1,6 +1,14 @@
 "use strict";
 const crypto = require("node:crypto");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_VOICE_BYTES = 512 * 1024;
+const VOICE_TYPE = "audio/mp4";
+const WEB_ORIGINS = new Set(["https://utechat-ab9d8.web.app", "https://utechat-ab9d8.firebaseapp.com"]);
+const API_METHODS = new Map([
+  ["/api/rtc-token", ["POST"]], ["/api/call-invite", ["POST"]],
+  ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
+  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]]
+]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 class ApiError extends Error { constructor(status, code) { super(code); this.status = status; } }
@@ -17,6 +25,31 @@ function validImage(bytes, type) {
   if (type === "image/jpeg") return bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
   if (type === "image/png") return bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
   return type === "image/webp" && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+}
+function validVoice(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 24 || bytes.length > MAX_VOICE_BYTES) return false;
+  let header = false, metadata = false, data = false;
+  for (let offset = 0; offset < bytes.length;) {
+    const remaining = bytes.length - offset;
+    if (remaining < 8) return false;
+    let length = bytes.readUInt32BE(offset);
+    let headerSize = 8;
+    if (length === 1) {
+      // Android's MediaRecorder writes mdat with an extended size even for short clips.
+      headerSize = 16;
+      if (remaining < headerSize || bytes.readUInt32BE(offset + 8) !== 0) return false;
+      length = bytes.readUInt32BE(offset + 12);
+    } else if (length === 0) {
+      length = remaining;
+    }
+    if (length < headerSize || length > remaining) return false;
+    const box = bytes.toString("ascii", offset + 4, offset + 8);
+    if (offset === 0) header = box === "ftyp" && length >= headerSize + 8;
+    if (box === "moov" && length > headerSize) metadata = true;
+    if (box === "mdat" && length > headerSize) data = true;
+    offset += length;
+  }
+  return header && metadata && data;
 }
 async function readBody(req, limit) {
   const chunks = []; let size = 0;
@@ -40,6 +73,11 @@ function send(res, status, body, type = "application/json; charset=utf-8") {
 function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now, dailyUploadBytes = 32 * 1024 * 1024 }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
   const groupDeletions = new Map();
+  async function contactAllowed(first, second, tx) {
+    const refs = [db.doc(`users/${first}/blocked/${second}`), db.doc(`users/${second}/blocked/${first}`)];
+    const blocks = await Promise.all(refs.map(ref => tx ? tx.get(ref) : ref.get()));
+    return blocks.every(block => !block.exists);
+  }
   async function member(conversationId, uid) {
     const parent = await db.doc(`conversations/${conversationId}`).get(), data = parent.data();
     requireValue(parent.exists && Array.isArray(data.participantIds) && data.participantIds.includes(uid), 403, "forbidden");
@@ -90,6 +128,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         }
         await db.recursiveDelete(root.collection("messages"));
         await db.recursiveDelete(root.collection("members"));
+        await db.recursiveDelete(db.doc(`backendVoice/${conversationId}`).collection("media"));
         await db.runTransaction(async tx => {
           const parent = await tx.get(root), saved = await tx.get(receipt);
           if (saved.exists && saved.data().status === "complete") return;
@@ -121,6 +160,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       requireValue(parent.exists && conversation.type === "direct" && Array.isArray(conversation.participantIds)
         && conversation.participantIds.length === 2 && conversation.participantIds.includes(call.callerUid)
         && conversation.participantIds.includes(call.calleeUid), 403, "forbidden");
+      requireValue(await contactAllowed(call.callerUid, call.calleeUid, tx), 403, "contact-unavailable");
       if (!call.rtcUidByUser?.[call.callerUid] || !call.rtcUidByUser?.[call.calleeUid]) {
         const rtcUid = (id) => crypto.createHash("sha256").update(id).digest().readUInt32BE(0) % 2147483646 + 1;
         const caller = rtcUid(call.callerUid); let callee = rtcUid(call.calleeUid);
@@ -167,6 +207,13 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     }
   }
   async function pushOnce(eventId, recipientUid, data, ttl) {
+    // Device tokens from older APKs can still exist before the recipient verifies.
+    try {
+      if (!(await auth.getUser(recipientUid)).emailVerified) return;
+    } catch (error) {
+      if (error.code === "auth/user-not-found") return;
+      throw error;
+    }
     const ref = db.doc(`backendEvents/${hash(`${eventId}:${recipientUid}`)}`), attemptId = crypto.randomUUID();
     const claimed = await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref), previous = snapshot.data();
@@ -180,7 +227,8 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       let acceptedDevices = 0;
       if (valid.length) {
         const result = await messaging.sendEachForMulticast({ tokens: valid.map((doc) => doc.data().token),
-          data: { ...data, recipientUid }, android: { priority: "high", ttl } });
+          data: { ...data, recipientUid }, android: { priority: "high", ttl },
+          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)) } } });
         let retry = false;
         for (let i = 0; i < result.responses.length; i++) {
           const response = result.responses[i];
@@ -211,7 +259,9 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     requireValue(snapshot.exists, 404, "not-found"); const call = snapshot.data();
     requireValue(call.callerUid === uid, 403, "forbidden"); await member(call.conversationId, uid);
     requireValue(call.status === "ringing" && call.expiresAt > now(), 409, "call-not-ready");
-    await member(call.conversationId, call.calleeUid); scheduleExpiry(body.callId, call.expiresAt);
+    await member(call.conversationId, call.calleeUid);
+    requireValue(await contactAllowed(call.callerUid, call.calleeUid), 403, "contact-unavailable");
+    scheduleExpiry(body.callId, call.expiresAt);
     await pushOnce(`call:${body.callId}`, call.calleeUid,
       { eventType: "call", callId: body.callId, conversationId: call.conversationId }, Math.max(1, call.expiresAt - now()));
   }
@@ -221,6 +271,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     const [parent, message] = await Promise.all([ref.get(), ref.collection("messages").doc(body.messageId).get()]);
     requireValue(parent.exists && message.exists, 404, "not-found"); const data = message.data();
     requireValue(data.senderId === uid, 403, "forbidden");
+    if (data.type === "recalled") return;
     requireValue(Number.isFinite(data.sentAt) && data.sentAt >= now() - 24 * 60 * 60_000 && data.sentAt <= now() + 60_000, 409, "event-expired");
     const group = parent.data().type === "group";
     let recipients = parent.data().participantIds;
@@ -231,7 +282,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     }
     let retryError;
     for (const recipient of recipients) {
-      if (recipient === uid) continue;
+      if (recipient === uid || !await contactAllowed(uid, recipient)) continue;
       try {
         await pushOnce(`message:${body.conversationId}:${body.messageId}`, recipient, {
         eventType: "message", conversationId: body.conversationId, messageId: body.messageId,
@@ -256,6 +307,9 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       const parent = await tx.get(db.doc(`conversations/${parts.conversationId}`));
       requireValue(parent.exists && parent.data().participantIds.includes(uid)
         && (!parent.data().lifecycle || parent.data().lifecycle === "active"), 403, "forbidden");
+      if (parent.data().type === "direct") {
+        requireValue(await contactAllowed(...parent.data().participantIds, tx), 403, "contact-unavailable");
+      }
       if (saved.exists) {
         requireValue(saved.data().sha256 === digest && saved.data().contentType === contentType, 409, "immutable-object"); return saved.data();
       }
@@ -280,24 +334,98 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     const [record, message] = await Promise.all([db.doc(`backendMedia/${hash(path)}`).get(),
       db.doc(`conversations/${parts.conversationId}/messages/${parts.messageId}`).get()]);
     requireValue(record.exists && record.data().ready, 404, "not-found");
+    requireValue(message.data()?.type !== "recalled", 404, "not-found");
     requireValue(uid === parts.ownerUid || (message.exists && message.data().type === "image"
       && message.data().mediaPath === path && message.data().senderId === parts.ownerUid), 403, "forbidden");
     const bytes = await storage.download(path), metadata = record.data();
     requireValue(bytes.length === metadata.size && hash(bytes) === metadata.sha256 && validImage(bytes, metadata.contentType), 502, "invalid-media");
     return { bytes, contentType: metadata.contentType };
   }
+  // Short voice notes fit inside one private Firestore document. The client can
+  // publish a voice message only after the corresponding server record exists.
+  async function uploadVoice(path, uid, bytes) {
+    const parts = mediaPath(path);
+    requireValue(parts.ownerUid === uid, 403, "forbidden");
+    await member(parts.conversationId, uid);
+    requireValue(validVoice(bytes), 400, "invalid-voice");
+    const ref = db.doc(`backendVoice/${parts.conversationId}/media/${parts.messageId}`);
+    const quota = db.doc(`backendUsage/${hash(uid)}_${new Date(now()).toISOString().slice(0, 10)}`);
+    const digest = hash(bytes);
+    return db.runTransaction(async tx => {
+      const [parent, saved, usage] = await Promise.all([
+        tx.get(db.doc(`conversations/${parts.conversationId}`)), tx.get(ref), tx.get(quota),
+      ]);
+      const group = parent.data();
+      requireValue(parent.exists && group.participantIds.includes(uid)
+        && (!group.lifecycle || group.lifecycle === "active"), 403, "forbidden");
+      if (group.type === "direct") {
+        requireValue(await contactAllowed(...group.participantIds, tx), 403, "contact-unavailable");
+      } else {
+        const membership = await tx.get(db.doc(`conversations/${parts.conversationId}/members/${uid}`));
+        requireValue(membership.data()?.userId === uid, 403, "forbidden");
+      }
+      if (saved.exists) {
+        requireValue(saved.data().path === path && saved.data().sha256 === digest, 409, "immutable-object");
+      } else {
+        const used = usage.data()?.bytes || 0;
+        requireValue(used + bytes.length <= dailyUploadBytes, 429, "daily-upload-limit");
+        tx.set(ref, { path, size: bytes.length, sha256: digest, bytes, createdAt: now() });
+        tx.set(quota, { bytes: used + bytes.length });
+      }
+      return { path, size: bytes.length, contentType: VOICE_TYPE };
+    });
+  }
+
+  async function downloadVoice(path, uid) {
+    const parts = mediaPath(path);
+    await member(parts.conversationId, uid);
+    const [record, message] = await Promise.all([
+      db.doc(`backendVoice/${parts.conversationId}/media/${parts.messageId}`).get(),
+      db.doc(`conversations/${parts.conversationId}/messages/${parts.messageId}`).get(),
+    ]);
+    requireValue(record.exists && record.data().path === path, 404, "not-found");
+    requireValue(message.data()?.type !== "recalled", 404, "not-found");
+    requireValue(uid === parts.ownerUid || (message.data()?.type === "voice"
+      && message.data().mediaPath === path && message.data().senderId === parts.ownerUid), 403, "forbidden");
+    const bytes = Buffer.from(record.data().bytes);
+    requireValue(validVoice(bytes) && hash(bytes) === record.data().sha256, 502, "invalid-voice");
+    return bytes;
+  }
   async function handle(req, res) {
     try {
       const url = new URL(req.url, "http://backend.invalid");
-      if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage });
-      const allowed = (req.method === "POST" && ["/api/rtc-token", "/api/call-invite", "/api/message-notify", "/api/group-delete"].includes(url.pathname))
-        || (["GET", "PUT"].includes(req.method) && url.pathname === "/api/media");
-      requireValue(allowed, 404, "not-found"); const authorization = req.headers.authorization || "";
+      const methods = API_METHODS.get(url.pathname);
+      const origin = req.headers.origin;
+      res.setHeader("Vary", "Origin");
+      if (WEB_ORIGINS.has(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+      if (req.method === "OPTIONS") {
+        requireValue(WEB_ORIGINS.has(origin), 403, "forbidden");
+        requireValue(methods?.includes(req.headers["access-control-request-method"]), 404, "not-found");
+        res.writeHead(204, {
+          "Access-Control-Allow-Methods": methods.join(", "),
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Max-Age": "600"
+        });
+        return res.end();
+      }
+      if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage, voice: true });
+      const voice = url.pathname === "/api/voice";
+      requireValue(methods?.includes(req.method), 404, "not-found"); const authorization = req.headers.authorization || "";
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }
-      rateLimit(user.uid, url.pathname === "/api/media" ? "media" : "api");
+      requireValue(user.email_verified === true, 403, "email-unverified");
+      rateLimit(user.uid, url.pathname === "/api/media" || voice ? "media" : "api");
       sweep().catch(() => process.stderr.write("Call reconciliation deferred.\n"));
+      if (voice) {
+        const path = url.searchParams.get("path");
+        const parts = mediaPath(path);
+        if (req.method === "GET") return send(res, 200, await downloadVoice(path, user.uid), VOICE_TYPE);
+        requireValue(parts.ownerUid === user.uid, 403, "forbidden");
+        requireValue(req.headers["content-type"] === VOICE_TYPE, 400, "invalid-voice");
+        await member(parts.conversationId, user.uid);
+        return send(res, 200, await uploadVoice(path, user.uid, await readBody(req, MAX_VOICE_BYTES)));
+      }
       if (url.pathname === "/api/media") {
         const path = url.searchParams.get("path"); const parts = mediaPath(path);
         if (req.method === "GET") { const result = await download(path, user.uid); return send(res, 200, result.bytes, result.contentType); }

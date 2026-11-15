@@ -2,19 +2,19 @@
   "rules": {
     "presence": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || data.child('visible').val() === true)",
+        ".read": "auth != null && auth.token.email_verified === true && (auth.uid === $uid || data.child('visible').val() === true)",
         "visible": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
           ".validate": "newData.isBoolean()"
         },
         "connections": {
           "$connectionId": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
             ".validate": "newData.val() === true || !newData.exists()"
           }
         },
         "lastSeen": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.token.email_verified === true && auth.uid === $uid",
           ".validate": "newData.isNumber()"
         },
         "$other": {

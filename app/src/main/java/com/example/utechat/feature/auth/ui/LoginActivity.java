@@ -8,7 +8,6 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.TextView;
 import android.util.Patterns;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,15 +15,10 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.utechat.R;
 import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
-import com.example.utechat.feature.main.ui.MainActivity;
+import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 
-/**
- * Màn hình đăng nhập.
- *
- * [MOCK] Nút Login chỉ validate input và chuyển sang giao diện chính.
- * Chưa có xác thực hay lưu phiên đăng nhập.
- */
+/** Sign in with email and password or request a password reset link. */
 public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
@@ -64,7 +58,7 @@ public class LoginActivity extends AppCompatActivity {
                     break;
                 case SUCCESS:
                     setLoading(false);
-                    navigateToMain();
+                    AuthGate.openAfterAuth(this);
                     break;
                 case ERROR:
                     setLoading(false);
@@ -76,11 +70,59 @@ public class LoginActivity extends AppCompatActivity {
 
     private void setupListeners() {
         btnLogin.setOnClickListener(v -> attemptLogin());
+        View reset = findViewById(R.id.btn_forgot_password);
+        reset.setVisibility(AuthRepositoryProvider.isMock(this) ? View.GONE : View.VISIBLE);
+        reset.setOnClickListener(v -> showPasswordReset());
 
         tvGoToRegister.setOnClickListener(v -> {
             Intent register = new Intent(this, RegisterActivity.class);
-            copyNotificationTarget(getIntent(), register);
+            AuthGate.copyNotificationTarget(getIntent(), register);
             startActivity(register);
+        });
+    }
+
+    private void showPasswordReset() {
+        com.google.android.material.textfield.TextInputLayout field =
+                new com.google.android.material.textfield.TextInputLayout(this);
+        int padding = Math.round(24 * getResources().getDisplayMetrics().density);
+        field.setPadding(padding, padding / 2, padding, 0);
+        field.setHint(getString(R.string.reset_email_label));
+        EditText email = new com.google.android.material.textfield.TextInputEditText(field.getContext());
+        email.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        email.setSingleLine(true);
+        email.setText(etEmail.getText());
+        field.addView(email);
+        androidx.appcompat.app.AlertDialog dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.forgot_password)
+                .setMessage(R.string.reset_password_description)
+                .setView(field)
+                .setNegativeButton(R.string.friends_cancel_button, null)
+                .setPositiveButton(R.string.reset_password_send, null).create();
+        dialog.show();
+        Button send = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
+        send.setOnClickListener(v -> {
+            String address = email.getText().toString().trim();
+            if (!Patterns.EMAIL_ADDRESS.matcher(address).matches()) {
+                field.setError(getString(R.string.error_email_invalid));
+                email.requestFocus();
+                return;
+            }
+            field.setError(null);
+            send.setEnabled(false);
+            AuthRepositoryProvider.get(this).resetPassword(address, new com.example.utechat.domain.repository.AuthRepository.Callback<Void>() {
+                @Override public void onSuccess(Void unused) {
+                    if (!dialog.isShowing() || isFinishing() || isDestroyed()) return;
+                    dialog.dismiss();
+                    new com.google.android.material.dialog.MaterialAlertDialogBuilder(LoginActivity.this)
+                            .setTitle(R.string.forgot_password).setMessage(R.string.reset_password_sent)
+                            .setPositiveButton(R.string.community_close, null).show();
+                }
+                @Override public void onError(com.example.utechat.domain.repository.AuthRepository.AuthException error) {
+                    if (!dialog.isShowing() || isFinishing() || isDestroyed()) return;
+                    send.setEnabled(true);
+                    field.setError(error.getMessage());
+                }
+            });
         });
     }
 
@@ -115,20 +157,4 @@ public class LoginActivity extends AppCompatActivity {
         tvGoToRegister.setEnabled(!loading);
     }
 
-    private void navigateToMain() {
-        Intent intent = new Intent(this, MainActivity.class);
-        copyNotificationTarget(getIntent(), intent);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-    }
-
-    private void copyNotificationTarget(Intent source, Intent target) {
-        if (source == null || !source.hasExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID)) return;
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID));
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE));
-        target.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE,
-                source.getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE));
-    }
 }

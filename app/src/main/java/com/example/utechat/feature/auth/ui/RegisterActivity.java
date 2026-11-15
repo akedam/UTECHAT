@@ -1,6 +1,5 @@
 package com.example.utechat.feature.auth.ui;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -8,7 +7,6 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.TextView;
 import android.util.Patterns;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,15 +14,10 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.utechat.R;
 import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
-import com.example.utechat.feature.main.ui.MainActivity;
+import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 
-/**
- * Màn hình đăng ký tài khoản.
- *
- * [MOCK] Validate cơ bản và chuyển thẳng vào Main.
- * Kết nối Firebase Auth thật sẽ được thực hiện ở G3.
- */
+/** Registration form for email-and-password accounts. */
 public class RegisterActivity extends AppCompatActivity {
 
     private EditText etDisplayName, etEmail, etPassword, etConfirmPassword;
@@ -66,7 +59,7 @@ public class RegisterActivity extends AppCompatActivity {
                     break;
                 case SUCCESS:
                     setLoading(false);
-                    navigateToMain();
+                    AuthGate.openAfterAuth(this);
                     break;
                 case ERROR:
                     setLoading(false);
@@ -126,17 +119,4 @@ public class RegisterActivity extends AppCompatActivity {
         tvGoToLogin.setEnabled(!loading);
     }
 
-    private void navigateToMain() {
-        Intent intent = new Intent(this, MainActivity.class);
-        if (getIntent() != null && getIntent().hasExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID)) {
-            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID,
-                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_ID));
-            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE,
-                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TITLE));
-            intent.putExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE,
-                    getIntent().getStringExtra(com.example.utechat.core.common.Constants.EXTRA_CONVERSATION_TYPE));
-        }
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-    }
 }

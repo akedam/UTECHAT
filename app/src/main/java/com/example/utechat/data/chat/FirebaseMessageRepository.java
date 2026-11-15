@@ -89,25 +89,32 @@ public final class FirebaseMessageRepository implements MessageRepository {
 
     @Override
     public void sendText(String conversationId, Message message, SendCallback callback) {
-        sendMessage(conversationId, message, false, false, callback);
+        sendMessage(conversationId, message, "text", callback);
     }
 
     @Override
     public void sendImage(String conversationId, Message message, SendCallback callback) {
-        sendMessage(conversationId, message, true, false, callback);
+        sendMessage(conversationId, message, "image", callback);
     }
 
     @Override public void sendPoll(String conversationId, Message message, SendCallback callback) {
-        sendMessage(conversationId, message, false, true, callback);
+        sendMessage(conversationId, message, "poll", callback);
     }
 
-    private void sendMessage(String conversationId, Message message, boolean image, boolean poll, SendCallback callback) {
+    @Override public void sendVoice(String conversationId, Message message, SendCallback callback) {
+        sendMessage(conversationId, message, "voice", callback);
+    }
+
+    private void sendMessage(String conversationId, Message message, String type, SendCallback callback) {
+        boolean image = "image".equals(type);
+        boolean voice = "voice".equals(type);
+        boolean poll = "poll".equals(type);
         if (conversationId == null || conversationId.isEmpty() || message.getId() == null
                 || message.getId().isEmpty() || message.getSenderId() == null
                 || message.getContent() == null
                 || (!image && message.getContent().trim().isEmpty())
                 || (poll && !validPoll(message))
-                || (image && (message.getMediaUrl() == null || message.getContentType() == null
+                || ((image || voice) && (message.getMediaUrl() == null || message.getContentType() == null
                     || message.getFileSize() <= 0 || message.getFileSize() > 8L * 1024L * 1024L))) {
             callback.onError(context.getString(R.string.chat_send_error));
             return;
@@ -119,19 +126,24 @@ public final class FirebaseMessageRepository implements MessageRepository {
         Map<String, Object> payload = new HashMap<>();
         payload.put("senderId", message.getSenderId());
         payload.put("senderName", message.getSenderName() == null ? "" : message.getSenderName());
-        payload.put("type", image ? "image" : poll ? "poll" : "text");
+        payload.put("type", type);
         payload.put("content", message.getContent());
         payload.put("sentAt", sentAt);
         payload.put("createdAt", sentAt);
         payload.put("readBy", Arrays.asList(message.getSenderId()));
-        if (image) {
+        if (image || voice) {
             payload.put("mediaPath", message.getMediaUrl());
             payload.put("contentType", message.getContentType());
             payload.put("fileSize", message.getFileSize());
+            if (voice) payload.put("durationMs", message.getDurationMs());
         } else if (poll) {
             payload.put("pollQuestion", message.getContent());
             payload.put("pollOptions", new ArrayList<>(message.getPollOptions()));
             payload.put("pollVotes", new HashMap<String, Integer>());
+        }
+        if ("text".equals(type) && message.getReply() != null) {
+            Message.Reply reply = message.getReply();
+            payload.put("reply", Map.of("id", reply.id, "name", reply.name, "text", reply.text, "type", reply.type));
         }
 
         String collectionId = "conversations";
@@ -139,7 +151,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         var messageRef = conversationRef.collection("messages").document(message.getId());
         Map<String, Object> summary = new HashMap<>();
         summary.put("lastMessage", image ? "image" : message.getContent());
-        summary.put("lastMessageType", image ? "image" : poll ? "poll" : "text");
+        summary.put("lastMessageType", type);
         summary.put("lastMessageAt", sentAt);
         summary.put("lastMessageSenderId", message.getSenderId());
         summary.put("lastMessageId", message.getId());
@@ -152,7 +164,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
                     com.example.utechat.data.backend.BackendEvents.message(context, conversationId, message.getId());
                     callback.onSuccess();
                 })
-                .addOnFailureListener(error -> verifyIdempotentWrite(messageRef, message, image, poll, callback));
+                .addOnFailureListener(error -> verifyIdempotentWrite(messageRef, message, type, payload.get("reply"), callback));
     }
 
     private boolean validPoll(Message message) {
@@ -191,17 +203,15 @@ public final class FirebaseMessageRepository implements MessageRepository {
     }
 
     private void verifyIdempotentWrite(com.google.firebase.firestore.DocumentReference reference,
-                                       Message message, boolean image, boolean poll, SendCallback callback) {
+                                       Message message, String type, Object reply, SendCallback callback) {
         reference.get(Source.SERVER).addOnSuccessListener(snapshot -> {
             if (snapshot.exists()
                     && message.getSenderId().equals(snapshot.getString("senderId"))
-                    && (image ? "image".equals(snapshot.getString("type"))
-                                && message.getMediaUrl().equals(snapshot.getString("mediaPath"))
-                                : poll ? "poll".equals(snapshot.getString("type"))
-                                    && message.getContent().equals(snapshot.getString("pollQuestion"))
-                                    && message.getPollOptions().equals(snapshot.get("pollOptions"))
-                                : "text".equals(snapshot.getString("type"))
-                                    && message.getContent().equals(snapshot.getString("content")))) {
+                    && type.equals(snapshot.getString("type"))
+                    && message.getContent().equals(snapshot.getString("content"))
+                    && java.util.Objects.equals(reply, snapshot.get("reply"))
+                    && (message.getMediaUrl() == null || message.getMediaUrl().equals(snapshot.getString("mediaPath")))
+                    && (message.getPollOptions() == null || message.getPollOptions().equals(snapshot.get("pollOptions")))) {
                 com.example.utechat.data.backend.BackendEvents.message(context,
                         reference.getParent().getParent().getId(), message.getId());
                 callback.onSuccess();
@@ -245,6 +255,16 @@ public final class FirebaseMessageRepository implements MessageRepository {
         }
         message.setMediaUrl(document.getString("mediaPath"));
         message.setContentType(document.getString("contentType"));
+        message.setDurationMs(epochMillis(document.get("durationMs")));
+        Object rawReply = document.get("reply");
+        if (rawReply instanceof Map) {
+            Map<?, ?> reply = (Map<?, ?>) rawReply;
+            if (reply.get("id") instanceof String && reply.get("name") instanceof String
+                    && reply.get("text") instanceof String && reply.get("type") instanceof String) {
+                message.setReply(new Message.Reply((String) reply.get("id"), (String) reply.get("name"),
+                        (String) reply.get("text"), (String) reply.get("type")));
+            }
+        }
         Object size = document.get("fileSize");
         message.setFileSize(size instanceof Number ? ((Number) size).longValue() : 0L);
         message.setSentAt(epochMillis(document.get("sentAt")));
@@ -253,6 +273,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         message.setReadBy(stringList(document.get("readBy")));
         boolean fromMe = currentUserId != null && currentUserId.equals(message.getSenderId());
         String storedSenderName = document.getString("senderName");
+        message.setStoredSenderName(storedSenderName == null ? "" : storedSenderName);
         message.setSenderName(storedSenderName == null || storedSenderName.trim().isEmpty()
                 ? (fromMe ? currentUserName : peerName) : storedSenderName);
         message.setDeliveryStatus(includePending && document.getMetadata().hasPendingWrites()
