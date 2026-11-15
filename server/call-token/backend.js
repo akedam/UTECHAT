@@ -3,6 +3,12 @@ const crypto = require("node:crypto");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VOICE_BYTES = 512 * 1024;
 const VOICE_TYPE = "audio/mp4";
+const WEB_ORIGINS = new Set(["https://utechat-ab9d8.web.app", "https://utechat-ab9d8.firebaseapp.com"]);
+const API_METHODS = new Map([
+  ["/api/rtc-token", ["POST"]], ["/api/call-invite", ["POST"]],
+  ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
+  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]]
+]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 class ApiError extends Error { constructor(status, code) { super(code); this.status = status; } }
@@ -221,7 +227,8 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       let acceptedDevices = 0;
       if (valid.length) {
         const result = await messaging.sendEachForMulticast({ tokens: valid.map((doc) => doc.data().token),
-          data: { ...data, recipientUid }, android: { priority: "high", ttl } });
+          data: { ...data, recipientUid }, android: { priority: "high", ttl },
+          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)) } } });
         let retry = false;
         for (let i = 0; i < result.responses.length; i++) {
           const response = result.responses[i];
@@ -387,11 +394,23 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
   async function handle(req, res) {
     try {
       const url = new URL(req.url, "http://backend.invalid");
+      const methods = API_METHODS.get(url.pathname);
+      const origin = req.headers.origin;
+      res.setHeader("Vary", "Origin");
+      if (WEB_ORIGINS.has(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+      if (req.method === "OPTIONS") {
+        requireValue(WEB_ORIGINS.has(origin), 403, "forbidden");
+        requireValue(methods?.includes(req.headers["access-control-request-method"]), 404, "not-found");
+        res.writeHead(204, {
+          "Access-Control-Allow-Methods": methods.join(", "),
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Max-Age": "600"
+        });
+        return res.end();
+      }
       if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage, voice: true });
       const voice = url.pathname === "/api/voice";
-      const allowed = (req.method === "POST" && ["/api/rtc-token", "/api/call-invite", "/api/message-notify", "/api/group-delete"].includes(url.pathname))
-        || (["GET", "PUT"].includes(req.method) && (url.pathname === "/api/media" || voice));
-      requireValue(allowed, 404, "not-found"); const authorization = req.headers.authorization || "";
+      requireValue(methods?.includes(req.method), 404, "not-found"); const authorization = req.headers.authorization || "";
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }

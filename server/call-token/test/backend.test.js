@@ -64,8 +64,28 @@ async function fixture(t,options={}) {
     const bytes=Buffer.from(await result.arrayBuffer());
     return{status:result.status,body:result.headers.get("content-type").includes("application/json")?JSON.parse(bytes):bytes};
   }
-  return{db,backend,pushes,objects,request,get tokenCalls(){return tokenCalls;}};
+  return{db,backend,pushes,objects,request,base:`http://127.0.0.1:${server.address().port}`,get tokenCalls(){return tokenCalls;}};
 }
+
+test("browser preflight permits UTEChat origins and leaves API authentication intact", async t => {
+  const {base}=await fixture(t);
+  const trusted="https://utechat-ab9d8.web.app";
+  const preflight=(origin,method,route="/api/rtc-token")=>fetch(base+route,{
+    method:"OPTIONS",headers:{Origin:origin,"Access-Control-Request-Method":method,
+      "Access-Control-Request-Headers":"authorization, content-type"},
+  });
+  const expected=await preflight(trusted,"POST");
+  assert.equal(expected.status,204);
+  assert.equal(expected.headers.get("access-control-allow-origin"),trusted);
+  assert.equal(expected.headers.get("vary"),"Origin");
+  const foreign=await preflight("https://utechat-ab9d8.web.app.example.org","POST");
+  assert.equal(foreign.status,403);
+  assert.equal(foreign.headers.get("access-control-allow-origin"),null);
+  assert.equal((await preflight(trusted,"DELETE","/api/voice")).status,404);
+  const anonymous=await fetch(base+"/api/rtc-token",{method:"POST",headers:{Origin:trusted}});
+  assert.equal(anonymous.status,401);
+  assert.equal(anonymous.headers.get("access-control-allow-origin"),trusted);
+});
 test("email verification gates chat API access and protects notifications on older installations", async t => {
   const f = await fixture(t, { unverifiedRecipients: ["bob"] });
   const blocked = await f.request("/api/rtc-token", "unverified-alice", {callId:"call1"});
