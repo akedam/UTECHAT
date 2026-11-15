@@ -107,6 +107,25 @@ test("token authorization rejects absent/revoked/outsider credentials; RTC UIDs 
   await f.db.doc("calls/call1").update({status:"ended"});
   assert.equal((await f.request("/api/rtc-token","alice",{callId:"call1"})).status,409);
 });
+test("avatar uploads require a verified owner, enforce size and keep a single public image", async t => {
+  const fixtureData = await fixture(t);
+  const jpeg = Buffer.from([255, 216, 255, 224, 0, 6, 74, 70, 73, 70, 255, 217]);
+  const put = (uid, bytes = jpeg) => fixtureData.request("/api/avatar?uid=bob", uid, bytes, "PUT", "image/jpeg");
+  assert.equal((await put(null)).status, 401);
+  assert.equal((await put("unverified-alice")).status, 403);
+  assert.equal((await put("alice", PNG)).status, 400);
+  assert.equal((await put("alice", Buffer.alloc(192 * 1024 + 1))).status, 413);
+  const uploaded = await put("alice");
+  assert.equal(uploaded.status, 200);
+  assert.match(uploaded.body.path, /^\/api\/avatar\?uid=alice&v=[a-f0-9]{64}$/);
+  assert.deepEqual((await fixtureData.request(uploaded.body.path, null, null, "GET")).body, jpeg);
+  assert.equal((await fixtureData.request("/api/avatar?uid=bob", null, null, "GET")).status, 404);
+  assert.equal((await put("alice")).body.path, uploaded.body.path);
+  const replacement = Buffer.from(jpeg);
+  replacement[9]++;
+  assert.notEqual((await put("alice", replacement)).body.path, uploaded.body.path);
+  assert.deepEqual((await fixtureData.request(uploaded.body.path, null, null, "GET")).body, replacement);
+});
 test("membership removal prevents token issuance even for a listed call participant",async(t)=>{
   const f=await fixture(t);await f.db.doc("conversations/chat").update({participantIds:["alice","mallory"]});
   assert.equal((await f.request("/api/rtc-token","bob",{callId:"call1"})).status,403);

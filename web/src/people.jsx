@@ -101,6 +101,7 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, open, s
 export function QrDialog({ user, friendships, open, error, close }) {
   const [mode, setMode] = useState('show')
   const [url, setUrl] = useState('')
+  const [qrFile, setQrFile] = useState(null)
   const [person, setPerson] = useState(null)
   const [input, setInput] = useState('')
   const [scanning, setScanning] = useState(false)
@@ -111,10 +112,34 @@ export function QrDialog({ user, friendships, open, error, close }) {
   const code = qrPrefix + user.uid
   useEffect(() => {
     let cancelled = false
-    import('qrcode').then(({ default: qr }) => qr.toDataURL(code, { width: 640, margin: 3, color: { dark: '#102448', light: '#ffffff' } }))
-      .then(result => { if (!cancelled) setUrl(result) }).catch(error)
-    return () => { cancelled = true; stopCamera() }
+    let objectUrl
+    import('qrcode').then(async ({ default: qr }) => {
+      const canvas = document.createElement('canvas')
+      await qr.toCanvas(canvas, code, { width: 640, margin: 3, color: { dark: '#102448', light: '#ffffff' } })
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+      if (cancelled || !blob) return
+      const file = new File([blob], 'utechat-qr.png', { type: 'image/png' })
+      objectUrl = URL.createObjectURL(file)
+      setQrFile(file)
+      setUrl(objectUrl)
+    }).catch(error)
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl); stopCamera() }
   }, [code, error])
+  async function saveQr(event) {
+    const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    if (!appleMobile || !qrFile || !navigator.canShare?.({ files: [qrFile] })) return
+    event.preventDefault()
+    try { await navigator.share({ files: [qrFile], title: 'Mã QR UTEChat' }) }
+    catch (failure) {
+      if (failure.name !== 'AbortError') {
+        const download = document.createElement('a')
+        download.href = url
+        download.download = qrFile.name
+        download.click()
+      }
+    }
+  }
   function stopCamera() {
     generation.current++
     media.current?.getTracks().forEach(track => track.stop())
@@ -195,7 +220,7 @@ export function QrDialog({ user, friendships, open, error, close }) {
       <p>Cho bạn bè quét mã này bằng UTEChat.</p>
       <div className="button-row">
         <button className="secondary" onClick={() => navigator.clipboard.writeText(code).catch(error)}><Copy size={18} /> Sao chép mã</button>
-        {url && <a className="secondary" href={url} download="utechat-qr.png"><ArrowDownToLine size={18} /> Lưu ảnh</a>}
+        {url && <a className="secondary" href={url} download={qrFile?.name} onClick={saveQr}><ArrowDownToLine size={18} /> Lưu ảnh</a>}
       </div>
     </div> : <div className="stack">
       <video ref={video} autoPlay muted playsInline className={scanning ? 'qr-camera' : 'qr-camera waiting'} />

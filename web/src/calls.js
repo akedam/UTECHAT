@@ -58,6 +58,7 @@ async function openMedia(mode) {
 
 function connectRtc(call, stream, connected) {
   const tracks = []
+  let Agora
   let client
   let closed = false
   let queue
@@ -65,18 +66,52 @@ function connectRtc(call, stream, connected) {
   const session = {
     remoteTracks: new Map(),
     localVideo: null,
-    async toggleVideo(hidden) { await session.localVideo?.setMuted(hidden) },
+    async setCamera(enabled, facing) {
+      await queue
+      guard()
+      if (!enabled) {
+        const current = session.localVideo
+        if (!current) return null
+        await client.unpublish(current)
+        current.close()
+        session.localVideo = null
+        return null
+      }
+      const camera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing }, audio: false })
+      const source = camera.getVideoTracks()[0]
+      let track
+      try {
+        guard()
+        track = Agora.createCustomVideoTrack({ mediaStreamTrack: source })
+        await client.publish(track)
+        guard()
+        session.localVideo = track
+        return track
+      } catch (failure) { track?.close(); source.stop(); throw failure }
+    },
+    async switchCamera(facing) {
+      await queue
+      guard()
+      if (!session.localVideo) return
+      const camera = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: facing } }, audio: false
+      })
+      const next = camera.getVideoTracks()[0]
+      try { guard(); await session.localVideo.replaceTrack(next, true) }
+      catch (failure) { next.stop(); throw failure }
+    },
     playAudio() { session.remoteTracks.get('audio')?.play() },
     close() {
       if (closed) return
       closed = true
-      tracks.forEach(track => track.close())
+      tracks[0]?.close()
+      session.localVideo?.close()
       stream.getTracks().forEach(track => track.stop())
       Promise.resolve(queue).catch(() => {}).then(() => client?.leave()).catch(() => {})
     }
   }
   queue = (async () => {
-    const { default: Agora } = await import('agora-rtc-sdk-ng')
+    Agora = (await import('agora-rtc-sdk-ng')).default
     guard()
     const token = await api('/api/rtc-token', { body: { callId: call.id } })
     guard()
@@ -134,7 +169,7 @@ export function useCall(uid, error) {
   const [waiting, setWaiting] = useState(null)
   const [media, setMedia] = useState({})
   const [muted, setMuted] = useState(false)
-  const [videoOff, setVideoOff] = useState(false)
+  const [rear, setRear] = useState(false)
   const [busy, setBusy] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const stream = useRef(null)
@@ -150,7 +185,7 @@ export function useCall(uid, error) {
     updateActive(null)
     setMedia({})
     setMuted(false)
-    setVideoOff(false)
+    setRear(false)
     setSeconds(0)
   }
 
@@ -229,7 +264,7 @@ export function useCall(uid, error) {
     try { await fn() } catch (err) { error(err) } finally { setBusy(false); busyRef.current = false }
   }
   return {
-    displayed, busy, media, muted, videoOff, seconds, preview: stream.current,
+    displayed, busy, media, muted, rear, seconds, preview: stream.current,
     outgoing: (conversation, mediaType) => act(async () => {
       if (activeRef.current || waiting) throw new Error('Bạn đang có một cuộc gọi.')
       const peer = conversation.participantIds.find(value => value !== uid)
@@ -269,9 +304,21 @@ export function useCall(uid, error) {
       setMuted(!muted)
     }),
     toggleVideo: () => act(async () => {
-      await rtc.current?.toggleVideo(!videoOff)
-      if (!rtc.current) stream.current?.getVideoTracks().forEach(track => { track.enabled = videoOff })
-      setVideoOff(!videoOff)
+      const session = rtc.current
+      if (!session || !media.ready) return
+      const localTrack = await session.setCamera(!media.localTrack, rear ? 'environment' : 'user')
+      if (rtc.current === session) setMedia(previous => ({ ...previous, localTrack }))
+    }),
+    switchCamera: () => act(async () => {
+      const session = rtc.current
+      if (!session || !media.localTrack) return
+      try { await session.switchCamera(rear ? 'user' : 'environment') }
+      catch (failure) {
+        if (failure.name === 'OverconstrainedError' || failure.name === 'NotFoundError')
+          throw new Error('Thiết bị không có camera còn lại.')
+        throw failure
+      }
+      if (rtc.current === session) setRear(!rear)
     }),
     playAudio: () => rtc.current?.playAudio()
   }
@@ -281,7 +328,7 @@ export async function callPeer(call, uid) {
   return profile(call.callerUid === uid ? call.calleeUid : call.callerUid)
 }
 
-export function useIncomingTone(ringing) {
+export function useIncomingTone(ringing, messageKey) {
   const audio = useRef(null)
   useEffect(() => {
     const enable = () => {
@@ -289,27 +336,28 @@ export function useIncomingTone(ringing) {
       if (!Audio) return
       try {
         audio.current ||= new Audio()
-        if (audio.current.state === 'suspended') audio.current.resume().catch(() => {})
+      if (audio.current.state !== 'running') audio.current.resume().catch(() => {})
       } catch { /* Some browser profiles disable autoplay entirely. */ }
     }
     window.addEventListener('pointerdown', enable)
+    window.addEventListener('click', enable)
     window.addEventListener('keydown', enable)
     return () => {
       window.removeEventListener('pointerdown', enable)
+      window.removeEventListener('click', enable)
       window.removeEventListener('keydown', enable)
       audio.current?.close().catch(() => {})
+      audio.current = null
     }
   }, [])
-  useEffect(() => {
-    if (!ringing) return
-    const pulse = () => {
+  function playTone(frequency, delays) {
       const context = audio.current
       if (context?.state !== 'running' || document.visibilityState !== 'visible') return
       const start = context.currentTime
-      for (const delay of [0, .25]) {
+      for (const delay of delays) {
         const oscillator = context.createOscillator()
         const level = context.createGain()
-        oscillator.frequency.value = 510
+        oscillator.frequency.value = frequency
         level.gain.setValueAtTime(0, start + delay)
         level.gain.linearRampToValueAtTime(.065, start + delay + .025)
         level.gain.linearRampToValueAtTime(0, start + delay + .18)
@@ -318,9 +366,13 @@ export function useIncomingTone(ringing) {
         oscillator.stop(start + delay + .19)
         oscillator.onended = () => { oscillator.disconnect(); level.disconnect() }
       }
-    }
+  }
+  useEffect(() => {
+    if (!ringing) return
+    const pulse = () => playTone(510, [0, .25])
     pulse()
     const id = setInterval(pulse, 1800)
     return () => clearInterval(id)
   }, [ringing])
+  useEffect(() => { if (messageKey && !ringing) playTone(730, [0]) }, [messageKey])
 }

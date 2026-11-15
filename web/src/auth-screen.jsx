@@ -12,6 +12,16 @@ const actionSettings = () => ({
 })
 const credentialErrors = ['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found']
 
+function verificationError(error) {
+  if (['auth/too-many-requests', 'auth/quota-exceeded'].includes(error.code))
+    return 'Firebase đang giới hạn số lần gửi email xác minh. Vui lòng chờ rồi thử gửi lại.'
+  if (error.code === 'auth/network-request-failed')
+    return 'Chưa gửi được yêu cầu xác minh vì mất kết nối. Hãy kiểm tra mạng rồi bấm Gửi lại email xác minh.'
+  if (['auth/user-token-expired', 'auth/invalid-user-token', 'auth/user-disabled'].includes(error.code))
+    return 'Phiên xác minh không còn hợp lệ. Hãy đăng nhập lại.'
+  return 'Chưa gửi được email xác minh. Hãy bấm Gửi lại email xác minh để thử lại.'
+}
+
 export function AuthScreen({ user, verify }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
@@ -21,10 +31,10 @@ export function AuthScreen({ user, verify }) {
   const [feedback, setFeedback] = useState(null)
   const [busy, setBusy] = useState(false)
   const [attempts, setAttempts] = useLocal('utechat.web.signin', { count: 0, waitUntil: 0, last: 0 })
-  const [sent, setSent] = useLocal(`utechat.web.verify.${user?.uid || 'none'}`, 0)
+  const [sent, setSent] = useLocal('utechat.web.verify.lastSend', null)
   const [now, setNow] = useState(Date.now())
   const wait = Math.max(0, Math.ceil((attempts.waitUntil - now) / 1000))
-  const verifyWait = Math.max(0, Math.ceil((sent - now) / 1000))
+  const verifyWait = sent && sent.uid === user?.uid ? Math.max(0, Math.ceil((sent.until - now) / 1000)) : 0
   const changeMode = value => { setMode(value); setFeedback(null); setPassword(''); showPassword(false) }
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -32,14 +42,18 @@ export function AuthScreen({ user, verify }) {
   }, [])
   useEffect(() => {
     if (!user) return
+    let active = true
     const check = async () => {
       if (document.visibilityState !== 'visible') return
       await reload(user)
-      if (user.emailVerified) { await user.getIdToken(true); verify() }
+      if (user.emailVerified) {
+        await user.getIdToken(true)
+        if (active && auth.currentUser?.uid === user.uid) verify()
+      }
     }
     const refresh = () => check().catch(() => {})
     document.addEventListener('visibilitychange', refresh)
-    return () => document.removeEventListener('visibilitychange', refresh)
+    return () => { active = false; document.removeEventListener('visibilitychange', refresh) }
   }, [user, verify])
 
   async function act(callback) {
@@ -49,15 +63,25 @@ export function AuthScreen({ user, verify }) {
       setFeedback({ text: errorText(error), type: 'error' })
     } finally { setBusy(false) }
   }
+  async function requestVerification(account, nameSaved = true) {
+    try {
+      auth.languageCode = 'vi'
+      await sendEmailVerification(account, actionSettings())
+      setSent({ uid: account.uid, until: Date.now() + 60_000 })
+      const note = nameSaved ? '' : ' Bạn có thể cập nhật tên hiển thị trong Hồ sơ sau khi xác minh.'
+      setFeedback({ text: 'Đã yêu cầu gửi email xác minh. Kiểm tra Hộp thư đến và Thư rác.' + note, type: 'success' })
+    } catch (error) {
+      setFeedback({ text: verificationError(error), type: 'error' })
+    }
+  }
   const submit = event => {
     event.preventDefault()
     void act(async () => {
       if (mode === 'register') {
         if (!name.trim()) throw new Error('Nhập tên hiển thị của bạn.')
         const result = await createUserWithEmailAndPassword(auth, email.trim(), password)
-        await updateProfile(result.user, { displayName: name.trim() })
-        await sendEmailVerification(result.user, actionSettings())
-        setFeedback({ text: 'Đã gửi email xác minh. Hãy mở liên kết trong hộp thư.', type: 'success' })
+        const nameSaved = await updateProfile(result.user, { displayName: name.trim() }).then(() => true, () => false)
+        await requestVerification(result.user, nameSaved)
         return
       }
       if (mode === 'reset') {
@@ -104,7 +128,7 @@ export function AuthScreen({ user, verify }) {
         {user ? <>
           <span className="auth-symbol"><Mail size={28} /></span>
           <h2>Xác minh email</h2>
-          <p>Mở liên kết xác minh được gửi tới <strong>{user.email}</strong>. Kiểm tra cả thư mục Spam nếu bạn chưa thấy email.</p>
+          <p>Tài khoản cần xác minh địa chỉ <strong>{user.email}</strong>. Nếu đã nhận được email, hãy mở liên kết xác minh trong thư.</p>
           {feedback && <p className={`feedback ${feedback.type}`} role="status">{feedback.text}</p>}
           <button className="primary wide" disabled={busy} onClick={() => act(async () => {
             await reload(user)
@@ -112,12 +136,10 @@ export function AuthScreen({ user, verify }) {
             await user.getIdToken(true)
             verify()
           })}>Tôi đã xác minh</button>
-          <button className="secondary wide" disabled={busy || verifyWait > 0} onClick={() => act(async () => {
-            await sendEmailVerification(user, actionSettings())
-            setSent(Date.now() + 60_000)
-            setFeedback({ text: 'Đã gửi lại liên kết xác minh.', type: 'success' })
-          })}>{verifyWait ? `Gửi lại sau ${verifyWait}s` : 'Gửi lại email xác minh'}</button>
-          <button className="text-button wide" onClick={() => signOut(auth).catch(error => setFeedback({ type: 'error', text: errorText(error) }))}>Dùng tài khoản khác</button>
+          <button className="secondary wide" disabled={busy || verifyWait > 0}
+            onClick={() => act(() => requestVerification(user))}>{verifyWait ? `Gửi lại sau ${verifyWait}s` : 'Gửi lại email xác minh'}</button>
+          <button className="text-button wide" disabled={busy}
+            onClick={() => signOut(auth).catch(error => setFeedback({ type: 'error', text: errorText(error) }))}>Dùng tài khoản khác</button>
         </> : <>
           <h2>{mode === 'register' ? 'Tạo tài khoản' : mode === 'reset' ? 'Quên mật khẩu' : 'Đăng nhập'}</h2>
           <p>{mode === 'register' ? 'Xác minh email để bắt đầu trò chuyện.' :
