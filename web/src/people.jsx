@@ -94,9 +94,12 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, friends
     return () => { cancelled = true; clearTimeout(timer) }
   }, [entered, error])
   const key = entered.toLocaleLowerCase('vi')
-  const matches = key ? conversations.filter(item => titleOf(item).name.toLocaleLowerCase('vi').includes(key)) : []
   const matchingFriends = key ? friends.filter(person => person.displayName.toLocaleLowerCase('vi').includes(key)) : []
   const friendIds = new Set(matchingFriends.map(person => person.id))
+  const matches = key ? conversations.filter(item => {
+    const title = titleOf(item)
+    return !friendIds.has(title.peer) && title.name.toLocaleLowerCase('vi').includes(key)
+  }) : []
   const results = found.filter(person => !friendIds.has(person.id))
   return <Modal title="Tìm kiếm" onClose={close} onBack={close} className="search-dialog app-screen">
     <div className="search-box"><Search size={20} /><input autoFocus aria-label="Tìm bạn hoặc hội thoại" placeholder="Nhập tên bạn hoặc cuộc trò chuyện"
@@ -393,7 +396,7 @@ export function Profile({ user, data, presence, blocked, people, setDialog, erro
       <button className="secondary" onClick={() => setDialog({ type: 'profile' })}>Chỉnh sửa hồ sơ</button>
     </div>
     <button className="settings-row" onClick={() => setDialog({ type: 'qr' })}><QrCode /><span><strong>Mã QR của tôi</strong><small>Chia sẻ mã để kết bạn</small></span><ChevronRight /></button>
-    <label className="settings-row"><CircleUserRound /><span><strong>Trạng thái hoạt động</strong><small>Hiển thị khi bạn đang trực tuyến</small></span>
+    <label id="profile-settings" tabIndex={-1} className="settings-row"><CircleUserRound /><span><strong>Trạng thái hoạt động</strong><small>Hiển thị khi bạn đang trực tuyến</small></span>
       <input type="checkbox" role="switch" checked={presence?.visible === true} onChange={event => setVisibility(user.uid, event.target.checked).catch(error)} /></label>
     <label className="settings-row"><Bell /><span><strong>Thông báo trên thiết bị này</strong><small>Tin nhắn và cuộc gọi đến</small></span>
       <input type="checkbox" role="switch" checked={enabled} disabled={busy} onChange={async event => {

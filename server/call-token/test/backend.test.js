@@ -162,6 +162,38 @@ test("an event with no registered recipient can retry after device registration"
   assert.equal(f.pushes.length, 1);
 });
 
+test("web message previews are opt-in per device and muted chats still ring for calls", async (t) => {
+  const f = await fixture(t, { rows: {
+    "users/bob/deviceTokens/device": { token: "android", platform: "android" },
+    "users/bob/deviceTokens/private": { token: "private", platform: "web" },
+    "users/bob/deviceTokens/preview": { token: "preview", platform: "web", showPreview: true },
+    "users/bob/deviceTokens/muted": { token: "muted", platform: "web", showPreview: true, mutedChats: ["chat"] }
+  } });
+  assert.equal((await f.request("/api/message-notify", "alice", { conversationId: "chat", messageId: "msg1" })).status, 200);
+  const messages = Object.fromEntries(f.pushes.map(push => [push.tokens[0], push.data]));
+  assert.equal(messages.android.preview, "Hello");
+  assert.equal(messages.preview.showPreview, "true");
+  assert.equal(messages.preview.preview, "Hello");
+  assert.equal(messages.private.preview, undefined);
+  assert.equal(messages.private.senderName, undefined);
+  assert.equal(messages.muted, undefined);
+  await f.db.doc("calls/call1").update({ status: "ringing" });
+  assert.equal((await f.request("/api/call-invite", "alice", { callId: "call1" })).status, 200);
+  assert.ok(f.pushes.at(-1).tokens.includes("muted"));
+  assert.equal(f.pushes.at(-1).data.eventType, "call");
+});
+
+test("a conversation muted on all web devices consumes the event without delivering push", async (t) => {
+  const f = await fixture(t, { rows: {
+    "users/bob/deviceTokens/device": { token: "muted", platform: "web", mutedChats: ["chat"] }
+  } });
+  const event = { conversationId: "chat", messageId: "msg1" };
+  assert.equal((await f.request("/api/message-notify", "alice", event)).status, 200);
+  await f.db.doc("users/bob/deviceTokens/device").update({ mutedChats: [] });
+  assert.equal((await f.request("/api/message-notify", "alice", event)).status, 200);
+  assert.equal(f.pushes.length, 0);
+});
+
 test("voice objects are immutable and a recipient can read only after the voice message is published", async (t) => {
   const f = await fixture(t);
   const box = (name, payload) => {

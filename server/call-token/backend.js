@@ -229,11 +229,13 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       const muted = (device) => message && device.platform === "web" &&
         Array.isArray(device.mutedChats) && device.mutedChats.includes(data.conversationId);
       const eligible = valid.filter((doc) => !muted(doc.data()));
-      const privatePreview = (doc) => message && doc.data().platform === "web" && doc.data().showPreview !== true;
+      const webMessage = (doc) => message && doc.data().platform === "web";
       const { preview, senderName, conversationTitle, ...generic } = data;
       const deliveries = [
-        { docs: eligible.filter((doc) => !privatePreview(doc)), payload: data },
-        { docs: eligible.filter(privatePreview), payload: generic }
+        { docs: eligible.filter((doc) => !webMessage(doc)), payload: data },
+        { docs: eligible.filter((doc) => webMessage(doc) && doc.data().showPreview === true),
+          payload: { ...data, showPreview: "true" } },
+        { docs: eligible.filter((doc) => webMessage(doc) && doc.data().showPreview !== true), payload: generic }
       ];
       let acceptedDevices = 0;
       let retry = false;
