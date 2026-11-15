@@ -2,6 +2,7 @@ package com.example.utechat.data.backend;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
 import androidx.test.core.app.ActivityScenario;
@@ -9,10 +10,12 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
 import androidx.test.runner.lifecycle.Stage;
 import com.example.utechat.R;
+import com.example.utechat.BuildConfig;
 import com.example.utechat.feature.calls.ui.CallActivity;
 import com.example.utechat.feature.main.ui.MainActivity;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Source;
@@ -25,11 +28,14 @@ import static org.junit.Assume.assumeTrue;
 /** Run receiver and caller concurrently on two signed-in emulator accounts. Never enabled in normal CI. */
 public final class TwoDeviceCallSmokeTest {
     @Test public void foregroundCallConnectsBothPeers() throws Exception {
-        String role=InstrumentationRegistry.getArguments().getString("rtcRole");
+        Bundle args=InstrumentationRegistry.getArguments();
+        String role=args.getString("rtcRole");
         assumeTrue("caller".equals(role)||"receiver".equals(role)||"receiver_background".equals(role));
         boolean receiver=role.startsWith("receiver");
-        String media=InstrumentationRegistry.getArguments().getString("rtcMedia","audio");
+        String media=args.getString("rtcMedia","audio");
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        boolean local="true".equals(args.getString("rtcLocal"));
+        if(local) signInToLocalFirebase(args);
         assertNotNull("Sign into a test account first",FirebaseAuth.getInstance().getCurrentUser());
         ActivityScenario<?> scenario;
         if(receiver)scenario=ActivityScenario.launch(MainActivity.class);
@@ -100,7 +106,20 @@ public final class TwoDeviceCallSmokeTest {
                 if(!active.isFinishing()&&!active.isDestroyed())active.findViewById(R.id.btn_end_call).performClick();
             });
             scenario.close();
+            if(local) FirebaseAuth.getInstance().signOut();
         }
+    }
+    private void signInToLocalFirebase(Bundle args) throws Exception {
+        assertTrue("Local RTC smoke test requires a debug APK",BuildConfig.DEBUG);
+        assertEquals("http://localhost:8879/api/rtc-token",BuildConfig.AGORA_TOKEN_SERVER_URL);
+        // The dedicated emulator reaches the local fixtures through adb reverse.
+        FirebaseAuth auth=FirebaseAuth.getInstance();
+        auth.useEmulator("127.0.0.1",9099);
+        FirebaseFirestore.getInstance().useEmulator("127.0.0.1",8080);
+        FirebaseDatabase.getInstance().useEmulator("127.0.0.1",9000);
+        auth.signOut();
+        Tasks.await(auth.signInWithEmailAndPassword(args.getString("rtcEmail"),
+                args.getString("rtcPassword")),20,TimeUnit.SECONDS);
     }
     private CallActivity currentCall(){
         AtomicReference<CallActivity> result=new AtomicReference<>();
