@@ -17,7 +17,7 @@ public final class VerifyEmailActivity extends AppCompatActivity {
     private AuthRepository repository;
     private SharedPreferences emailRequests;
     private String email;
-    private Button resend, confirm, signOut;
+    private Button resend, confirm, signOut, useAnotherEmail;
     private TextView status;
     private boolean busy;
     private final Runnable updateResend = this::refreshButtons;
@@ -37,12 +37,19 @@ public final class VerifyEmailActivity extends AppCompatActivity {
         resend = findViewById(R.id.btn_verify_resend);
         confirm = findViewById(R.id.btn_verify_confirm);
         signOut = findViewById(R.id.btn_verify_sign_out);
+        useAnotherEmail = findViewById(R.id.btn_verify_other_email);
         resend.setOnClickListener(v -> sendLink());
         confirm.setOnClickListener(v -> checkEmail());
         signOut.setOnClickListener(v -> {
             setBusy(true);
             repository.signOut(() -> {
                 if (isAlive()) AuthGate.openAfterAuth(this);
+            });
+        });
+        useAnotherEmail.setOnClickListener(v -> {
+            setBusy(true);
+            repository.signOut(() -> {
+                if (isAlive()) AuthGate.replaceTask(this, RegisterActivity.class);
             });
         });
         if (state != null) showStatus(state.getCharSequence("status"));
@@ -119,6 +126,7 @@ public final class VerifyEmailActivity extends AppCompatActivity {
                 : getString(R.string.verify_email_resend_wait, (wait + 999) / 1_000));
         confirm.setEnabled(!busy);
         signOut.setEnabled(!busy);
+        useAnotherEmail.setEnabled(!busy);
         resend.removeCallbacks(updateResend);
         if (wait > 0 && getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
             resend.postDelayed(updateResend, Math.min(1_000, wait));

@@ -1,9 +1,22 @@
-import { deleteDoc, doc, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore'
 import { app, db, pushPublicKey } from './firebase'
 
 const registration = () => navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready)
 const tokenKey = uid => `utechat.web.fcm.${uid}`
+const previewKey = uid => `utechat.web.preview.${uid}`
 const tokenDoc = (uid, id) => doc(db, 'users', uid, 'deviceTokens', id)
+export function notificationPreferences(uid) {
+  let chats = {}
+  try { chats = JSON.parse(localStorage.getItem(`utechat.web.conversation.${uid}`)) || {} } catch { /* Ignore invalid local data. */ }
+  return {
+    showPreview: localStorage.getItem(previewKey(uid)) === 'true',
+    mutedChats: Object.keys(chats).filter(id => chats[id]?.muted)
+  }
+}
+export async function saveNotificationPreferences(uid, change) {
+  if (notificationsEnabled(uid)) await updateDoc(tokenDoc(uid, localStorage.getItem(tokenKey(uid))), change)
+  if ('showPreview' in change) localStorage.setItem(previewKey(uid), String(change.showPreview))
+}
 const hash = async value => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
@@ -36,7 +49,7 @@ export async function configureNotifications(uid, request = false) {
   }
   const id = await hash(token)
   const previous = localStorage.getItem(tokenKey(uid))
-  await setDoc(tokenDoc(uid, id), { token, platform: 'web', updatedAt: Date.now() })
+  await setDoc(tokenDoc(uid, id), { token, platform: 'web', updatedAt: Date.now(), ...notificationPreferences(uid) })
   if (previous && previous !== id) await deleteDoc(tokenDoc(uid, previous))
   localStorage.setItem(tokenKey(uid), id)
   await setWorkerAccount(uid)

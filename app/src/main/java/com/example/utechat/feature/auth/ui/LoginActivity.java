@@ -24,8 +24,11 @@ public class LoginActivity extends AppCompatActivity {
     private EditText etEmail, etPassword;
     private Button btnLogin;
     private TextView tvGoToRegister;
+    private TextView loginWaitMessage;
     private ProgressBar progressBar;
     private AuthViewModel viewModel;
+    private boolean loading;
+    private final Runnable refreshLoginButton = this::updateLoginButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +50,17 @@ public class LoginActivity extends AppCompatActivity {
         btnLogin = findViewById(R.id.btn_login);
         tvGoToRegister = findViewById(R.id.tv_go_to_register);
         progressBar = findViewById(R.id.progress_bar);
+        loginWaitMessage = findViewById(R.id.tv_login_wait);
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        updateLoginButton();
+    }
+
+    @Override protected void onStop() {
+        btnLogin.removeCallbacks(refreshLoginButton);
+        super.onStop();
     }
 
     private void observeViewModel() {
@@ -62,7 +76,8 @@ public class LoginActivity extends AppCompatActivity {
                     break;
                 case ERROR:
                     setLoading(false);
-                    Toast.makeText(this, resource.getMessage(), Toast.LENGTH_LONG).show();
+                    if (viewModel.loginWaitMillis() == 0)
+                        Toast.makeText(this, resource.getMessage(), Toast.LENGTH_LONG).show();
                     break;
             }
         });
@@ -150,11 +165,24 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void setLoading(boolean loading) {
+        this.loading = loading;
         progressBar.setVisibility(loading ? View.VISIBLE : View.GONE);
-        btnLogin.setEnabled(!loading);
         etEmail.setEnabled(!loading);
         etPassword.setEnabled(!loading);
         tvGoToRegister.setEnabled(!loading);
+        updateLoginButton();
+    }
+
+    private void updateLoginButton() {
+        long wait = viewModel.loginWaitMillis();
+        btnLogin.removeCallbacks(refreshLoginButton);
+        btnLogin.setEnabled(!loading && wait == 0);
+        btnLogin.setText(wait == 0 ? getString(R.string.btn_login)
+                : getString(R.string.auth_login_wait_seconds, (wait + 999) / 1_000));
+        loginWaitMessage.setVisibility(wait == 0 ? View.GONE : View.VISIBLE);
+        loginWaitMessage.setText(viewModel.isFirebaseLoginLimited()
+                ? R.string.auth_login_firebase_wait : R.string.auth_login_local_wait);
+        if (wait > 0) btnLogin.postDelayed(refreshLoginButton, (wait - 1) % 1_000 + 1);
     }
 
 }

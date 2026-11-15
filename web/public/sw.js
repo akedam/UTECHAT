@@ -27,8 +27,10 @@ self.addEventListener('push', event => {
     const call = data.eventType === 'call'
     const id = data.conversationId
     if (!/^[A-Za-z0-9_-]{1,256}$/.test(id || '')) return
-    await self.registration.showNotification(call ? 'Cuộc gọi UTEChat' : 'UTEChat', {
-      body: call ? 'Mở UTEChat để trả lời cuộc gọi.' : 'Bạn có tin nhắn mới.',
+    const preview = typeof data.preview === 'string' && data.preview.trim().slice(0, 300)
+    const title = preview && String(data.conversationTitle || data.senderName || '').slice(0, 80)
+    await self.registration.showNotification(call ? 'Cuộc gọi UTEChat' : title || 'UTEChat', {
+      body: call ? 'Mở UTEChat để trả lời cuộc gọi.' : preview || 'Bạn có tin nhắn mới.',
       icon: '/apple-touch-icon.png',
       silent: false,
       tag: call ? 'call-' + data.callId : 'chat-' + id,

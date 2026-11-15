@@ -99,6 +99,10 @@ final class ChatOptionsDialog extends Dialog {
         row(R.drawable.ic_chat_storage, R.string.chat_storage, this::storage);
         if (!group && !host.chatViewModel().isMock()) {
             gap();
+            row(R.drawable.ic_nav_profile, R.string.profile_view_friend, () -> {
+                dismiss();
+                host.showPeerProfile();
+            });
             row(R.drawable.ic_shield_outline, R.string.user_safety, host::showPeerSafety);
         }
         setContentView(root);

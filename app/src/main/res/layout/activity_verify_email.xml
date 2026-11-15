@@ -78,6 +78,15 @@
             android:textAllCaps="false" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_verify_other_email"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="@string/verify_email_use_another"
+            android:textAllCaps="false" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_verify_sign_out"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="match_parent"

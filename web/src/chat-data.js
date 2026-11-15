@@ -87,6 +87,7 @@ export async function uploadAvatar(file) {
 }
 
 export const watchProfile = (uid, fn, fail) => onSnapshot(doc(db, 'users', uid), snap => fn(snap.exists() ? read(snap) : null), fail)
+export const watchPublicProfile = (uid, fn, fail) => onSnapshot(doc(cards, uid), snap => fn(snap.exists() ? read(snap) : null), fail)
 export const watchConversations = (uid, fn, fail) => watch(
   query(collection(db, 'conversations'), where('participantIds', 'array-contains', uid)), fn, fail
 )
@@ -315,6 +316,7 @@ export async function reportUser(conversationId, uid, reason, messageId) {
 export function watchPresence(uid, callback) {
   return onValue(ref(presenceDb, `presence/${uid}`), snap => callback(snap.val()), () => callback(null))
 }
+export const isOnline = presence => presence?.visible === true && Object.values(presence.connections || {}).some(Boolean)
 export function setVisibility(uid, visible) {
   return set(ref(presenceDb, `presence/${uid}/visible`), visible)
 }

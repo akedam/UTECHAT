@@ -20,6 +20,31 @@ import com.google.android.material.button.MaterialButton;
 import java.util.*;
 
 public class FriendsFragment extends Fragment {
+    private final androidx.activity.result.ActivityResultLauncher<com.journeyapps.barcodescanner.ScanOptions> scanner =
+            registerForActivityResult(new com.journeyapps.barcodescanner.ScanContract(), result -> {
+                if (result.getContents() != null) openQr(result.getContents());
+            });
+    private final androidx.activity.result.ActivityResultLauncher<androidx.activity.result.PickVisualMediaRequest> qrPhoto =
+            registerForActivityResult(new androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(), uri -> {
+                if (uri == null) return;
+                var resolver = requireContext().getContentResolver();
+                var owner = getViewLifecycleOwner();
+                var main = new android.os.Handler(android.os.Looper.getMainLooper());
+                new Thread(() -> {
+                    String contents;
+                    try {
+                        contents = com.example.utechat.feature.friends.qr.FriendQrImage.read(resolver, uri);
+                    } catch (java.io.IOException | com.google.zxing.ReaderException | RuntimeException error) {
+                        contents = null;
+                    }
+                    String decoded = contents;
+                    main.post(() -> {
+                        if (owner.getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+                            openQr(decoded);
+                        }
+                    });
+                }, "utechat-qr-image").start();
+            });
     private FriendsViewModel vm; private FriendsAdapter adapter; private RecyclerView list;
     private LinearLayout requestRows; private TextView empty,error; private ProgressBar progress;
     private String filter = "all";
@@ -42,10 +67,50 @@ public class FriendsFragment extends Fragment {
         v.findViewById(R.id.et_friend_search).setOnClickListener(openSearch);
         v.findViewById(R.id.btn_friend_search).setOnClickListener(openSearch);
         v.findViewById(R.id.btn_open_friend_search).setOnClickListener(openSearch);
+        View qr = v.findViewById(R.id.btn_friend_qr_scan);
+        qr.setVisibility(vm.isMock() ? View.GONE : View.VISIBLE);
+        qr.setOnClickListener(x -> showQrSources());
         vm.getFriends().observe(getViewLifecycleOwner(),users->{friends=users==null?Collections.emptyList():users;filterFriends();});
         vm.getRequests().observe(getViewLifecycleOwner(),this::renderRequests);
         vm.getLoading().observe(getViewLifecycleOwner(),b->progress.setVisibility(Boolean.TRUE.equals(b)?View.VISIBLE:View.GONE));
         vm.getError().observe(getViewLifecycleOwner(),s->{error.setText(s==null?"":s);error.setVisibility(s==null||s.isEmpty()?View.GONE:View.VISIBLE);});
+    }
+
+    private void showQrSources() {
+        boolean hasCamera = requireContext().getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY);
+        if (!hasCamera) {
+            pickQrImage();
+            return;
+        }
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.friend_qr_scan)
+                .setItems(new CharSequence[] {getString(R.string.friend_qr_camera), getString(R.string.friend_qr_pick)},
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                var options = new com.journeyapps.barcodescanner.ScanOptions()
+                                        .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+                                        .setPrompt(getString(R.string.friend_qr_scan_prompt)).setBeepEnabled(false)
+                                        .setCaptureActivity(com.example.utechat.feature.friends.qr.PortraitQrScannerActivity.class);
+                                scanner.launch(options);
+                            } else pickQrImage();
+                        })
+                .show();
+    }
+
+    private void pickQrImage() {
+        qrPhoto.launch(new androidx.activity.result.PickVisualMediaRequest.Builder()
+                .setMediaType(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                .build());
+    }
+
+    private void openQr(String contents) {
+        String uid = com.example.utechat.feature.friends.qr.FriendQrCode.readUid(contents);
+        if (uid == null) {
+            Toast.makeText(requireContext(), R.string.friend_qr_invalid, Toast.LENGTH_LONG).show();
+            return;
+        }
+        startActivity(new Intent(requireContext(), com.example.utechat.feature.search.ui.SearchActivity.class)
+                .putExtra(com.example.utechat.feature.search.ui.SearchActivity.EXTRA_QR_UID, uid));
     }
     private void selectFilter(String value){
         filter=value;
