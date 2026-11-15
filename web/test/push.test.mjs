@@ -74,6 +74,18 @@ test('a tap focuses a ready client and waits for its confirmation before finishi
   assert.equal(sw.opened.length, 0)
 })
 
+test('the worker exposes the sender and content only for an explicit preview', async () => {
+  const sw = fixture()
+  await sw.bind('alice')
+  const data = { eventType: 'message', recipientUid: 'alice', conversationId: 'chat1', senderName: 'Bob', preview: 'Hello' }
+  await sw.deliver(data)
+  assert.equal(sw.shown[0].title, 'UTEChat')
+  assert.equal(sw.shown[0].body, 'Bạn có tin nhắn mới.')
+  await sw.deliver({ ...data, showPreview: 'true' })
+  assert.equal(sw.shown[1].title, 'Bob')
+  assert.equal(sw.shown[1].body, 'Hello')
+})
+
 test('a tap navigates an unready client or opens the conversation when the app is closed', async () => {
   const navigated = []
   const fallback = fixture([{ async focus() {

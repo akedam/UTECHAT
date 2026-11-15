@@ -65,9 +65,9 @@ export function Modal({ title, children, onClose, className = '', onBack }) {
     onClick={event => { if (event.target === event.currentTarget) onClose() }}>
     <section className="modal-inner">
       <header className="modal-header">
-        {onBack && <IconButton icon={ArrowLeft} label="Quay lại" onClick={onBack} />}
+        {onBack && <IconButton icon={ArrowLeft} label="Quay lại" className="modal-back" onClick={onBack} />}
         <h2 id={id}>{title}</h2>
-        <IconButton icon={X} label="Đóng" onClick={onClose} />
+        <IconButton icon={X} label="Đóng" className="modal-close" onClick={onClose} />
       </header>
       <div className="modal-content">{children}</div>
     </section>
@@ -91,10 +91,13 @@ export function useLocal(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback } catch { return fallback }
   }
   const [entry, setEntry] = useState(() => ({ key, value: get() }))
+  const latest = useRef(entry)
   const value = entry.key === key ? entry.value : get()
   return [value, next => {
-    const result = typeof next === 'function' ? next(value) : next
+    const current = latest.current.key === key ? latest.current.value : get()
+    const result = typeof next === 'function' ? next(current) : next
     try { localStorage.setItem(key, JSON.stringify(result)) } catch { /* Storage may be disabled in private mode. */ }
-    setEntry({ key, value: result })
+    latest.current = { key, value: result }
+    setEntry(latest.current)
   }]
 }

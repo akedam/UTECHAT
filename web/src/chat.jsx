@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowLeft, Bell, BellOff, Camera, CheckCheck, ChevronRight, CircleAlert, Copy, RefreshCw,
-  Ellipsis, Flag, Forward, HardDrive, Image, MessageSquare, Mic, MicOff, Pencil, Phone, PhoneOff, Pin,
+  Ellipsis, Flag, Forward, HardDrive, Image, List, MessageSquare, Mic, MicOff, PanelTop, Pencil, Phone, PhoneOff, Pin,
   Plus, Reply, Search, Send, Shield, Smile, Square, Star, Trash2, UserRound, Users, Video, VideoOff, X
 } from 'lucide-react'
 import {
-  blockUser, downloadMedia, findIncomingBlock, hide, markRead, messagePreview, olderMessages, profile, react, reactions,
-  recall, reportUser, sendMessage, setPin, vote, watchMessage, watchMessages, watchPresence
+  blockUser, downloadMedia, findIncomingBlock, hide, isOnline, markRead, messagePreview, olderMessages, react, reactions,
+  recall, reportUser, sendMessage, setPin, vote, watchMessage, watchMessages, watchPresence, watchPublicProfile
 } from './chat-data'
 import { callHistoryTitle, callPeer } from './calls'
 import { Avatar, Empty, IconButton, Modal, formatDate, formatTime, sameDay, useLocal } from './ui'
@@ -158,9 +158,9 @@ function Bubble({ message, group, own, ownUid, person, replies, hidden, action, 
   const cancel = () => clearTimeout(timer.current)
   useEffect(() => cancel, [])
   const start = event => {
-    if (event.button !== 0 || event.target.closest('button,a,audio,video')) return
     cancel()
     longPress.current = false
+    if (event.button !== 0 || (event.target.closest('button,a,audio,video') && !event.target.closest('.image-preview'))) return
     point.current = [event.clientX, event.clientY]
     timer.current = setTimeout(() => { longPress.current = true; action(message) }, 500)
   }
@@ -189,6 +189,9 @@ function Bubble({ message, group, own, ownUid, person, replies, hidden, action, 
     <div className="bubble-wrap">
       <div className={`bubble ${history ? 'call-record' : ''}`}
         onContextMenu={event => { event.preventDefault(); cancel(); if (!longPress.current) action(message); longPress.current = false }}
+        onClickCapture={event => {
+          if (longPress.current) { event.preventDefault(); event.stopPropagation(); longPress.current = false }
+        }}
         onPointerDown={start}
         onPointerMove={event => { if (point.current && Math.hypot(event.clientX - point.current[0], event.clientY - point.current[1]) > 10) cancel() }}
         onPointerUp={cancel} onPointerCancel={cancel} onPointerLeave={cancel}>{body}</div>
@@ -249,10 +252,10 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   const messages = useMemo(() => [...unique.values()].filter(message => !hidden.has(`${id}:${message.id}`))
     .sort((a, b) => a.sentAt - b.sentAt || a.id.localeCompare(b.id)), [unique, hidden, id])
   const bottom = messages.at(-1)
-  const hasOnline = presence?.visible && Object.values(presence.connections || {}).some(Boolean)
+  const hasOnline = isOnline(presence)
   const subtitle = group ? `${conversation.participantIds.length} thành viên` : hasOnline ? 'Đang hoạt động' : ''
   const readCurrent = () => {
-    if (!bottom || document.visibilityState !== 'visible' || uiSeen.current === bottom.id) return
+    if (!bottom || !near || document.visibilityState !== 'visible' || uiSeen.current === bottom.id) return
     uiSeen.current = bottom.id
     markRead(id, bottom).catch(() => { if (uiSeen.current === bottom.id) uiSeen.current = null })
   }
@@ -260,13 +263,20 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     readCurrent()
     document.addEventListener('visibilitychange', readCurrent)
     return () => document.removeEventListener('visibilitychange', readCurrent)
-  }, [id, bottom?.id])
+  }, [id, bottom?.id, near])
   useLayoutEffect(() => {
     if (!firstLoaded || jumping.current || !log.current) return
     const height = log.current.scrollHeight
     if (near || lastBottom.current === 0) log.current.scrollTop = height
     lastBottom.current = height
   }, [firstLoaded, bottom?.id, near])
+  useEffect(() => {
+    const area = log.current
+    if (!area || !near || !window.ResizeObserver) return
+    const observer = new ResizeObserver(() => { if (!jumping.current) area.scrollTop = area.scrollHeight })
+    observer.observe(area)
+    return () => observer.disconnect()
+  }, [near])
 
   const scrollBottom = () => log.current?.scrollTo({ top: log.current.scrollHeight, behavior: 'smooth' })
   const loadOlder = async () => {
@@ -297,14 +307,14 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       const data = override || (clip ? { type: 'voice', content: 'Tin nhắn thoại', blob: clip.blob, durationMs: clip.durationMs }
         : photo ? { type: 'image', content: '', blob: photo.blob } : { type: 'text', content })
       await sendMessage(id, data, reply)
-      if (data.type === 'text') saveDraft('')
+      if (data.type === 'text') saveDraft(current => current === draft ? '' : current)
       setReply(null); setPhoto(null); recorder.cancel(); setMore(false); scrollBottom()
     } catch (failure) {
       if (title.peer && (failure.code === 'permission-denied' || failure.serverCode === 'contact-unavailable' ||
         failure.serverCode === 'forbidden') && await findIncomingBlock(title.peer)) {
         const attempted = override ? messagePreview(override) : recorder.clip ? 'Tin nhắn thoại' : photo ? 'Hình ảnh' : content
         setBlockedAttempt(attempted)
-        saveDraft('')
+        saveDraft(current => current === draft ? '' : current)
         setReply(null)
         setPhoto(null)
         recorder.cancel()
@@ -326,6 +336,13 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     reply: () => { setReply(message); text.current?.focus() },
     photo: () => { setReply(message); photoInput.current?.click() }, blocked
   })
+  const pickEmoji = () => showDialog({ type: 'emoji', pick: emoji => {
+    const field = text.current
+    const start = field?.selectionStart ?? draft.length
+    const end = field?.selectionEnd ?? draft.length
+    saveDraft(draft.slice(0, start) + emoji + draft.slice(end))
+    requestAnimationFrame(() => { field?.focus(); field?.setSelectionRange(start + emoji.length, start + emoji.length) })
+  } })
   const handleScroll = event => {
     const el = event.currentTarget
     setNear(el.scrollHeight - el.clientHeight - el.scrollTop < 100)
@@ -343,8 +360,9 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       <div className="chat-tools">
         {!group && <><IconButton icon={Phone} label="Gọi thoại" onClick={() => call('audio')} disabled={blocked} />
           <IconButton icon={Video} label="Gọi video" onClick={() => call('video')} disabled={blocked} /></>}
-        <IconButton icon={Ellipsis} label="Tùy chọn hội thoại" onClick={() => showDialog(group ? { type: 'manage', search: () => setSearch(true) } : {
-          type: 'options', title, id, blocked, search: () => setSearch(true), settings, setSettings,
+        <IconButton icon={List} label="Tùy chọn hội thoại" onClick={() => showDialog({
+          type: 'options', title, id, group, blocked, search: () => setSearch(true), settings, setSettings,
+          previews: messages.filter(message => message.type === 'image').slice(-4).reverse(),
           stats: {
             count: messages.length, images: messages.filter(message => message.type === 'image').length,
             bytes: messages.reduce((sum, message) => sum + (Number(message.fileSize) || 0), 0)
@@ -395,11 +413,11 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       {recorder.clip && <div className="compose-preview"><Mic size={20} /><audio src={recorder.clip.url} controls preload="metadata" />
         <IconButton icon={X} label="Bỏ bản ghi" onClick={recorder.cancel} /></div>}
       {more && <div className="composer-tools">
-        <button className="secondary compact" onClick={() => showDialog({ type: 'emoji', pick: emoji => { saveDraft(draft + emoji); text.current?.focus() } })}><Smile size={17} /> Biểu tượng cảm xúc</button>
-        {group && <button className="secondary compact" onClick={() => showDialog({ type: 'poll', submit: data => sendMessage(id, data) })}>Tạo bình chọn</button>}
+        <button className="secondary compact" onClick={() => photoInput.current?.click()}><Camera size={17} /> Chụp ảnh</button>
+        <button className="secondary compact" onClick={() => showDialog({ type: 'poll', submit: data => sendMessage(id, data) })}>Tạo bình chọn</button>
       </div>}
       <form className="composer" onSubmit={event => { event.preventDefault(); submit() }}>
-        <IconButton icon={Plus} label="Thêm tiện ích" onClick={() => setMore(!more)} aria-expanded={more} />
+        {!recorder.recording && <IconButton icon={Smile} label="Biểu tượng cảm xúc" onClick={pickEmoji} />}
         {recorder.recording ? <div className="recording" role="status"><span /> Đang ghi âm {durationLabel(recorder.elapsed)}
           <IconButton icon={X} label="Hủy ghi âm" onClick={recorder.cancel} /></div>
           : <textarea ref={text} aria-label="Tin nhắn" rows="1" maxLength={5000} value={draft} placeholder="Nhập tin nhắn"
@@ -411,13 +429,15 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
         <input type="file" hidden accept="image/*" ref={imageInput} onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
         <input type="file" hidden accept="image/*" capture="environment" ref={photoInput}
           onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
-        {!recorder.recording && <IconButton icon={Image} label="Chọn ảnh" disabled={sending} onClick={() => imageInput.current?.click()} />}
+        {!recorder.recording && <IconButton icon={Ellipsis} label="Thêm tiện ích" onClick={() => setMore(!more)} aria-expanded={more} />}
         <IconButton icon={recorder.recording ? Square : Mic} label={recorder.recording ? 'Dừng ghi âm' : 'Ghi âm'}
           disabled={recorder.busy || sending} onClick={() => {
             if (recorder.recording) recorder.stop()
             else { setPhoto(null); recorder.start() }
           }} />
-        <button className="send-button" type="submit" aria-label="Gửi tin nhắn" disabled={sending || recorder.recording || (!draft.trim() && !photo && !recorder.clip)}><Send size={20} /></button>
+        {!recorder.recording && <IconButton icon={Image} label="Chọn ảnh" disabled={sending} onClick={() => imageInput.current?.click()} />}
+        {!recorder.recording && (draft.trim() || photo || recorder.clip) &&
+          <button className="send-button" type="submit" aria-label="Gửi tin nhắn" disabled={sending}><Send size={20} /></button>}
       </form>
     </div>}
   </section>
@@ -527,43 +547,69 @@ export function PollDialog({ data, close, error }) {
   </form></Modal>
 }
 
-export function ChatOptions({ data, close, replace, confirm, error }) {
-  const { id, title, settings, setSettings, blocked, stats } = data
-  return <Modal title="Tùy chọn hội thoại" onClose={close}>
-    <div className="settings-hero"><Avatar name={title.name} photo={title.photo} size={68} /><strong>{title.name}</strong></div>
-    {optionRow(Search, 'Tìm tin nhắn', () => { close(); data.search() })}
-    {optionRow(UserRound, 'Xem hồ sơ', () => replace({ type: 'peer-profile', uid: title.peer, conversationId: id }))}
-    {optionRow(Pencil, 'Đổi tên gợi nhớ', () => replace({ type: 'nickname', settings, setSettings }))}
-    {optionRow(Star, settings.favorite ? 'Bỏ đánh dấu liên hệ nhanh' : 'Đánh dấu liên hệ nhanh',
-      () => { setSettings({ ...settings, favorite: !settings.favorite }); close() })}
-    {optionRow(Pin, settings.pinned ? 'Bỏ ghim hội thoại' : 'Ghim hội thoại', () => { setSettings({ ...settings, pinned: !settings.pinned }); close() })}
-    {optionRow(settings.muted ? BellOff : Bell, settings.muted ? 'Bật thông báo trong trang' : 'Tắt thông báo trong trang', () => { setSettings({ ...settings, muted: !settings.muted }); close() })}
-    {optionRow(Users, `Tạo nhóm với ${title.name}`, () => replace({ type: 'create', selectedFirst: title.peer }))}
-    {optionRow(Image, 'Ảnh và liên kết đã chia sẻ', () => replace({ type: 'gallery', id }))}
-    <label className="labeled-row">Hình nền<select value={settings.wallpaper || 'cloud'} onChange={event => setSettings({ ...settings, wallpaper: event.target.value })}>
-      <option value="cloud">Xám xanh</option><option value="sky">Xanh da trời</option><option value="sand">Kem</option><option value="paper">Trắng</option>
-    </select></label>
-    {optionRow(Shield, 'Bảo vệ trò chuyện', () => replace({ type: 'info', title: 'Bảo vệ trò chuyện',
+export function ChatOptions({ data, close, replace, confirm, error, openCommunity }) {
+  const { id, title, group, settings, setSettings, blocked, stats, previews } = data
+  const [busy, setBusy] = useState(false)
+  const openProfile = () => replace({ type: 'peer-profile', uid: title.peer, conversationId: id })
+  const manage = () => replace({ type: 'manage', id, search: data.search })
+  const gallery = () => replace({ type: 'gallery', id })
+  const change = async (key, value) => {
+    setBusy(true)
+    try { await setSettings({ ...settings, [key]: value }) }
+    catch (failure) { error(failure) } finally { setBusy(false) }
+  }
+  const shortcut = (Icon, label, action, props) => <button className="chat-shortcut" onClick={action} {...props}>
+    <span><Icon size={22} /></span>{label}
+  </button>
+  const toggle = (Icon, label, key) => <label className="settings-row">
+    <Icon /> <span><strong>{label}</strong></span>
+    <input type="checkbox" role="switch" checked={Boolean(settings[key])} disabled={busy}
+      onChange={event => change(key, event.target.checked)} />
+  </label>
+  return <Modal title="Tùy chọn hội thoại" onClose={close} onBack={close} className="app-screen chat-options">
+    <div className="settings-hero"><Avatar name={title.name} photo={title.photo} size={80} group={group} /><strong>{title.name}</strong>
+      <div className="chat-shortcuts">
+        {shortcut(Search, 'Tìm tin nhắn', () => { close(); data.search() })}
+        {group ? shortcut(Users, 'Thành viên', manage) : shortcut(UserRound, 'Xem hồ sơ', openProfile)}
+        {shortcut(PanelTop, 'Đổi hình nền', () => replace({ type: 'wallpaper', options: data }))}
+        {shortcut(settings.muted ? BellOff : Bell, settings.muted ? 'Bật thông báo tin nhắn' : 'Tắt thông báo tin nhắn',
+          () => change('muted', !settings.muted), { disabled: busy })}
+      </div>
+    </div>
+    <div className="options-group">
+      {optionRow(Pencil, 'Đổi tên gợi nhớ', () => replace({ type: 'nickname', settings, setSettings }))}
+      {toggle(Star, 'Đánh dấu liên hệ nhanh', 'favorite')}
+    </div>
+    <div className="options-group">
+      {optionRow(Image, 'Ảnh và liên kết đã chia sẻ', gallery)}
+      {previews.length > 0 && <div className="option-thumbnails">
+        {previews.map(message => <Attachment key={message.id} message={message} open={() => replace({ type: 'image', message })} />)}
+      </div>}
+    </div>
+    <div className="options-group">
+      {!group && optionRow(Users, `Tạo nhóm với ${title.name}`, () => replace({ type: 'create', selectedFirst: title.peer }))}
+      {optionRow(Users, 'Mở Cộng đồng', openCommunity)}
+      {toggle(Pin, 'Ghim hội thoại', 'pinned')}
+      {optionRow(Shield, 'Bảo vệ trò chuyện', () => replace({ type: 'info', title: 'Bảo vệ trò chuyện',
       description: 'Quyền truy cập tin nhắn do Firebase kiểm soát theo tài khoản và thành viên hội thoại. UTEChat chưa hỗ trợ mã hóa đầu cuối.' }))}
-    {optionRow(HardDrive, 'Dung lượng trò chuyện', () => replace({ type: 'info', title: 'Dung lượng trò chuyện',
+      {optionRow(HardDrive, 'Dung lượng trò chuyện', () => replace({ type: 'info', title: 'Dung lượng trò chuyện',
       description: `Đã tải ${stats.count} tin nhắn, gồm ${stats.images} ảnh. Tệp đính kèm có tổng dung lượng ${(stats.bytes / 1024).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} KB.` }))}
-    {optionRow(Flag, 'Báo cáo', () => replace({ type: 'report', id, uid: title.peer }))}
-    {optionRow(Shield, blocked ? 'Bỏ chặn' : 'Chặn người dùng', () => {
-      if (blocked) { blockUser(title.peer, false).then(close).catch(error); return }
-      confirm({ title: 'Chặn người dùng', description: 'Hai bạn sẽ không thể nhắn tin hoặc gọi điện cho nhau.', label: 'Chặn', danger: true,
-        action: async () => { await blockUser(title.peer, true); close() } })
-    }, true)}
+    </div>
+    {!group && <div className="options-group">
+      {optionRow(Flag, 'Báo cáo', () => replace({ type: 'report', id, uid: title.peer }))}
+      {optionRow(Shield, blocked ? 'Bỏ chặn' : 'Chặn người dùng', () => {
+        if (blocked) { blockUser(title.peer, false).then(close).catch(error); return }
+        confirm({ title: 'Chặn người dùng', description: 'Hai bạn sẽ không thể nhắn tin hoặc gọi điện cho nhau.', label: 'Chặn', danger: true,
+          action: async () => { await blockUser(title.peer, true); close() } })
+      }, true)}
+    </div>}
   </Modal>
 }
 
 export function PeerProfile({ uid, close, error, chat, remove }) {
   const [person, setPerson] = useState(null)
-  useEffect(() => {
-    let done = false
-    profile(uid).then(value => { if (!done) setPerson(value) }).catch(error)
-    return () => { done = true }
-  }, [uid, error])
-  return <Modal title="Trang cá nhân" onClose={close}>
+  useEffect(() => watchPublicProfile(uid, setPerson, error), [uid, error])
+  return <Modal title="Trang cá nhân" onClose={close} onBack={close} className="app-screen">
     <div className="settings-hero"><Avatar name={person?.displayName} photo={person?.photoUrl} size={80} />
       <strong>{person?.displayName || 'Người dùng UTEChat'}</strong>
       <div className="button-row">
