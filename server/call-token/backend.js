@@ -2,12 +2,13 @@
 const crypto = require("node:crypto");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VOICE_BYTES = 512 * 1024;
+const MAX_AVATAR_BYTES = 192 * 1024;
 const VOICE_TYPE = "audio/mp4";
 const WEB_ORIGINS = new Set(["https://utechat-ab9d8.web.app", "https://utechat-ab9d8.firebaseapp.com"]);
 const API_METHODS = new Map([
   ["/api/rtc-token", ["POST"]], ["/api/call-invite", ["POST"]],
   ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
-  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]]
+  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]]
 ]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -64,8 +65,8 @@ async function readJson(req) {
   try { return JSON.parse(raw.toString("utf8") || "{}"); }
   catch (_) { throw new ApiError(400, "invalid-json"); }
 }
-function send(res, status, body, type = "application/json; charset=utf-8") {
-  res.writeHead(status, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+function send(res, status, body, type = "application/json; charset=utf-8", cache = "no-store") {
+  res.writeHead(status, { "content-type": type, "cache-control": cache, "x-content-type-options": "nosniff" });
   res.end(Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
@@ -228,7 +229,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       if (valid.length) {
         const result = await messaging.sendEachForMulticast({ tokens: valid.map((doc) => doc.data().token),
           data: { ...data, recipientUid }, android: { priority: "high", ttl },
-          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)) } } });
+          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)), Urgency: data.eventType === "call" ? "high" : "normal" } } });
         let retry = false;
         for (let i = 0; i < result.responses.length; i++) {
           const response = result.responses[i];
@@ -391,6 +392,31 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     requireValue(validVoice(bytes) && hash(bytes) === record.data().sha256, 502, "invalid-voice");
     return bytes;
   }
+
+  async function uploadAvatar(uid, bytes) {
+    requireValue(segment(uid) && validImage(bytes, "image/jpeg"), 400, "invalid-avatar");
+    const version = hash(bytes);
+    const avatar = db.doc(`backendAvatars/${uid}`);
+    const quota = db.doc(`backendUsage/${hash(uid)}_${new Date(now()).toISOString().slice(0, 10)}`);
+    await db.runTransaction(async tx => {
+      const [saved, usage] = await Promise.all([tx.get(avatar), tx.get(quota)]);
+      if (saved.data()?.version === version) return;
+      const used = usage.data()?.bytes || 0;
+      requireValue(used + bytes.length <= dailyUploadBytes, 429, "daily-upload-limit");
+      tx.set(avatar, { bytes, version });
+      tx.set(quota, { bytes: used + bytes.length });
+    });
+    return { path: `/api/avatar?uid=${encodeURIComponent(uid)}&v=${version}` };
+  }
+
+  async function downloadAvatar(uid) {
+    requireValue(segment(uid));
+    const avatar = (await db.doc(`backendAvatars/${uid}`).get()).data();
+    requireValue(avatar, 404, "not-found");
+    const bytes = Buffer.from(avatar.bytes);
+    requireValue(bytes.length <= MAX_AVATAR_BYTES && validImage(bytes, "image/jpeg"), 502, "invalid-media");
+    return bytes;
+  }
   async function handle(req, res) {
     try {
       const url = new URL(req.url, "http://backend.invalid");
@@ -410,12 +436,20 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       }
       if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage, voice: true });
       const voice = url.pathname === "/api/voice";
+      const avatar = url.pathname === "/api/avatar";
+      if (avatar && req.method === "GET") {
+        return send(res, 200, await downloadAvatar(url.searchParams.get("uid")), "image/jpeg", "public, max-age=300");
+      }
       requireValue(methods?.includes(req.method), 404, "not-found"); const authorization = req.headers.authorization || "";
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }
       requireValue(user.email_verified === true, 403, "email-unverified");
-      rateLimit(user.uid, url.pathname === "/api/media" || voice ? "media" : "api");
+      rateLimit(user.uid, url.pathname === "/api/media" || voice || avatar ? "media" : "api");
+      if (avatar) {
+        requireValue(req.headers["content-type"] === "image/jpeg", 400, "invalid-avatar");
+        return send(res, 200, await uploadAvatar(user.uid, await readBody(req, MAX_AVATAR_BYTES)));
+      }
       sweep().catch(() => process.stderr.write("Call reconciliation deferred.\n"));
       if (voice) {
         const path = url.searchParams.get("path");
