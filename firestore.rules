@@ -49,7 +49,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /blocked/{peerUid} {
-        allow read, delete: if isOwner();
+        allow get: if isOwner() || (signedIn() && request.auth.uid == peerUid);
+        allow list, delete: if isOwner();
         allow create: if isOwner() && userId != peerUid
           && request.resource.data.keys().hasOnly(['createdAt'])
           && request.resource.data.createdAt == request.time

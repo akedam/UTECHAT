@@ -50,7 +50,9 @@ export async function api(path, { body, method = body ? 'POST' : 'GET', type, bl
   }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    throw new Error(backendErrors[data.error] || 'Máy chủ chưa xử lý được yêu cầu. Hãy thử lại.')
+    const error = new Error(backendErrors[data.error] || 'Máy chủ chưa xử lý được yêu cầu. Hãy thử lại.')
+    error.serverCode = data.error
+    throw error
   }
   return blob ? response.blob() : response.json()
 }

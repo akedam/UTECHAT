@@ -8,7 +8,7 @@ import {
 import { auth, backend } from './firebase'
 import { useCall, useIncomingTone } from './calls'
 import {
-  downloadMedia, ensureProfile, historyPreview, openDirect, profile, reactions, saveProfile, startPresence,
+  answerFriend, downloadMedia, ensureProfile, historyPreview, openDirect, profile, reactions, saveProfile, startPresence, uploadAvatar,
   unread, watchBlocked, watchConversations, watchFriendships, watchHidden, watchPresence, watchProfile
 } from './chat-data'
 import { configureNotifications, disableNotifications, installWorker, notificationsEnabled } from './notifications'
@@ -96,6 +96,7 @@ function Workspace({ user }) {
   const [friendships, setFriendships] = useState([])
   const [people, setPeople] = useState({})
   const [blocked, setBlocked] = useState([])
+  const [messageCue, setMessageCue] = useState('')
   const [hidden, setHidden] = useState(new Set())
   const [presence, setPresence] = useState(null)
   const [drafts, setDrafts] = useLocal(`utechat.web.draft.${user.uid}`, {})
@@ -187,14 +188,17 @@ function Workspace({ user }) {
     const previous = seenMessages.current
     seenMessages.current = messages
     if (!loadedChats || previous === null || document.visibilityState !== 'visible') return
-    const fresh = conversations.find(row => row.id !== selected && !previous.has(row.lastMessageId) &&
+    const fresh = conversations.find(row => !previous.has(row.lastMessageId) &&
       unread(row, user.uid, hidden) && !preferences[row.id]?.muted && row.lastMessageAt > Date.now() - 10_000)
-    if (fresh) notify(`${titleOf(fresh).name} đã gửi tin nhắn mới.`)
+    if (fresh) {
+      setMessageCue(fresh.id + ':' + fresh.lastMessageId)
+      if (fresh.id !== selected) notify(`${titleOf(fresh).name} đã gửi tin nhắn mới.`)
+    }
   }, [conversations, loadedChats])
 
   const controller = useCall(user.uid, error)
   useIncomingTone(controller.displayed?.status === 'ringing' && controller.displayed.calleeUid === user.uid &&
-    !preferences[controller.displayed.conversationId]?.muted)
+    !preferences[controller.displayed.conversationId]?.muted, messageCue)
   const open = async uid => {
     try {
       if (blocked.includes(uid)) throw new Error('Bạn đã chặn tài khoản này.')
@@ -297,7 +301,14 @@ function Workspace({ user }) {
       allowForward={sorted.some(row => row.id !== dialogs.id)} />}
     {dialogs?.type === 'forward' && <ForwardDialog {...dialogProps} data={dialogs} conversations={sorted} titleOf={titleOf} />}
     {dialogs?.type === 'report' && <ReportDialog {...dialogProps} data={dialogs} />}
-    {dialogs?.type === 'peer-profile' && <PeerProfile {...dialogProps} uid={dialogs.uid} />}
+    {dialogs?.type === 'peer-profile' && <PeerProfile {...dialogProps} uid={dialogs.uid}
+      chat={() => { close(); if (dialogs.conversationId) setChat(dialogs.conversationId); else open(dialogs.uid) }}
+      remove={() => {
+        const friendship = friendships.find(item => item.status === 'accepted' && [item.fromUid, item.toUid].includes(dialogs.uid))
+        if (!friendship) { error(new Error('Hai bạn hiện không có trong danh sách bạn bè.')); return }
+        setConfirmation({ title: 'Xóa bạn', description: 'Người này sẽ được xóa khỏi danh sách bạn bè của bạn.',
+          label: 'Xóa bạn', danger: true, action: async () => { await answerFriend(friendship.id, false); close(); notify('Đã xóa bạn.') } })
+      }} />}
     {dialogs?.type === 'poll' && <PollDialog {...dialogProps} data={dialogs} />}
     {dialogs?.type === 'gallery' && <Gallery {...dialogProps} id={dialogs.id} hidden={hidden}
       open={({ message }) => setDialog({ type: 'image', message })} />}
@@ -327,12 +338,32 @@ function NicknameEditor({ data, close }) {
 function ProfileEditor({ data, close, error, notify }) {
   const [form, setForm] = useState({ displayName: data.displayName, bio: data.bio || '', photoUrl: data.photoUrl || '' })
   const [busy, setBusy] = useState(false)
+  const [photo, setPhoto] = useState(null)
+  const [preview, setPreview] = useState('')
+  useEffect(() => {
+    if (!photo) { setPreview(''); return }
+    const url = URL.createObjectURL(photo)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [photo])
   const input = (key, label, maxLength, type) => <label>{label}<input type={type || 'text'} value={form[key]} maxLength={maxLength}
     required={key === 'displayName'} onChange={event => setForm({ ...form, [key]: event.target.value })} /></label>
-  return <Modal title="Chỉnh sửa hồ sơ" onClose={close}><form className="stack" onSubmit={async event => {
+  return <Modal title="Chỉnh sửa hồ sơ" onClose={() => !busy && close()}><form className="stack" onSubmit={async event => {
     event.preventDefault(); setBusy(true)
-    try { await saveProfile(form); close(); notify('Đã lưu hồ sơ.') } catch (failure) { error(failure); setBusy(false) }
+    try {
+      const photoUrl = photo ? await uploadAvatar(photo) : form.photoUrl
+      await saveProfile({ ...form, photoUrl })
+      close()
+      notify('Đã lưu hồ sơ.')
+    } catch (failure) { error(failure); setBusy(false) }
   }}>
+    <div className="settings-hero">
+      {preview ? <img className="profile-preview" src={preview} alt="Xem trước ảnh đại diện" /> :
+        <Avatar name={form.displayName} photo={form.photoUrl} size={80} />}
+      <label className="file-button secondary">Chọn ảnh đại diện
+        <input type="file" accept="image/*" disabled={busy} onChange={event => setPhoto(event.target.files[0] || null)} />
+      </label>
+    </div>
     {input('displayName', 'Tên hiển thị', 80)}
     <label>Giới thiệu<textarea maxLength={300} value={form.bio} onChange={event => setForm({ ...form, bio: event.target.value })} /></label>
     {input('photoUrl', 'Đường dẫn ảnh đại diện HTTPS', 2048, 'url')}

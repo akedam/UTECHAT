@@ -37,8 +37,10 @@ export function Avatar({ name, photo, size = 44, group = false, online = false }
   useEffect(() => setFailed(false), [photo])
   const initials = (name || 'U').trim().split(/\s+/).slice(-2).map(part => Array.from(part)[0]).join('').toUpperCase()
   const tint = ((name || '').codePointAt(0) || 0) % 4
+  const validPhoto = /^https:\/\//i.test(photo || '') ||
+    (import.meta.env.DEV && photo?.startsWith(location.origin + '/api/avatar?'))
   return <span className={`avatar tint-${tint}${group ? ' group-avatar' : ''}`} style={{ '--avatar': size + 'px' }} aria-hidden="true">
-    {/^https:\/\//i.test(photo || '') && !failed
+    {validPhoto && !failed
       ? <img src={photo} referrerPolicy="no-referrer" alt="" onError={() => setFailed(true)} /> : initials}
     {online && <span className="online-dot" />}
   </span>

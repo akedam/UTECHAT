@@ -30,6 +30,7 @@ self.addEventListener('push', event => {
     await self.registration.showNotification(call ? 'Cuộc gọi UTEChat' : 'UTEChat', {
       body: call ? 'Mở UTEChat để trả lời cuộc gọi.' : 'Bạn có tin nhắn mới.',
       icon: '/apple-touch-icon.png',
+      silent: false,
       tag: call ? 'call-' + data.callId : 'chat-' + id,
       data: { id, uid }
     })

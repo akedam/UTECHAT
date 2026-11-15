@@ -104,7 +104,10 @@ test('a private block prevents direct contact and reports stay private and immut
     sentAt: 1, createdAt: 1, readBy: ['bob'] };
   await assertFails(setDoc(doc(bob, 'users/alice/blocked/bob'), { createdAt: serverTimestamp() }));
   await assertSucceeds(setDoc(block, { createdAt: serverTimestamp() }));
-  await assertFails(getDoc(doc(bob, 'users/alice/blocked/bob')));
+  await assertSucceeds(getDoc(doc(bob, 'users/alice/blocked/bob')));
+  await assertFails(getDocs(collection(bob, 'users/alice/blocked')));
+  const stranger = verifiedContext('charlie').firestore();
+  await assertFails(getDoc(doc(stranger, 'users/alice/blocked/bob')));
   await assertFails(setDoc(doc(bob, `conversations/${conversationId}/messages/blocked`), message));
   const now = Date.now();
   await assertFails(setDoc(doc(bob, 'calls/blocked-call'), {

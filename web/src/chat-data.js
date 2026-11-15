@@ -1,11 +1,11 @@
 import {
-  collection, deleteDoc, deleteField, doc, endAt, FieldPath, getDoc, getDocs, limit,
+  collection, deleteDoc, deleteField, doc, endAt, FieldPath, getDoc, getDocFromServer, getDocs, limit,
   onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, startAfter,
   startAt, updateDoc, where, writeBatch
 } from 'firebase/firestore'
 import { onDisconnect, onValue, push, ref, remove, serverTimestamp as databaseTime, set } from 'firebase/database'
 import { updateProfile } from 'firebase/auth'
-import { api, auth, db, presenceDb } from './firebase'
+import { api, auth, backend, db, presenceDb } from './firebase'
 
 export const reactions = ['❤️', '😆', '😮', '😢', '😡', '👍', '😂', '😍', '🔥', '👏', '🎉', '💯', '🙌', '🙏', '👎']
 export const qrPrefix = 'utechat://friend/v1/'
@@ -44,7 +44,8 @@ export async function saveProfile({ displayName, bio, photoUrl }) {
   const name = displayName.trim()
   if (!name || name.length > 80) throw new Error('Tên hiển thị phải có từ 1 đến 80 ký tự.')
   const url = photoUrl.trim()
-  if (url && (url.length > 2048 || new URL(url).protocol !== 'https:')) {
+  if (url && (url.length > 2048 || (new URL(url).protocol !== 'https:' &&
+    !(import.meta.env.DEV && new URL(url).origin === location.origin)))) {
     throw new Error('Ảnh đại diện cần dùng địa chỉ HTTPS.')
   }
   const now = Date.now()
@@ -57,6 +58,32 @@ export async function saveProfile({ displayName, bio, photoUrl }) {
   await batch.commit()
   await updateProfile(user, { displayName: name, photoURL: url || null }).catch(() => {})
   return ownData
+}
+
+export async function uploadAvatar(file) {
+  if (file.size > 20 * 1024 * 1024) throw new Error('Hãy chọn ảnh nhỏ hơn 20 MB.')
+  const source = URL.createObjectURL(file)
+  let bytes
+  try {
+    const image = new Image()
+    image.src = source
+    await image.decode()
+    const size = Math.min(image.naturalWidth, image.naturalHeight)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 384
+    const context = canvas.getContext('2d', { alpha: false })
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, 384, 384)
+    context.drawImage(image, (image.naturalWidth - size) / 2, (image.naturalHeight - size) / 2, size, size, 0, 0, 384, 384)
+    bytes = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .8))
+  } catch {
+    throw new Error('Không đọc được ảnh này. Hãy chọn ảnh JPG hoặc PNG.')
+  } finally {
+    URL.revokeObjectURL(source)
+  }
+  if (!bytes || bytes.size > 192 * 1024) throw new Error('Ảnh đại diện vượt quá dung lượng cho phép.')
+  const result = await api('/api/avatar', { method: 'PUT', body: bytes, type: 'image/jpeg' })
+  return new URL(result.path, backend || location.origin).href
 }
 
 export const watchProfile = (uid, fn, fail) => onSnapshot(doc(db, 'users', uid), snap => fn(snap.exists() ? read(snap) : null), fail)
@@ -86,6 +113,8 @@ export function sendFriend(uid) {
 export const answerFriend = (id, accept) => accept
   ? updateDoc(doc(friends, id), { status: 'accepted', updatedAt: Date.now() })
   : deleteDoc(doc(friends, id))
+export const findIncomingBlock = peer => getDocFromServer(doc(db, 'users', peer, 'blocked', me()))
+  .then(snapshot => snapshot.exists(), () => false)
 
 export async function directId(first, second) {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode([first, second].sort().join(':')))

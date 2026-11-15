@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowLeft, Bell, BellOff, Camera, CheckCheck, ChevronRight, CircleAlert, Copy,
+  ArrowDown, ArrowLeft, Bell, BellOff, Camera, CheckCheck, ChevronRight, CircleAlert, Copy, RefreshCw,
   Ellipsis, Flag, Forward, HardDrive, Image, MessageSquare, Mic, MicOff, Pencil, Phone, PhoneOff, Pin,
   Plus, Reply, Search, Send, Shield, Smile, Square, Star, Trash2, UserRound, Users, Video, VideoOff, X
 } from 'lucide-react'
 import {
-  blockUser, downloadMedia, hide, markRead, messagePreview, olderMessages, profile, react, reactions,
+  blockUser, downloadMedia, findIncomingBlock, hide, markRead, messagePreview, olderMessages, profile, react, reactions,
   recall, reportUser, sendMessage, setPin, vote, watchMessage, watchMessages, watchPresence
 } from './chat-data'
 import { callHistoryTitle, callPeer } from './calls'
@@ -212,6 +212,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   const [loadingOld, setLoadingOld] = useState(false)
   const [reply, setReply] = useState(null)
   const [sending, setSending] = useState(false)
+  const [blockedAttempt, setBlockedAttempt] = useState(null)
   const [photo, setPhoto] = useState(null)
   const [pinned, setPinned] = useState(null)
   const [presence, setPresence] = useState(null)
@@ -298,7 +299,18 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       await sendMessage(id, data, reply)
       if (data.type === 'text') saveDraft('')
       setReply(null); setPhoto(null); recorder.cancel(); setMore(false); scrollBottom()
-    } catch (failure) { error(failure) } finally { setSending(false) }
+    } catch (failure) {
+      if (title.peer && (failure.code === 'permission-denied' || failure.serverCode === 'contact-unavailable' ||
+        failure.serverCode === 'forbidden') && await findIncomingBlock(title.peer)) {
+        const attempted = override ? messagePreview(override) : recorder.clip ? 'Tin nhắn thoại' : photo ? 'Hình ảnh' : content
+        setBlockedAttempt(attempted)
+        saveDraft('')
+        setReply(null)
+        setPhoto(null)
+        recorder.cancel()
+        requestAnimationFrame(scrollBottom)
+      } else error(failure)
+    } finally { setSending(false) }
   }
   const attach = async file => {
     if (!file) return
@@ -324,7 +336,10 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     <header className="chat-head">
       <IconButton icon={ArrowLeft} label="Quay lại danh sách" className="chat-back" onClick={onBack} />
       <Avatar name={title.name} photo={title.photo} size={42} group={group} online={hasOnline} />
-      <div className="chat-title"><h2>{title.name}</h2>{subtitle && <p>{subtitle}</p>}</div>
+      <div className="chat-title">{title.peer ? <button className="chat-title-profile"
+        onClick={() => showDialog({ type: 'peer-profile', uid: title.peer, conversationId: id })}>
+        <h2>{title.name}</h2>{subtitle && <p>{subtitle}</p>}
+      </button> : <><h2>{title.name}</h2>{subtitle && <p>{subtitle}</p>}</>}</div>
       <div className="chat-tools">
         {!group && <><IconButton icon={Phone} label="Gọi thoại" onClick={() => call('audio')} disabled={blocked} />
           <IconButton icon={Video} label="Gọi video" onClick={() => call('video')} disabled={blocked} /></>}
@@ -369,6 +384,10 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       {!near && <IconButton icon={ArrowDown} className="to-latest" label="Tới tin nhắn mới nhất" onClick={scrollBottom} />}
     </div>
     {blocked ? <div className="blocked-banner"><Shield size={18} /> Bạn đã chặn tài khoản này.</div> : <div className="composer-area">
+      {blockedAttempt !== null && <div className="blocked-attempt" role="status">
+        <div className="bubble"><p>{blockedAttempt}</p></div>
+        <span>Bạn đã bị chặn</span><IconButton icon={X} label="Bỏ thông báo" onClick={() => setBlockedAttempt(null)} />
+      </div>}
       {reply && <div className="compose-preview"><Reply size={20} /><div><strong>Trả lời {reply.senderName || 'tin nhắn'}</strong><small>{messagePreview(reply)}</small></div>
         <IconButton icon={X} label="Hủy trả lời" onClick={() => setReply(null)} /></div>}
       {photo && <div className="compose-preview"><img src={photo.url} alt="" /><div><strong>Ảnh đính kèm</strong><small>Bấm gửi để chia sẻ ảnh</small></div>
@@ -513,7 +532,7 @@ export function ChatOptions({ data, close, replace, confirm, error }) {
   return <Modal title="Tùy chọn hội thoại" onClose={close}>
     <div className="settings-hero"><Avatar name={title.name} photo={title.photo} size={68} /><strong>{title.name}</strong></div>
     {optionRow(Search, 'Tìm tin nhắn', () => { close(); data.search() })}
-    {optionRow(UserRound, 'Xem hồ sơ', () => replace({ type: 'peer-profile', uid: title.peer }))}
+    {optionRow(UserRound, 'Xem hồ sơ', () => replace({ type: 'peer-profile', uid: title.peer, conversationId: id }))}
     {optionRow(Pencil, 'Đổi tên gợi nhớ', () => replace({ type: 'nickname', settings, setSettings }))}
     {optionRow(Star, settings.favorite ? 'Bỏ đánh dấu liên hệ nhanh' : 'Đánh dấu liên hệ nhanh',
       () => { setSettings({ ...settings, favorite: !settings.favorite }); close() })}
@@ -537,7 +556,7 @@ export function ChatOptions({ data, close, replace, confirm, error }) {
   </Modal>
 }
 
-export function PeerProfile({ uid, close, error }) {
+export function PeerProfile({ uid, close, error, chat, remove }) {
   const [person, setPerson] = useState(null)
   useEffect(() => {
     let done = false
@@ -546,7 +565,12 @@ export function PeerProfile({ uid, close, error }) {
   }, [uid, error])
   return <Modal title="Trang cá nhân" onClose={close}>
     <div className="settings-hero"><Avatar name={person?.displayName} photo={person?.photoUrl} size={80} />
-      <strong>{person?.displayName || 'Người dùng UTEChat'}</strong></div>
+      <strong>{person?.displayName || 'Người dùng UTEChat'}</strong>
+      <div className="button-row">
+        <button className="primary" onClick={chat}>Nhắn tin</button>
+        <button className="danger" onClick={remove}>Xóa bạn</button>
+      </div>
+    </div>
   </Modal>
 }
 
@@ -573,7 +597,9 @@ export function CallOverlay({ controller, uid, error }) {
   const preview = useRef(null)
   const modal = useRef(null)
   const incoming = call?.calleeUid === uid && call.status === 'ringing'
-  const video = call?.mediaType === 'video'
+  const previewing = call?.status === 'ringing' && call.mediaType === 'video' && !incoming
+  const cameraOn = Boolean(controller.media.localTrack) || previewing
+  const video = call?.mediaType === 'video' || Boolean(controller.media.localTrack || controller.media.video)
   useEffect(() => {
     if (!call) return
     setPeer(null)
@@ -594,16 +620,16 @@ export function CallOverlay({ controller, uid, error }) {
   }, [controller.media.video])
   useEffect(() => {
     const track = controller.media.localTrack
-    if (track && local.current && !controller.videoOff) track.play(local.current, { fit: 'cover', mirror: true })
+    if (track && local.current) track.play(local.current, { fit: 'cover', mirror: !controller.rear })
     return () => track?.stop()
-  }, [controller.media.localTrack, controller.videoOff])
+  }, [controller.media.localTrack, controller.rear])
   useEffect(() => {
     if (preview.current && controller.preview && video) preview.current.srcObject = controller.preview
-  }, [controller.preview, controller.media.localTrack, controller.videoOff, video])
+  }, [controller.preview, controller.media.localTrack, previewing, video])
   if (!call) return null
   const connected = controller.media.ready && Boolean(controller.media.audio || controller.media.video)
   const showPeer = !(video && controller.media.video)
-  return <dialog ref={modal} className="call-overlay" aria-label={video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'} onCancel={event => event.preventDefault()}>
+  return <dialog ref={modal} className={`call-overlay${incoming ? ' incoming-call' : ''}`} aria-label={video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'} onCancel={event => event.preventDefault()}>
     <div className="call-surface">
       <header><span className="call-type">{video ? <Video size={20} /> : <Phone size={20} />}{video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}</span></header>
       {video && <div className="remote-video" ref={remote} />}
@@ -613,8 +639,8 @@ export function CallOverlay({ controller, uid, error }) {
         <p>{incoming ? 'Cuộc gọi đến' : connected ? durationLabel(controller.seconds) :
           call.status === 'accepted' ? 'Đang kết nối…' : 'Đang gọi…'}</p>
       </div>}
-      {!incoming && video && <div className="self-video">
-        {controller.videoOff ? <VideoOff size={24} /> : controller.media.localTrack ? <div ref={local} /> :
+      {!incoming && cameraOn && <div className="self-video">
+        {controller.media.localTrack ? <div ref={local} /> :
           <video ref={preview} autoPlay muted playsInline />}
       </div>}
       <div className="call-buttons">
@@ -622,8 +648,10 @@ export function CallOverlay({ controller, uid, error }) {
           {video ? <Video size={23} /> : <Phone size={23} />}<span>Trả lời</span></button> : <>
           <button className="call-button" disabled={controller.busy} onClick={controller.toggleMute}>
             {controller.muted ? <MicOff size={23} /> : <Mic size={23} />}<span>{controller.muted ? 'Bật mic' : 'Tắt mic'}</span></button>
-          {video && <button className="call-button" disabled={controller.busy} onClick={controller.toggleVideo}>
-            {controller.videoOff ? <VideoOff size={23} /> : <Video size={23} />}<span>{controller.videoOff ? 'Bật camera' : 'Tắt camera'}</span></button>}
+          <button className="call-button" disabled={controller.busy || !controller.media.ready} onClick={controller.toggleVideo}>
+            {cameraOn ? <Video size={23} /> : <VideoOff size={23} />}<span>{cameraOn ? 'Tắt camera' : 'Bật camera'}</span></button>
+          {controller.media.localTrack && <button className="call-button" disabled={controller.busy} onClick={controller.switchCamera}>
+            <RefreshCw size={23} /><span>Đổi camera</span></button>}
           {connected && <button className="call-button" onClick={controller.playAudio}><Bell size={23} /><span>Phát âm thanh</span></button>}
         </>}
         <button className="call-button hangup" disabled={controller.busy} onClick={controller.finish}><PhoneOff size={23} />
