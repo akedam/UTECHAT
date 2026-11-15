@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth'
 import {
   ArrowRight, BellOff, Check, ChevronRight, CircleAlert, ContactRound, Image as ImageIcon,
-  MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, UsersRound, UserRound, X
+  MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, Star, UsersRound, UserRound, X
 } from 'lucide-react'
 import { auth, backend } from './firebase'
 import { useCall, useIncomingTone } from './calls'
@@ -55,7 +55,8 @@ function ChatList({ sorted, selected, choose, titleOf, uid, hidden, drafts, pref
       <Avatar name={name} photo={photo} size={48} group={row.type === 'group'} />
       <span className="row-text"><strong>{name}</strong><small>{draft ? <><b>Bản nháp</b> <span>{draft}</span></> : preview}</small></span>
       <span className="row-meta"><time>{row.lastMessage ? listTime(row.lastMessageAt) : ''}</time>
-        <span>{preferences[row.id]?.pinned && <Pin size={13} />} {preferences[row.id]?.muted && <BellOff size={13} />}
+        <span>{preferences[row.id]?.pinned ? <Pin size={13} /> : preferences[row.id]?.favorite && <Star size={13} />}
+          {preferences[row.id]?.muted && <BellOff size={13} />}
           {isNew && <i className="unread-dot" aria-label="Chưa đọc" />}</span></span>
     </button>
   })}</div>
@@ -167,11 +168,11 @@ function Workspace({ user }) {
     if (row.type === 'group') return { name: row.groupName || 'Nhóm UTEChat', photo: row.groupPhotoUrl }
     const peer = row.participantIds?.find(uid => uid !== user.uid)
     const data = people[peer] || row.participantSummaries?.[peer]
-    return { name: data?.displayName || 'Người dùng UTEChat', photo: data?.photoUrl, peer }
+    return { name: preferences[row.id]?.nickname || data?.displayName || 'Người dùng UTEChat', photo: data?.photoUrl, peer }
   }
+  const rank = row => preferences[row.id]?.pinned ? 0 : preferences[row.id]?.favorite ? 1 : 2
   const sorted = [...conversations].sort((first, second) =>
-    Number(Boolean(preferences[second.id]?.pinned)) - Number(Boolean(preferences[first.id]?.pinned)) ||
-      (second.lastMessageAt || 0) - (first.lastMessageAt || 0))
+    rank(first) - rank(second) || (second.lastMessageAt || 0) - (first.lastMessageAt || 0))
   const conversation = sorted.find(row => row.id === selected)
   const title = conversation ? titleOf(conversation) : null
   const accepted = friendships.filter(row => row.status === 'accepted')
@@ -280,6 +281,8 @@ function Workspace({ user }) {
       friends={accepted} confirm={setConfirmation} deselect={() => setChat('')}
       search={() => { close(); dialogs.search() }} gallery={() => setDialog({ type: 'gallery', id: conversation.id })} />}
     {dialogs?.type === 'profile' && <ProfileEditor {...dialogProps} data={account} />}
+    {dialogs?.type === 'nickname' && <NicknameEditor data={dialogs} close={close} />}
+    {dialogs?.type === 'info' && <Modal title={dialogs.title} onClose={close}><p>{dialogs.description}</p></Modal>}
     {dialogs?.type === 'password' && <Modal title="Đặt lại mật khẩu" onClose={close}>
       <p>UTEChat sẽ gửi liên kết đặt lại mật khẩu đến {user.email}.</p><button className="primary wide" onClick={async () => {
         try { await sendPasswordResetEmail(auth, user.email); close(); notify('Đã gửi liên kết đặt lại mật khẩu.') }
@@ -303,6 +306,20 @@ function Workspace({ user }) {
     <CallOverlay {...{ controller, uid: user.uid, error }} />
     <Toast toast={toast} clear={closeToast} />
   </div>
+}
+
+function NicknameEditor({ data, close }) {
+  const [name, setName] = useState(data.settings.nickname || '')
+  return <Modal title="Đổi tên gợi nhớ" onClose={close}><form className="stack" onSubmit={event => {
+    event.preventDefault(); data.setSettings({ ...data.settings, nickname: name.trim() }); close()
+  }}>
+    <label>Tên gợi nhớ<input autoFocus value={name} maxLength={80} onChange={event => setName(event.target.value)} /></label>
+    <p className="muted">Tên gợi nhớ chỉ hiển thị trên trình duyệt này.</p>
+    <div className="button-row">
+      <button type="button" className="secondary" onClick={() => { data.setSettings({ ...data.settings, nickname: '' }); close() }}>Mặc định</button>
+      <button className="primary">Lưu</button>
+    </div>
+  </form></Modal>
 }
 
 function ProfileEditor({ data, close, error, notify }) {

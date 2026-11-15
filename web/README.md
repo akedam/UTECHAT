@@ -12,7 +12,7 @@ npm.cmd run dev
 
 Mở địa chỉ do Vite hiển thị. Vite chuyển tiếp yêu cầu API tới backend Render. Để dùng một backend cục bộ, đặt `UTECHAT_DEV_BACKEND` thành địa chỉ của backend trước khi chạy Vite.
 
-Để thử luồng đăng ký và chat với dữ liệu cục bộ, chạy `firebase.cmd emulators:start --only auth,firestore,database --project demo-utechat` từ thư mục gốc. Sau đó đặt `VITE_USE_EMULATORS=1` rồi khởi động Vite. Các yêu cầu ảnh, thoại và Agora cần một backend riêng kết nối cùng bộ Emulator.
+Để thử luồng đăng ký và chat với dữ liệu cục bộ, chạy `firebase.cmd emulators:start --only 'auth,firestore,database' --project demo-utechat` từ thư mục gốc. Sau đó đặt `VITE_USE_EMULATORS=1` rồi khởi động Vite. Các yêu cầu ảnh, thoại và Agora cần một backend riêng kết nối cùng bộ Emulator.
 
 ## Build và cập nhật
 

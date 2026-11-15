@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowLeft, Bell, BellOff, Camera, CheckCheck, ChevronRight, CircleAlert, Copy,
-  Ellipsis, Flag, Forward, Image, MessageSquare, Mic, MicOff, Phone, PhoneOff, Pin,
-  Plus, Reply, Search, Send, Shield, Smile, Square, Trash2, UserRound, Users, Video, VideoOff, X
+  Ellipsis, Flag, Forward, HardDrive, Image, MessageSquare, Mic, MicOff, Pencil, Phone, PhoneOff, Pin,
+  Plus, Reply, Search, Send, Shield, Smile, Square, Star, Trash2, UserRound, Users, Video, VideoOff, X
 } from 'lucide-react'
 import {
   blockUser, downloadMedia, hide, markRead, messagePreview, olderMessages, profile, react, reactions,
@@ -329,7 +329,11 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
         {!group && <><IconButton icon={Phone} label="Gọi thoại" onClick={() => call('audio')} disabled={blocked} />
           <IconButton icon={Video} label="Gọi video" onClick={() => call('video')} disabled={blocked} /></>}
         <IconButton icon={Ellipsis} label="Tùy chọn hội thoại" onClick={() => showDialog(group ? { type: 'manage', search: () => setSearch(true) } : {
-          type: 'options', title, id, blocked, search: () => setSearch(true), settings, setSettings
+          type: 'options', title, id, blocked, search: () => setSearch(true), settings, setSettings,
+          stats: {
+            count: messages.length, images: messages.filter(message => message.type === 'image').length,
+            bytes: messages.reduce((sum, message) => sum + (Number(message.fileSize) || 0), 0)
+          }
         })} />
       </div>
     </header>
@@ -505,18 +509,25 @@ export function PollDialog({ data, close, error }) {
 }
 
 export function ChatOptions({ data, close, replace, confirm, error }) {
-  const { id, title, settings, setSettings, blocked } = data
+  const { id, title, settings, setSettings, blocked, stats } = data
   return <Modal title="Tùy chọn hội thoại" onClose={close}>
     <div className="settings-hero"><Avatar name={title.name} photo={title.photo} size={68} /><strong>{title.name}</strong></div>
     {optionRow(Search, 'Tìm tin nhắn', () => { close(); data.search() })}
     {optionRow(UserRound, 'Xem hồ sơ', () => replace({ type: 'peer-profile', uid: title.peer }))}
+    {optionRow(Pencil, 'Đổi tên gợi nhớ', () => replace({ type: 'nickname', settings, setSettings }))}
+    {optionRow(Star, settings.favorite ? 'Bỏ đánh dấu liên hệ nhanh' : 'Đánh dấu liên hệ nhanh',
+      () => { setSettings({ ...settings, favorite: !settings.favorite }); close() })}
     {optionRow(Pin, settings.pinned ? 'Bỏ ghim hội thoại' : 'Ghim hội thoại', () => { setSettings({ ...settings, pinned: !settings.pinned }); close() })}
     {optionRow(settings.muted ? BellOff : Bell, settings.muted ? 'Bật thông báo trong trang' : 'Tắt thông báo trong trang', () => { setSettings({ ...settings, muted: !settings.muted }); close() })}
     {optionRow(Users, `Tạo nhóm với ${title.name}`, () => replace({ type: 'create', selectedFirst: title.peer }))}
-    {optionRow(Image, 'Ảnh đã chia sẻ', () => replace({ type: 'gallery', id }))}
+    {optionRow(Image, 'Ảnh và liên kết đã chia sẻ', () => replace({ type: 'gallery', id }))}
     <label className="labeled-row">Hình nền<select value={settings.wallpaper || 'cloud'} onChange={event => setSettings({ ...settings, wallpaper: event.target.value })}>
-      <option value="cloud">Xám xanh</option><option value="sky">Xanh da trời</option><option value="sand">Kem</option>
+      <option value="cloud">Xám xanh</option><option value="sky">Xanh da trời</option><option value="sand">Kem</option><option value="paper">Trắng</option>
     </select></label>
+    {optionRow(Shield, 'Bảo vệ trò chuyện', () => replace({ type: 'info', title: 'Bảo vệ trò chuyện',
+      description: 'Quyền truy cập tin nhắn do Firebase kiểm soát theo tài khoản và thành viên hội thoại. UTEChat chưa hỗ trợ mã hóa đầu cuối.' }))}
+    {optionRow(HardDrive, 'Dung lượng trò chuyện', () => replace({ type: 'info', title: 'Dung lượng trò chuyện',
+      description: `Đã tải ${stats.count} tin nhắn, gồm ${stats.images} ảnh. Tệp đính kèm có tổng dung lượng ${(stats.bytes / 1024).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} KB.` }))}
     {optionRow(Flag, 'Báo cáo', () => replace({ type: 'report', id, uid: title.peer }))}
     {optionRow(Shield, blocked ? 'Bỏ chặn' : 'Chặn người dùng', () => {
       if (blocked) { blockUser(title.peer, false).then(close).catch(error); return }
@@ -540,12 +551,17 @@ export function PeerProfile({ uid, close, error }) {
 }
 
 export function Gallery({ id, hidden, close, open, error }) {
-  const [images, setImages] = useState([])
-  useEffect(() => watchMessages(id, list => setImages(list.filter(row => row.type === 'image')), error), [id, error])
-  const visible = images.filter(row => !hidden.has(`${id}:${row.id}`))
-  return <Modal title="Ảnh đã chia sẻ gần đây" onClose={close}>
-    {visible.length ? <div className="gallery">{visible.map(message => <Attachment key={message.id} {...{ message, open }} />)}</div>
-      : <Empty icon={Image} title="Chưa có ảnh đã chia sẻ gần đây" />}
+  const [messages, setMessages] = useState([])
+  useEffect(() => watchMessages(id, list => setMessages(list), error), [id, error])
+  const visible = messages.filter(row => !hidden.has(`${id}:${row.id}`))
+  const images = visible.filter(row => row.type === 'image')
+  const links = [...new Set(visible.filter(row => row.type === 'text' && !row.id.startsWith('call_'))
+    .flatMap(row => row.content?.match(/https?:\/\/[^\s<>"']+/gi) || []))]
+  return <Modal title="Ảnh và liên kết gần đây" onClose={close}>
+    {images.length ? <div className="gallery">{images.map(message => <Attachment key={message.id} {...{ message, open }} />)}</div>
+      : !links.length && <Empty icon={Image} title="Chưa có ảnh hoặc liên kết gần đây" />}
+    {!!links.length && <><h3 className="section-label">Liên kết</h3>{links.map(link =>
+      <a className="shared-link" key={link} href={link} target="_blank" rel="noopener noreferrer">{link}</a>)}</>}
   </Modal>
 }
 

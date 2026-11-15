@@ -220,6 +220,7 @@ time, .muted { color: var(--subtle); }
 .chat { height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto auto minmax(0,1fr) auto; --chat-bg: #e7edf4; }
 .chat.sky { --chat-bg: #e6f5fe; }
 .chat.sand { --chat-bg: #f2ede4; }
+.chat.paper { --chat-bg: #f9fbfe; }
 .chat-head { grid-row: 1; display: flex; align-items: center; gap: 11px; background: #fff; padding: 12px clamp(11px, 2.4vw, 26px); min-height: 69px; border-bottom: 1px solid var(--line); }
 .chat-back { display: none; }
 .chat-title { flex: 1; min-width: 0; }
@@ -350,6 +351,7 @@ audio { width: min(250px, 56vw); max-width: 100%; height: 34px; display: block; 
 .reaction-bar button:hover, .emoji-grid button:hover { background: #e6f2ff; }
 .gallery { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
 .gallery .image-preview img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.shared-link { display: block; overflow-wrap: anywhere; color: var(--blue-dark); padding: 9px 3px; border-top: 1px solid var(--line); font-size: .83rem; }
 .image-dialog { width: min(90vw, 830px); }
 .image-dialog img { display: block; margin: auto; max-height: 72dvh; object-fit: contain; }
 .toast { position: fixed; z-index: 4; inset: auto max(12px,env(safe-area-inset-right)) max(13px,env(safe-area-inset-bottom)) auto; margin: 0;
