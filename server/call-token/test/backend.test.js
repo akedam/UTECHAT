@@ -11,14 +11,36 @@ function fakeDb(initial) {
     update:async(data)=>rows.set(path,{...rows.get(path),...structuredClone(data)}),
     delete:async()=>rows.delete(path)});
   const snapshot=(path)=>({id:path.split("/").at(-1),ref:doc(path),exists:rows.has(path),data:()=>structuredClone(rows.get(path))});
-  function collection(path,filters=[],max=Infinity) {
-    return {path,doc:(id)=>doc(`${path}/${id}`),where:(key,operator,value)=>collection(path,[...filters,[key,operator,value]],max),
-      limit:(count)=>collection(path,filters,count),get:async()=>({docs:[...rows.keys()]
-        .filter((key)=>key.startsWith(path+"/") && key.split("/").length===path.split("/").length+1)
-        .filter((key)=>filters.every(([field,op,value])=>op==='>='?rows.get(key)[field]>=value:op==='<'?rows.get(key)[field]<value:rows.get(key)[field]===value)).slice(0,max).map(snapshot)})};
+  function collection(path, filters = [], max = Infinity, order = [], after = null) {
+    const sortedValues = key => order.map(([field]) => field === "__name__" ? doc(key).id : rows.get(key)[field]);
+    const compare = (left, right) => {
+      for (let index = 0; index < order.length; index++) {
+        if (left[index] === right[index]) continue;
+        return (left[index] < right[index] ? -1 : 1) * (order[index][1] === "desc" ? -1 : 1);
+      }
+      return 0;
+    };
+    return {
+      path,
+      doc: id => doc(`${path}/${id}`),
+      where: (key, operator, value) => collection(path, [...filters, [key, operator, value]], max, order, after),
+      orderBy: (key, direction) => collection(path, filters, max, [...order, [key, direction]], after),
+      startAfter: (...values) => collection(path, filters, max, order, values),
+      limit: count => collection(path, filters, count, order, after),
+      get: async () => ({ docs: [...rows.keys()]
+        .filter(key => key.startsWith(path + "/") && key.split("/").length === path.split("/").length + 1)
+        .filter(key => filters.every(([field, op, value]) => op === '>=' ? rows.get(key)[field] >= value
+          : op === '<' ? rows.get(key)[field] < value : rows.get(key)[field] === value))
+        .filter(key => !after || compare(sortedValues(key), after) > 0)
+        .sort((a, b) => compare(sortedValues(a), sortedValues(b))).slice(0, max).map(snapshot) })
+    };
   }
   let pending=Promise.resolve();
-  return {rows,doc,collection,batch(){const refs=[];return{delete(ref){refs.push(ref);},async commit(){refs.forEach(ref=>rows.delete(ref.path));}};},
+  return {rows,doc,collection,batch(){const writes=[];return{
+    delete(ref){writes.push(()=>rows.delete(ref.path));},
+    set(ref,data){writes.push(()=>rows.set(ref.path,structuredClone(data)));},
+    async commit(){writes.forEach(write=>write());}
+  };},
     async recursiveDelete(ref){for(const path of rows.keys())if(path.startsWith(ref.path+'/'))rows.delete(path);},runTransaction(fn){
     const task=pending.then(async()=>{
       const writes=[];
@@ -85,6 +107,92 @@ test("browser preflight permits UTEChat origins and leaves API authentication in
   const anonymous=await fetch(base+"/api/rtc-token",{method:"POST",headers:{Origin:trusted}});
   assert.equal(anonymous.status,401);
   assert.equal(anonymous.headers.get("access-control-allow-origin"),trusted);
+});
+test("Moments are private, deduplicated, and removable only by their author", async t => {
+  const f = await fixture(t, { rows: {
+    "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" }
+  } });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9]);
+  const upload = { nonce: "first-capture", caption: "Xin chào", recipients: ["bob"], image: jpeg.toString("base64") };
+  const put = (body = upload, uid = "alice") => f.request("/api/moments", uid, body, "PUT");
+  const get = (path, uid) => f.request(path, uid, null, "GET");
+  assert.equal((await put(upload, "unverified-alice")).status, 403);
+  const oversized = Buffer.from(jpeg);
+  oversized.writeUInt16BE(961, 7);
+  oversized.writeUInt16BE(961, 9);
+  assert.equal((await put({ ...upload, image: oversized.toString("base64") })).status, 400);
+  assert.equal((await put({ ...upload, recipients: ["bob", "bob"] })).status, 400);
+  assert.equal((await put({ ...upload, recipients: ["mallory"] })).status, 403);
+  const sent = await put();
+  assert.equal(sent.status, 200);
+  const { id } = sent.body;
+  assert.equal((await put()).body.id, id);
+  assert.equal((await put({ ...upload, caption: "Changed" })).status, 409);
+  assert.equal(f.objects.size, 1);
+  assert.equal(f.pushes.length, 1);
+  assert.deepEqual(f.pushes[0].data, { eventType: "moment", momentId: id, recipientUid: "bob" });
+  const detail = "/api/moment?id=" + id;
+  const photo = "/api/moment-photo?id=" + id;
+  assert.equal((await get(detail, "mallory")).status, 404);
+  assert.equal((await get(photo, "mallory")).status, 404);
+  assert.equal((await get("/api/moments", "mallory")).body.items.length, 0);
+  assert.equal((await get("/api/moments", "bob")).body.items[0].id, id);
+  assert.deepEqual((await get(photo, "bob")).body, jpeg);
+  assert.equal((await get(detail, "bob")).body.recipients, undefined);
+  const reply = (action, value) => f.request("/api/moment", "bob", { id, action, value });
+  assert.equal((await reply("seen")).body.seen, true);
+  assert.equal((await reply("react", "🔥")).status, 400);
+  assert.equal((await reply("react", "❤️")).body.reaction, "❤️");
+  assert.equal((await reply("report", "spam")).status, 200);
+  assert.equal((await reply("report", "abuse")).status, 200);
+  assert.equal([...f.db.rows.keys()].filter(key => key.startsWith("backendMomentReports/")).length, 1);
+  assert.equal((await reply("hide")).status, 200);
+  assert.equal((await get("/api/moments", "bob")).body.items.length, 0);
+  assert.deepEqual((await get(photo, "bob")).body, jpeg);
+  assert.deepEqual((await get(detail, "alice")).body.recipients, [{ id: "bob", seen: true, reaction: "❤️" }]);
+  assert.equal((await f.request(detail, "bob", null, "DELETE")).status, 404);
+  f.db.rows.set("users/bob/blocked/alice", {});
+  assert.equal((await get(photo, "bob")).status, 404);
+  assert.equal((await get("/api/moments", "bob")).body.items.length, 0);
+  assert.equal((await put({ ...upload, nonce: "blocked" })).status, 403);
+  f.db.rows.delete("users/bob/blocked/alice");
+  assert.equal((await f.request(detail, "alice", null, "DELETE")).status, 200);
+  assert.equal((await f.request(detail, "alice", null, "DELETE")).status, 200);
+  assert.equal((await get(photo, "bob")).status, 404);
+  assert.equal((await get("/api/moments?view=mine", "alice")).body.items.length, 0);
+  assert.equal(f.objects.size, 0);
+});
+
+test("a Tin reply stores the protected reference and text only in the author's direct conversation", async t => {
+  const id = "a".repeat(64);
+  const f = await fixture(t, { rows: {
+    "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" },
+    ["backendMoments/" + id]: { owner: "alice", state: "ready", recipients: ["bob"] },
+    "conversations/group1": { type: "group", participantIds: ["alice", "bob", "mallory"] },
+    "conversations/other": { type: "direct", participantIds: ["bob", "mallory"] }
+  } });
+  const reply = (uid, conversationId, options) => f.request("/api/moment", uid, {
+    action: "reply", id, conversationId, nonce: "test-reply", value: "Ảnh đẹp!", ...options
+  });
+  assert.equal((await reply("mallory", "other")).status, 404);
+  assert.equal((await reply("alice", "chat")).status, 404);
+  assert.equal((await reply("bob", "chat", { value: "  " })).status, 400);
+  assert.equal((await reply("bob", "other")).status, 403);
+  assert.equal((await reply("bob", "group1")).status, 403);
+  const posted = await reply("bob", "chat");
+  assert.equal(posted.status, 200);
+  const path = "conversations/chat/messages/" + posted.body.messageId;
+  const saved = f.db.rows.get(path);
+  assert.equal(saved.senderId, "bob");
+  assert.equal(saved.momentId, id);
+  assert.equal(saved.content, "Ảnh đẹp!");
+  assert.equal(saved.mediaPath, undefined);
+  assert.equal(f.db.rows.get("conversations/chat").lastMessageId, posted.body.messageId);
+  assert.deepEqual(await reply("bob", "chat"), posted);
+  assert.equal((await reply("bob", "chat", { value: "Khác" })).status, 409);
+  assert.equal([...f.db.rows.keys()].filter(key => key.startsWith("conversations/chat/messages/tin_")).length, 1);
+  f.db.rows.set("users/alice/blocked/bob", {});
+  assert.equal((await reply("bob", "chat", { nonce: "another" })).status, 404);
 });
 test("email verification gates chat API access and protects notifications on older installations", async t => {
   const f = await fixture(t, { unverifiedRecipients: ["bob"] });
@@ -267,8 +375,32 @@ test("uploads reject traversal, fake images and over-quota writes",async(t)=>{
 });
 test("health contains no keys and optional unconfigured media fails explicitly",async(t)=>{
   const f=await fixture(t,{backend:{storage:null}});
-  assert.deepEqual((await f.request("/healthz",null,{},"GET")).body,{status:"configured",apiVersion:1,media:false,voice:true});
+  assert.deepEqual((await f.request("/healthz",null,{},"GET")).body,{status:"configured",apiVersion:1,media:false,voice:true,moments:false});
   assert.equal((await f.request("/api/media?path=conversations/chat/alice/x","alice",PNG,"PUT","image/png")).status,503);
+});
+test("Tin retries a storage outage without spending quota twice or exposing an incomplete upload", async t => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 1, 0, 1, 1, 1, 0x11, 0, 0xff, 0xd9]);
+  const files = new Map();
+  const f = await fixture(t, {
+    rows: { "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" } },
+    backend: { dailyUploadBytes: jpeg.length, storage: {
+      async upload(path, bytes) {
+        if (files.has(path)) return false;
+        files.set(path, Buffer.from(bytes));
+        throw new Error("Storage response lost");
+      },
+      async download(path) { return files.get(path); }
+    } }
+  });
+  const upload = { nonce: "retry", caption: "Ảnh thử", recipients: ["bob"], image: jpeg.toString("base64") };
+  const put = () => f.request("/api/moments", "alice", upload, "PUT");
+  assert.deepEqual(await put(), { status: 503, body: { error: "moment-storage-unavailable" } });
+  assert.deepEqual((await f.request("/api/moments", "bob", null, "GET")).body.items, []);
+  const result = await put();
+  assert.equal(result.status, 200);
+  assert.equal((await put()).body.id, result.body.id);
+  assert.equal(files.size, 1);
+  assert.equal((await f.request("/api/moments", "bob", null, "GET")).body.items[0].id, result.body.id);
 });
 test("Supabase adapter uses private authenticated access and immutable uploads",async()=>{
   const calls=[];
