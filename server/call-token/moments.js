@@ -142,14 +142,18 @@ function createMoments({ db, storage, now, dailyUploadBytes, hash, segment, vali
   }
 
   async function list(uid, view, before) {
-    requireValue(view === "mine" || view === "received");
-    let query = box(uid, view).orderBy("createdAt", "desc").orderBy("__name__", "desc");
-    if (before) {
-      const cursor = /^(\d{1,16}):([a-f0-9]{64})$/.exec(before);
-      requireValue(cursor);
-      query = query.startAfter(Number(cursor[1]), cursor[2]);
+    requireValue(view === "all" || view === "mine" || view === "received");
+    const cursor = before ? /^(\d{1,16}):([a-f0-9]{64})$/.exec(before) : null;
+    requireValue(!before || cursor);
+    async function pointers(source) {
+      let query = box(uid, source).orderBy("createdAt", "desc").orderBy("__name__", "desc");
+      if (cursor) query = query.startAfter(Number(cursor[1]), cursor[2]);
+      return (await query.limit(PAGE_SIZE).get()).docs;
     }
-    const { docs } = await query.limit(PAGE_SIZE).get();
+    // The same exclusive cursor applies across both inboxes, including ties in creation time.
+    const docs = view === "all" ? (await Promise.all([pointers("mine"), pointers("received")])).flat()
+      .sort((a, b) => b.data().createdAt - a.data().createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+      .slice(0, PAGE_SIZE) : await pointers(view);
     const cards = await Promise.all(docs.map(async pointer => {
       const record = (await ref(pointer.id).get()).data();
       return await canView(record, uid) ? viewOf(pointer.id, record, uid) : null;
@@ -172,7 +176,8 @@ function createMoments({ db, storage, now, dailyUploadBytes, hash, segment, vali
       const original = story.data(), chat = root.data();
       if (existing.exists) {
         const previous = existing.data();
-        requireValue(previous.senderId === uid && previous.momentId === id && previous.content === body, 409, "moment-conflict");
+        requireValue(previous.senderId === uid && previous.type === "text" && previous.content === body &&
+          (previous.momentId == null || previous.momentId === id), 409, "moment-conflict");
         return;
       }
       const participants = chat?.participantIds;
@@ -183,7 +188,7 @@ function createMoments({ db, storage, now, dailyUploadBytes, hash, segment, vali
       const time = Math.max(now(), (chat.lastMessageAt || 0) + 1);
       tx.set(message, {
         senderId: uid, senderName: sender.data()?.displayName || "UTEChat", type: "text", content: body,
-        sentAt: time, createdAt: time, readBy: [uid], momentId: id
+        sentAt: time, createdAt: time, readBy: [uid]
       });
       tx.update(conversation, { lastMessage: body, lastMessageType: "text", lastMessageAt: time,
         lastMessageId: messageId, lastMessageSenderId: uid, updatedAt: time });

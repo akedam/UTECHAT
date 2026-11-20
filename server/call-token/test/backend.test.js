@@ -163,7 +163,30 @@ test("Moments are private, deduplicated, and removable only by their author", as
   assert.equal(f.objects.size, 0);
 });
 
-test("a Tin reply stores the protected reference and text only in the author's direct conversation", async t => {
+test("combined Tin feed paginates self and friend posts in a single newest-first order", async t => {
+  const f = await fixture(t, { rows: {
+    "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" }
+  } });
+  const ids = Array.from({ length: 19 }, (_, index) => (index + 1).toString(16).padStart(64, "0"));
+  for (let index = 0; index < ids.length; index++) {
+    const own = index % 2 === 0;
+    const id = ids[index], createdAt = TIME + Math.floor(index / 2);
+    f.db.rows.set(`users/alice/${own ? "sentMoments" : "receivedMoments"}/${id}`, { createdAt });
+    f.db.rows.set(`backendMoments/${id}`, {
+      owner: own ? "alice" : "bob", recipients: [own ? "bob" : "alice"], state: "ready", createdAt
+    });
+  }
+  const get = path => f.request(path, "alice", null, "GET");
+  const first = (await get("/api/moments?view=all")).body;
+  assert.equal(first.items.length, 16);
+  assert(first.items.some(item => item.own) && first.items.some(item => !item.own));
+  const last = (await get("/api/moments?view=all&before=" + encodeURIComponent(first.next))).body;
+  assert.deepEqual([...first.items, ...last.items].map(item => item.id), [...ids].reverse());
+  assert.equal(last.next, null);
+  assert((await get("/api/moments?view=mine")).body.items.every(item => item.own));
+});
+
+test("a Tin reply stores only text in the author's direct conversation", async t => {
   const id = "a".repeat(64);
   const f = await fixture(t, { rows: {
     "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" },
@@ -184,7 +207,8 @@ test("a Tin reply stores the protected reference and text only in the author's d
   const path = "conversations/chat/messages/" + posted.body.messageId;
   const saved = f.db.rows.get(path);
   assert.equal(saved.senderId, "bob");
-  assert.equal(saved.momentId, id);
+  assert.equal(saved.momentId, undefined);
+  assert.equal(saved.replyTo, undefined);
   assert.equal(saved.content, "Ảnh đẹp!");
   assert.equal(saved.mediaPath, undefined);
   assert.equal(f.db.rows.get("conversations/chat").lastMessageId, posted.body.messageId);
