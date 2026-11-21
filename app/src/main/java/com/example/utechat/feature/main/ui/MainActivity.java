@@ -35,6 +35,8 @@ import com.example.utechat.feature.discover.ui.DiscoverFragment;
  * MainActivity không chứa logic nghiệp vụ — chỉ điều phối Fragment.
  */
 public class MainActivity extends AppCompatActivity {
+    public static final String EXTRA_OPEN_COMMUNITY = "open_community";
+    public static final String EXTRA_GROUP_WITH = "group_with_friend";
 
     private final ActivityResultLauncher<String> notificationPermission = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(), granted -> {
@@ -100,9 +102,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openCommunityIfRequested(Intent intent) {
-        if (intent != null && intent.getBooleanExtra("open_community", false)) {
-            intent.removeExtra("open_community");
+        if (intent != null && intent.getBooleanExtra(EXTRA_OPEN_COMMUNITY, false)) {
+            String friendUid = intent.getStringExtra(EXTRA_GROUP_WITH);
+            intent.removeExtra(EXTRA_OPEN_COMMUNITY);
+            intent.removeExtra(EXTRA_GROUP_WITH);
             showTab(R.id.nav_discover);
+            discoverFragment.prepareGroupWith(friendUid);
         }
     }
 

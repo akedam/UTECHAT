@@ -11,7 +11,7 @@ import android.net.Uri;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ProgressBar;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.LinearLayout;
@@ -27,13 +27,16 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
 import com.example.utechat.R;
 import com.example.utechat.app.MediaRepositoryProvider;
+import com.example.utechat.app.PresenceRepositoryProvider;
 import com.example.utechat.app.UteChatApplication;
 import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.core.common.Constants;
 import com.example.utechat.core.common.Resource;
 import com.example.utechat.domain.model.Message;
+import com.example.utechat.domain.repository.PresenceRepository;
 import com.example.utechat.feature.chat.adapter.MessagesAdapter;
 import com.example.utechat.feature.chat.viewmodel.ChatViewModel;
 import com.example.utechat.feature.calls.ui.CallActivity;
@@ -97,6 +100,7 @@ public class ChatActivity extends AppCompatActivity {
     private String peerUid;
     private com.google.firebase.firestore.ListenerRegistration blockListener;
     private com.google.firebase.firestore.ListenerRegistration hiddenListener, pinListener;
+    private PresenceRepository.Subscription headerPresence;
     private String pinnedMessageId;
     private java.util.Set<String> hiddenIds = java.util.Collections.emptySet();
 
@@ -110,6 +114,17 @@ public class ChatActivity extends AppCompatActivity {
                 if (!(id instanceof String) || id.equals(viewModel.getCurrentUserId())) continue;
                 peerUid = (String) id;
                 viewModel.setPeerUid(peerUid);
+                PresenceRepository presence = PresenceRepositoryProvider.get();
+                if (presence != null) {
+                    headerPresence = presence.observe(peerUid, (online, lastSeen) -> {
+                        if (isDestroyed()) return;
+                        TextView subtitle = findViewById(R.id.chat_subtitle);
+                        subtitle.setText(online ? R.string.status_online : R.string.status_offline);
+                        subtitle.setTextColor(getColor(online ? R.color.chat_online : R.color.chat_meta));
+                        subtitle.setVisibility(online || lastSeen > 0 ? View.VISIBLE : View.GONE);
+                        findViewById(R.id.chat_online_badge).setVisibility(online ? View.VISIBLE : View.GONE);
+                    });
+                }
                 if (blockListener != null) blockListener.remove();
                 blockListener = com.example.utechat.feature.safety.UserSafety.blockReference(
                         db, viewModel.getCurrentUserId(), (String) id).addSnapshotListener((block, error) -> {
@@ -206,29 +221,27 @@ public class ChatActivity extends AppCompatActivity {
         conversationTitle = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TITLE);
         conversationType = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TYPE);
         setContentView(R.layout.activity_chat);
-        applyChatInsets(getWindow(), findViewById(R.id.chat_root), this);
+        applyChatInsets(getWindow(), findViewById(R.id.chat_root), this, true);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle(conversationTitle == null || conversationTitle.trim().isEmpty()
-                    ? getString(R.string.conversation_unknown_title) : conversationTitle);
+            getSupportActionBar().setDisplayShowTitleEnabled(false);
         }
         toolbar.setNavigationIcon(R.drawable.ic_chat_back);
-        if (toolbar.getNavigationIcon() != null) toolbar.getNavigationIcon().setTint(getColor(R.color.white));
+        if (toolbar.getNavigationIcon() != null) toolbar.getNavigationIcon().setTint(getColor(R.color.chat_text));
         chatPreferences = new ChatPreferences(this, conversationId);
         applyConversationAppearance();
-        toolbar.post(() -> {
-            if (!"direct".equalsIgnoreCase(conversationType)) return;
-            for (int i = 0; i < toolbar.getChildCount(); i++) {
-                View child = toolbar.getChildAt(i);
-                if (child instanceof TextView && android.text.TextUtils.equals(((TextView) child).getText(), toolbar.getTitle())) {
-                    child.setOnClickListener(view -> showPeerProfile());
-                    child.setFocusable(true);
-                    return;
-                }
-            }
-        });
+        String headerPhoto = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO);
+        if (headerPhoto != null && headerPhoto.startsWith("https://")) {
+            ImageView avatar = findViewById(R.id.chat_avatar_photo);
+            Glide.with(this).load(headerPhoto).circleCrop().into(avatar);
+        }
+        if ("direct".equalsIgnoreCase(conversationType)) {
+            View identity = findViewById(R.id.chat_identity);
+            identity.setOnClickListener(view -> showPeerProfile());
+            identity.setFocusable(true);
+        }
 
         bindViews();
         viewModel = new ViewModelProvider(this).get(ChatViewModel.class);
@@ -320,14 +333,12 @@ public class ChatActivity extends AppCompatActivity {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 btnSend.setEnabled(s != null && s.toString().trim().length() > 0);
-                btnSend.setVisibility(btnSend.isEnabled() ? View.VISIBLE : View.GONE);
             }
             @Override public void afterTextChanged(Editable s) {
                 chatPreferences.setDraft(s.toString());
             }
         });
         btnSend.setEnabled(false);
-        btnSend.setVisibility(View.GONE);
         etMessage.setOnEditorActionListener((textView, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendCurrentText();
@@ -538,6 +549,22 @@ public class ChatActivity extends AppCompatActivity {
             if (doc == null || isDestroyed()) return;
             pinnedMessageId = doc.getString("pinnedMessageId");
             renderPinnedMessage();
+            Object participantIds = doc.get("participantIds");
+            if (!(participantIds instanceof List)) return;
+            List<?> participants = (List<?>) participantIds;
+            if ("group".equalsIgnoreCase(conversationType)) {
+                TextView subtitle = findViewById(R.id.chat_subtitle);
+                subtitle.setText(getString(R.string.chat_group_member_count, participants.size()));
+                subtitle.setVisibility(View.VISIBLE);
+            } else if ("direct".equalsIgnoreCase(conversationType)) {
+                for (Object participant : participants) {
+                    if (!(participant instanceof String) || participant.equals(viewModel.getCurrentUserId())) continue;
+                    String uid = (String) participant;
+                    Object time = doc.get(com.google.firebase.firestore.FieldPath.of("readStates", uid, "readAt"));
+                    adapter.setPeerReadAt(time instanceof Number ? ((Number) time).longValue() : 0L);
+                    break;
+                }
+            }
         });
     }
 
@@ -676,6 +703,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     String conversationId() { return conversationId; }
+    String peerUid() { return peerUid; }
 
     void scrollToMessage(String id) {
         int position = findMessage(id);
@@ -686,12 +714,20 @@ public class ChatActivity extends AppCompatActivity {
         if (chatPreferences == null) return;
         String fallback = conversationTitle == null || conversationTitle.trim().isEmpty()
                 ? getString(R.string.conversation_unknown_title) : conversationTitle;
-        if (getSupportActionBar() != null) getSupportActionBar().setTitle(chatPreferences.title(fallback));
+        String title = chatPreferences.title(fallback);
+        ((TextView) findViewById(R.id.chat_title)).setText(title);
+        String name = title.trim();
+        String initial = name.isEmpty() ? "?" : name.substring(0, name.offsetByCodePoints(0, 1));
+        ((TextView) findViewById(R.id.chat_avatar_initial)).setText(initial.toUpperCase(java.util.Locale.getDefault()));
         View messages = findViewById(R.id.rv_messages);
         if (messages != null) ((View) messages.getParent()).setBackgroundColor(chatPreferences.wallpaper());
     }
 
     static void applyChatInsets(android.view.Window window, View root, android.content.Context context) {
+        applyChatInsets(window, root, context, false);
+    }
+
+    private static void applyChatInsets(android.view.Window window, View root, android.content.Context context, boolean lightHeader) {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false);
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -700,13 +736,14 @@ public class ChatActivity extends AppCompatActivity {
             view.setPadding(bars.left, bars.top, bars.right, bottom);
             android.graphics.drawable.LayerDrawable background = new android.graphics.drawable.LayerDrawable(
                     new android.graphics.drawable.Drawable[]{
-                            androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.bg_header_gradient),
+                            lightHeader ? new android.graphics.drawable.ColorDrawable(context.getColor(R.color.white))
+                                    : androidx.appcompat.content.res.AppCompatResources.getDrawable(context, R.drawable.bg_header_gradient),
                             new android.graphics.drawable.ColorDrawable(androidx.core.content.ContextCompat.getColor(context,R.color.utechat_surface))});
             background.setLayerGravity(1, android.view.Gravity.BOTTOM); background.setLayerHeight(1, bottom);
             view.setBackground(background);
             return insets;
         });
-        androidx.core.view.WindowCompat.getInsetsController(window, root).setAppearanceLightStatusBars(false);
+        androidx.core.view.WindowCompat.getInsetsController(window, root).setAppearanceLightStatusBars(lightHeader);
         androidx.core.view.WindowCompat.getInsetsController(window, root).setAppearanceLightNavigationBars(true);
         androidx.core.view.ViewCompat.requestApplyInsets(root);
     }
@@ -857,6 +894,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override protected void onDestroy() {
+        if (headerPresence != null) headerPresence.remove();
         if (hiddenListener != null) hiddenListener.remove();
         if (pinListener != null) pinListener.remove();
         voiceDialogs.close();

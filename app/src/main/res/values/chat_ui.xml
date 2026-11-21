@@ -10,8 +10,20 @@
     <string name="chat_copy">Sao chép tin nhắn</string>
     <string name="chat_copied">Đã sao chép tin nhắn</string>
     <color name="chat_canvas">#E3E8EC</color>
-    <color name="chat_sent_fill">#D2F1FD</color>
-    <color name="chat_sent_stroke">#BBD9E2</color>
+    <color name="chat_conversation_canvas">#EDF2F8</color>
+    <color name="chat_sent_fill">#E1EDFF</color>
+    <color name="chat_sent_stroke">#C6D9F4</color>
+    <color name="chat_accent">#1756CF</color>
+    <color name="chat_text">#14263F</color>
+    <color name="chat_meta">#4D5F76</color>
+    <color name="chat_meta_on_blue">#E4EDFF</color>
+    <color name="chat_border">#DCE5EF</color>
+    <color name="chat_online">#117046</color>
+    <color name="chat_composer_fill">#F4F7FC</color>
+    <color name="chat_button_inactive">#E9EFF7</color>
+    <color name="chat_skeleton_fill">#D7E2EF</color>
+    <string name="chat_message_seen">Đã xem</string>
+    <string name="chat_group_member_count">%1$d thành viên</string>
     <string name="chat_options">Tùy chọn</string>
     <string name="chat_more">Thêm tiện ích</string>
     <string name="chat_emoji">Biểu tượng cảm xúc</string>
@@ -26,6 +38,7 @@
     <string name="chat_shared_diary">Nhật ký chung</string>
     <string name="chat_media">Ảnh, file, link</string>
     <string name="chat_create_group">Tạo nhóm</string>
+    <string name="chat_create_group_with">Tạo nhóm với %1$s</string>
     <string name="chat_add_group">Thêm vào nhóm</string>
     <string name="chat_common_groups">Xem nhóm chung</string>
     <string name="chat_translate">Dịch trò chuyện</string>
@@ -52,6 +65,6 @@
     <style name="ChatToolbarTitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">
         <item name="android:textSize">18sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="android:textColor">@color/chat_text</item>
     </style>
 </resources>

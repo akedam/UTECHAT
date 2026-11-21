@@ -30,6 +30,7 @@ public class DiscoverFragment extends Fragment {
     private LinearLayout rows;
     private TextView error,count;
     private View empty,createButton;
+    private String preselectedFriend;
     private final List<AlertDialog> dialogs=new ArrayList<>();
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,@Nullable ViewGroup parent,@Nullable Bundle state){
@@ -61,6 +62,12 @@ public class DiscoverFragment extends Fragment {
         });
         if(!vm.isReady()){error.setText(R.string.friends_firebase_required);error.setVisibility(View.VISIBLE);}
     }
+
+    public void prepareGroupWith(@Nullable String friendUid) {
+        preselectedFriend = friendUid;
+        if (friendUid != null && name != null) name.requestFocus();
+    }
+
     private void chooseMembersAndCreate(){
         List<User> available=vm.friends().getValue();
         if(available==null||available.isEmpty()){
@@ -73,7 +80,11 @@ public class DiscoverFragment extends Fragment {
         if(title.isEmpty()){nameLayout.setError(getString(R.string.groups_name_invalid));name.requestFocus();return;}
         List<User> friends=new ArrayList<>(available);
         String[] labels=new String[friends.size()];boolean[] checked=new boolean[friends.size()];
-        for(int i=0;i<labels.length;i++)labels[i]=friends.get(i).getDisplayName();
+        for (int i = 0; i < labels.length; i++) {
+            User friend = friends.get(i);
+            labels[i] = friend.getDisplayName();
+            checked[i] = friend.getUid().equals(preselectedFriend);
+        }
         AlertDialog dialog=dialogBuilder().setTitle(R.string.community_choose_members)
                 .setMultiChoiceItems(labels,checked,(d,index,on)->{
                     checked[index]=on;
@@ -82,13 +93,24 @@ public class DiscoverFragment extends Fragment {
                     ((AlertDialog)d).getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(selected>=2);
                 }).setNegativeButton(R.string.friends_cancel_button,null).setPositiveButton(R.string.groups_create_button,null).create();
         show(dialog,false);
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(getString(R.string.community_create_count, selectedCount(checked) + 1));
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             List<User> picked=new ArrayList<>();for(int i=0;i<friends.size();i++)if(checked[i])picked.add(friends.get(i));
             if(picked.size()<2)return;
             dialog.dismiss();
             vm.create(title,picked,new FriendGroupRepository.Result<String>(){
-                public void success(String id){if(!isAdded()||getView()==null)return;name.setText("");name.clearFocus();Toast.makeText(requireContext(),R.string.community_created,Toast.LENGTH_SHORT).show();}
+                public void success(String id){
+                    if (!isAdded() || getView() == null) return;
+                    preselectedFriend = null;
+                    name.setText("");
+                    name.clearFocus();
+                    Toast.makeText(requireContext(), R.string.community_created, Toast.LENGTH_SHORT).show();
+                    startActivity(new Intent(requireContext(), ChatActivity.class)
+                            .putExtra(Constants.EXTRA_CONVERSATION_ID, id)
+                            .putExtra(Constants.EXTRA_CONVERSATION_TITLE, title)
+                            .putExtra(Constants.EXTRA_CONVERSATION_TYPE, "group"));
+                }
                 public void error(String message){/* The page keeps the draft and shows the ViewModel error. */}
             });
         });

@@ -89,11 +89,12 @@ final class ChatOptionsDialog extends Dialog {
         toggle(R.drawable.ic_chat_star, R.string.chat_favorite, "favorite");
         gap(); row(R.drawable.ic_chat_gallery, R.string.chat_media, this::media);
         mediaPreview();
-        gap(); row(R.drawable.ic_chat_group, R.string.chat_open_community, () -> {
-            host.startActivity(new Intent(host, MainActivity.class).putExtra("open_community", true)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            dismiss(); host.finish();
-        });
+        gap();
+        if (!group && !host.chatViewModel().isMock() && host.peerUid() != null) {
+            row(R.drawable.ic_chat_group, host.getString(R.string.chat_create_group_with, originalTitle),
+                    () -> openCommunity(host.peerUid()));
+        }
+        row(R.drawable.ic_chat_group, R.string.chat_open_community, () -> openCommunity(null));
         toggle(R.drawable.ic_chat_pin, R.string.chat_pin, "pinned");
         row(R.drawable.ic_shield_outline, R.string.chat_protection, () -> info(R.string.chat_protection, host.getString(R.string.chat_protection_summary)));
         row(R.drawable.ic_chat_storage, R.string.chat_storage, this::storage);
@@ -122,12 +123,25 @@ final class ChatOptionsDialog extends Dialog {
     private TextView label(String text, int size) { TextView t = new TextView(host); t.setText(text); t.setTextSize(size); t.setTextColor(color(R.color.utechat_on_surface)); return t; }
     private void gap() { View v = new View(host); body.addView(v, new LinearLayout.LayoutParams(-1, dp(8))); }
     private ImageView icon(int drawable) { ImageView i = new ImageView(host); i.setImageResource(drawable); i.setColorFilter(color(R.color.utechat_on_surface_variant)); i.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); return i; }
+    private void openCommunity(String friendUid) {
+        host.startActivity(new Intent(host, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_OPEN_COMMUNITY, true)
+                .putExtra(MainActivity.EXTRA_GROUP_WITH, friendUid)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        dismiss();
+        host.finish();
+    }
+
     private LinearLayout row(int drawable, int text, Runnable action) {
+        return row(drawable, host.getString(text), action);
+    }
+
+    private LinearLayout row(int drawable, String text, Runnable action) {
         LinearLayout r = new LinearLayout(host); r.setGravity(Gravity.CENTER_VERTICAL);
         r.setPadding(dp(16), dp(12), dp(16), dp(12)); r.setMinimumHeight(dp(58));
         r.setBackgroundColor(color(R.color.utechat_surface));
         r.addView(icon(drawable), new LinearLayout.LayoutParams(dp(24), dp(24)));
-        TextView name = label(host.getString(text), 16); name.setPadding(dp(18), 0, dp(8), 0);
+        TextView name = label(text, 16); name.setPadding(dp(18), 0, dp(8), 0);
         r.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         if (action != null) {
             r.addView(icon(R.drawable.ic_chevron_outline), new LinearLayout.LayoutParams(dp(18), dp(18)));
@@ -173,7 +187,7 @@ final class ChatOptionsDialog extends Dialog {
                 .setPositiveButton(R.string.community_close,(d,w)->{prefs.setTitle(input.getText().toString());title.setText(prefs.title(originalTitle));host.applyConversationAppearance();}).show();
     }
     private void wallpaper() {
-        int[] colors = {0xFFE3E8EC,0xFFE8F5FF,0xFFFFF5E6,0xFFFFFFFF};
+        int[] colors = {host.getColor(R.color.chat_conversation_canvas),0xFFE8F5FF,0xFFFFF5E6,0xFFFFFFFF};
         String[] labels = {host.getString(R.string.chat_wallpaper_default),host.getString(R.string.chat_wallpaper_blue),host.getString(R.string.chat_wallpaper_cream),host.getString(R.string.chat_wallpaper_white)};
         int selected = 0; for(int i=0;i<colors.length;i++) if(colors[i]==prefs.wallpaper()) selected=i;
         new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_wallpaper).setSingleChoiceItems(labels,selected,(d,w)->{

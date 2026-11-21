@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowDown, ArrowLeft, Bell, BellOff, Camera, CheckCheck, ChevronRight, CircleAlert, Copy, RefreshCw,
+  ArrowDown, ArrowLeft, Bell, BellOff, Camera, Check, CheckCheck, ChevronRight, CircleAlert, Copy, RefreshCw,
   Ellipsis, Flag, Forward, HardDrive, Image, List, MessageSquare, Mic, MicOff, PanelTop, Pencil, Phone, PhoneOff, Pin,
   Plus, Reply, Search, Send, Shield, Smile, Square, Star, Trash2, UserRound, Users, Video, VideoOff, X
 } from 'lucide-react'
@@ -187,7 +187,7 @@ function Bubble({ message, group, own, ownUid, person, replies, hidden, action, 
   return <div className={`message-row ${own ? 'sent' : 'received'}`} id={`msg-${message.id}`}>
     {!own && <Avatar name={person?.displayName || message.senderName} photo={person?.photoUrl} size={30} />}
     <div className="bubble-wrap">
-      <div className={`bubble ${history ? 'call-record' : ''}`}
+      <div className={`bubble ${history ? 'call-record' : message.type === 'text' ? 'bubble-text' : ''}`}
         onContextMenu={event => { event.preventDefault(); cancel(); if (!longPress.current) action(message); longPress.current = false }}
         onClickCapture={event => {
           if (longPress.current) { event.preventDefault(); event.stopPropagation(); longPress.current = false }
@@ -254,7 +254,8 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     .sort((a, b) => a.sentAt - b.sentAt || a.id.localeCompare(b.id)), [unique, hidden, id])
   const bottom = messages.at(-1)
   const hasOnline = isOnline(presence)
-  const subtitle = group ? `${conversation.participantIds.length} thành viên` : hasOnline ? 'Đang hoạt động' : ''
+  const subtitle = group ? `${conversation.participantIds.length} thành viên` : hasOnline ? 'Đang hoạt động' :
+    presence?.visible === true ? 'Ngoại tuyến' : ''
   const readCurrent = () => {
     if (!bottom || !near || document.visibilityState !== 'visible' || uiSeen.current === bottom.id) return
     uiSeen.current = bottom.id
@@ -355,7 +356,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     <header className="chat-head">
       <IconButton icon={ArrowLeft} label="Quay lại danh sách" className="chat-back" onClick={onBack} />
       <Avatar name={title.name} photo={title.photo} size={42} group={group} online={hasOnline} />
-      <div className="chat-title">{title.peer ? <button className="chat-title-profile"
+      <div className={`chat-title${hasOnline ? ' chat-title-online' : ''}`}>{title.peer ? <button className="chat-title-profile"
         onClick={() => showDialog({ type: 'peer-profile', uid: title.peer, conversationId: id })}>
         <h2>{title.name}</h2>{subtitle && <p>{subtitle}</p>}
       </button> : <><h2>{title.name}</h2>{subtitle && <p>{subtitle}</p>}</>}</div>
@@ -385,23 +386,32 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     </div>}
     <div className="chat-content">
       {!online && <div className="connection-banner" role="status">Mất kết nối. Tin đang soạn được giữ lại.</div>}
-      <div className="messages" ref={log} onScroll={handleScroll} role="log" aria-label="Tin nhắn">
-        {hasMore && <button className="secondary load-older" disabled={loadingOld} onClick={loadOlder}>{loadingOld ? 'Đang tải…' : 'Xem tin nhắn trước'}</button>}
-        {firstLoaded && !messages.length && <Empty icon={MessageSquare} title="Bắt đầu trò chuyện" description="Tin nhắn sẽ xuất hiện ở đây." />}
-        {!firstLoaded && <p className="loader" role="status">Đang tải tin nhắn…</p>}
+      <div className="messages" ref={log} onScroll={handleScroll} role="log" aria-label="Tin nhắn" aria-busy={!firstLoaded || undefined}>
+        {hasMore && <button className="secondary load-older" disabled={loadingOld} onClick={loadOlder}>
+          {loadingOld && <span className="chat-dots" aria-hidden="true"><i /><i /><i /></span>}
+          {loadingOld ? 'Đang tải…' : 'Xem tin nhắn trước'}</button>}
+        {firstLoaded && !messages.length && <Empty icon={MessageSquare} title="Bắt đầu trò chuyện" description="Gửi một lời chào để bắt đầu." />}
+        {!firstLoaded && <div className="chat-skeleton" aria-hidden="true">
+          <span /><span /><span /><span />
+        </div>}
         {messages.map((message, index) => {
           const own = message.senderId === ownUid
-          const unreadPeer = !group && own && bottom?.id === message.id &&
+          const latestOwn = own && bottom?.id === message.id
+          const seenByPeer = !group && latestOwn &&
             (conversation.readStates?.[title.peer]?.readAt || 0) >= message.sentAt
           const person = people[message.senderId] || conversation.participantSummaries?.[message.senderId]
-          return <div key={message.id}>
+          return <div className="message-entry" key={message.id}>
             {!sameDay(messages[index - 1]?.sentAt, message.sentAt) && <div className="day">{formatDate(message.sentAt)}</div>}
             <Bubble {...{ message, group, own, ownUid, person, replies: unique, hidden, id, error, jump, blocked }}
               action={openActions} open={showDialog} onCall={call} />
-            {unreadPeer && <div className="receipt"><CheckCheck size={13} /> Đã xem</div>}
+            {latestOwn && <div className={`receipt${seenByPeer ? ' receipt-seen' : ''}`}>
+              {seenByPeer ? <CheckCheck size={15} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
+              {seenByPeer ? 'Đã xem' : 'Đã gửi'}
+            </div>}
           </div>
         })}
       </div>
+      {!firstLoaded && <span className="sr-only" role="status">Đang tải tin nhắn…</span>}
       {!near && <IconButton icon={ArrowDown} className="to-latest" label="Tới tin nhắn mới nhất" onClick={scrollBottom} />}
     </div>
     {blocked ? <div className="blocked-banner"><Shield size={18} /> Bạn đã chặn tài khoản này.</div> : <div className="composer-area">
@@ -423,12 +433,14 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
         {!recorder.recording && <IconButton icon={Smile} label="Biểu tượng cảm xúc" onClick={pickEmoji} />}
         {recorder.recording ? <div className="recording" role="status"><span /> Đang ghi âm {durationLabel(recorder.elapsed)}
           <IconButton icon={X} label="Hủy ghi âm" onClick={recorder.cancel} /></div>
-          : <textarea ref={text} aria-label="Tin nhắn" rows="1" maxLength={5000} value={draft} placeholder="Nhập tin nhắn"
-            onChange={event => saveDraft(event.target.value)} onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && window.matchMedia('(pointer: fine)').matches) {
-                event.preventDefault(); submit()
-              }
-            }} />}
+          : <div className="composer-input" data-compose-value={draft}>
+            <textarea ref={text} aria-label="Tin nhắn" rows="1" maxLength={5000} value={draft} placeholder="Tin nhắn"
+              onChange={event => saveDraft(event.target.value)} onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && window.matchMedia('(pointer: fine)').matches) {
+                  event.preventDefault(); submit()
+                }
+              }} />
+          </div>}
         <input type="file" hidden accept="image/*" ref={imageInput} onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
         <input type="file" hidden accept="image/*" capture="environment" ref={photoInput}
           onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
@@ -439,9 +451,12 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
             else { setPhoto(null); recorder.start() }
           }} />
         {!recorder.recording && <IconButton icon={Image} label="Chọn ảnh" disabled={sending} onClick={() => imageInput.current?.click()} />}
-        {!recorder.recording && (draft.trim() || photo || recorder.clip) &&
-          <button className="send-button" type="submit" aria-label="Gửi tin nhắn" disabled={sending || !online}><Send size={20} /></button>}
+        {!recorder.recording && <button className="send-button" type="submit" aria-label="Gửi tin nhắn" title="Gửi tin nhắn"
+          aria-busy={sending || undefined} disabled={sending || !online || !(draft.trim() || photo || recorder.clip)}>
+          {sending ? <span className="chat-dots" aria-hidden="true"><i /><i /><i /></span> : <Send size={19} aria-hidden="true" />}
+        </button>}
       </form>
+      {sending && <span className="sr-only" role="status">Đang gửi tin nhắn…</span>}
     </div>}
   </section>
 }

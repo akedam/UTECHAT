@@ -41,8 +41,8 @@
                 android:id="@+id/tv_sender_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/utechat_primary"
-                android:textSize="11sp"
+                android:textColor="@color/chat_accent"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
             <TextView
@@ -50,16 +50,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:maxWidth="@dimen/chat_bubble_max_width"
-                android:textColor="@color/utechat_on_surface"
+                android:textColor="@color/chat_text"
                 android:textSize="16sp"
                 android:breakStrategy="high_quality" />
             <TextView
                 android:id="@+id/tv_message_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/utechat_on_surface_variant"
-                android:textSize="10sp" />
+                android:layout_marginTop="4dp"
+                android:textColor="@color/chat_meta"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

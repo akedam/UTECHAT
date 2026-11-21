@@ -287,23 +287,27 @@ export function CreateGroup({ people, selectedFirst, created, error, close }) {
   const [name, setName] = useState('')
   const [uids, setUids] = useState(selectedFirst ? [selectedFirst] : [])
   const [busy, setBusy] = useState(false)
+  const selected = people.filter(person => uids.includes(person.id))
   return <Modal title="Tạo nhóm" onClose={close}>
     <form className="stack" onSubmit={async event => {
       event.preventDefault()
       setBusy(true)
-      try { created(await createGroup(name, people.filter(person => uids.includes(person.id)))) }
+      try { created(await createGroup(name, selected)) }
       catch (failure) { error(failure); setBusy(false) }
     }}>
       <label>Tên nhóm<input value={name} onChange={event => setName(event.target.value)} required maxLength={80} placeholder="Nhập tên nhóm" autoFocus /></label>
-      <p className="muted">Chọn từ 2 đến 4 bạn bè. Đã chọn {uids.length}/4.</p>
+      <p className="muted">Chọn từ 2 đến 4 bạn bè. Đã chọn {selected.length}/4.</p>
       <div className="picker">
         {people.map(person => <label key={person.id}><Avatar name={person.displayName} photo={person.photoUrl} size={35} />
           <span>{person.displayName}</span>
-          <input type="checkbox" checked={uids.includes(person.id)} disabled={!uids.includes(person.id) && uids.length >= 4}
-            onChange={event => setUids(event.target.checked ? [...uids, person.id] : uids.filter(id => id !== person.id))} /></label>)}
+          <input type="checkbox" checked={uids.includes(person.id)} disabled={busy || (!uids.includes(person.id) && selected.length >= 4)}
+            onChange={event => {
+              const checked = event.target.checked
+              setUids(current => checked ? [...current, person.id] : current.filter(id => id !== person.id))
+            }} /></label>)}
         {!people.length && <p>Bạn cần kết bạn trước để tạo nhóm.</p>}
       </div>
-      <button className="primary wide" disabled={busy || !name.trim() || uids.length < 2}>Tạo nhóm</button>
+      <button className="primary wide" disabled={busy || !name.trim() || selected.length < 2}>Tạo nhóm</button>
     </form>
   </Modal>
 }

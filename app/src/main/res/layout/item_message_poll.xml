@@ -12,7 +12,7 @@
         android:id="@+id/tv_poll_sender"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/utechat_primary"
+        android:textColor="@color/chat_accent"
         android:textSize="@dimen/text_xs"
         android:textStyle="bold" />
 
@@ -43,8 +43,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="@color/utechat_on_surface_variant"
-            android:textSize="@dimen/text_xs" />
+            android:textColor="@color/chat_meta"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/tv_poll_status"
@@ -52,8 +52,8 @@
             android:layout_height="@dimen/touch_target_min"
             android:gravity="center_vertical"
             android:paddingStart="@dimen/space_sm"
-            android:textColor="@color/utechat_on_surface_variant"
-            android:textSize="@dimen/text_xs"
+            android:textColor="@color/chat_meta"
+            android:textSize="12sp"
             android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>

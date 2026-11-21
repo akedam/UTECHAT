@@ -5,18 +5,18 @@
         android:id="@+id/action_voice_call"
         android:title="@string/call_audio_menu"
         android:icon="@drawable/ic_phone_outline"
-        app:iconTint="@color/white"
+        app:iconTint="@color/chat_accent"
         app:showAsAction="always" />
     <item
         android:id="@+id/action_video_call"
         android:title="@string/call_video_menu"
         android:icon="@drawable/ic_video_outline"
-        app:iconTint="@color/white"
+        app:iconTint="@color/chat_accent"
         app:showAsAction="always" />
     <item
         android:id="@+id/action_chat_options"
         android:title="@string/chat_options"
         android:icon="@drawable/ic_chat_options"
-        app:iconTint="@color/white"
+        app:iconTint="@color/chat_accent"
         app:showAsAction="always" />
 </menu>

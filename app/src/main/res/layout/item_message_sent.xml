@@ -17,7 +17,7 @@
             android:orientation="vertical"
             android:paddingHorizontal="12dp"
             android:paddingVertical="10dp"
-            android:background="@drawable/bg_bubble_sent">
+            android:background="@drawable/bg_bubble_sent_text">
             <TextView
                 android:id="@+id/tv_sender_name"
                 android:layout_width="wrap_content"
@@ -31,16 +31,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:maxWidth="@dimen/chat_bubble_max_width"
-                android:textColor="@color/utechat_on_surface"
+                android:textColor="@color/white"
                 android:textSize="16sp"
                 android:breakStrategy="high_quality" />
             <TextView
                 android:id="@+id/tv_message_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/utechat_on_surface_variant"
-                android:textSize="10sp" />
+                android:layout_marginTop="4dp"
+                android:textColor="@color/chat_meta_on_blue"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
     <TextView
@@ -48,7 +48,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
-        android:textColor="@color/utechat_on_surface_variant"
-        android:textSize="10sp"
+        android:textColor="@color/chat_meta"
+        android:textSize="12sp"
         android:gravity="center_vertical" />
 </LinearLayout>

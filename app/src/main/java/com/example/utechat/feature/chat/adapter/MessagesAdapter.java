@@ -18,6 +18,7 @@ import com.example.utechat.domain.repository.MediaRepository;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -25,6 +26,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     private static final int VIEW_TYPE_SENT = 1, VIEW_TYPE_RECEIVED = 2,
             VIEW_TYPE_SENT_IMAGE = 3, VIEW_TYPE_RECEIVED_IMAGE = 4, VIEW_TYPE_POLL = 5, VIEW_TYPE_CALL = 6;
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm", Locale.getDefault());
+    private static final Object READ_RECEIPT = new Object();
     public interface RetryListener { void onRetry(Message message); }
     public interface VoteListener { void onVote(Message message, int optionIndex); }
     public interface CallListener { void onCallAgain(String mediaType); }
@@ -59,8 +61,21 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     private final MediaRepository media;
     private boolean groupConversation;
     private String peerPhoto;
+    private long peerReadAt;
     public void setGroupConversation(boolean group) { groupConversation = group; }
     public void setPeerPhoto(String url) { peerPhoto = url; }
+
+    public void setPeerReadAt(long readAt) {
+        if (readAt == peerReadAt) return;
+        long previous = peerReadAt;
+        peerReadAt = readAt;
+        for (int i = getItemCount() - 1; i >= 0; i--) {
+            Message message = getItem(i);
+            if (Objects.equals(currentUserId, message.getSenderId()) && hasPeerRead(message, previous) != hasPeerRead(message, readAt)) {
+                notifyItemChanged(i, READ_RECEIPT);
+            }
+        }
+    }
 
     public MessagesAdapter(String currentUserId, String currentUserName, RetryListener retryListener,
                            VoteListener voteListener, MediaRepository media) {
@@ -75,11 +90,51 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.TEXT&&com.example.utechat.data.calls.CallHistory.isHistoryMessage(m.getId(),m.getContent()))return VIEW_TYPE_CALL;if(m.getType()==Message.Type.POLL)return VIEW_TYPE_POLL;if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
     @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_CALL:return new CallHolder(inflater.inflate(R.layout.item_message_call,parent,false));case VIEW_TYPE_POLL:return new PollHolder(inflater.inflate(R.layout.item_message_poll,parent,false));case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
     @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof CallHolder)((CallHolder)holder).bind(m);else if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else if(holder instanceof PollHolder)((PollHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
+    @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (payloads.isEmpty() || !payloads.stream().allMatch(payload -> payload == READ_RECEIPT)) {
+            super.onBindViewHolder(holder, position, payloads);
+            return;
+        }
+        TextView status = holder instanceof TextHolder ? ((TextHolder) holder).status
+                : holder instanceof ImageHolder ? ((ImageHolder) holder).status
+                : holder instanceof PollHolder ? ((PollHolder) holder).status : null;
+        if (status != null) bindStatus(status, getItem(position));
+    }
     @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof ImageHolder) ((ImageHolder) holder).clear();
         super.onViewRecycled(holder);
     }
     private String formattedTime(Message m){return m.getSentAt()>0?TIME_FORMAT.format(new Date(m.getSentAt())):"";}
+
+    private boolean hasPeerRead(Message message, long readAt) {
+        Message.DeliveryStatus status = message.getDeliveryStatus();
+        return !groupConversation && status != Message.DeliveryStatus.SENDING && status != Message.DeliveryStatus.FAILED
+                && (status == Message.DeliveryStatus.READ || (message.getSentAt() > 0 && message.getSentAt() <= readAt));
+    }
+
+    private void bindStatus(TextView status, Message message) {
+        status.setVisibility(View.VISIBLE);
+        status.setOnClickListener(null);
+        status.setMinHeight(0);
+        if (message.getDeliveryStatus() == Message.DeliveryStatus.FAILED) {
+            status.setMinHeight(status.getResources().getDimensionPixelSize(R.dimen.touch_target_min));
+            status.setText(R.string.message_send_failed_retry);
+            status.setTextColor(status.getContext().getColor(R.color.utechat_error));
+            status.setOnClickListener(view -> retryListener.onRetry(message));
+            return;
+        }
+        boolean seen = hasPeerRead(message, peerReadAt);
+        if (message.getDeliveryStatus() == Message.DeliveryStatus.SENDING) {
+            if (message.getType() == Message.Type.IMAGE) {
+                status.setText(status.getContext().getString(R.string.image_upload_progress, message.getUploadProgress()));
+            } else {
+                status.setText(R.string.message_sending);
+            }
+        } else {
+            status.setText(seen ? R.string.chat_message_seen : R.string.message_sent);
+        }
+        status.setTextColor(status.getContext().getColor(seen ? R.color.chat_accent : R.color.chat_meta));
+    }
 
     private TextView newReactionView(android.widget.LinearLayout parent) {
         TextView result = new TextView(parent.getContext());
@@ -139,7 +194,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             float density=view.getResources().getDisplayMetrics().density;
             content.setMaxWidth((int)Math.min(280*density,view.getResources().getDisplayMetrics().widthPixels-88*density));
             quote = new TextView(view.getContext());
-            quote.setTextColor(view.getContext().getColor(R.color.utechat_primary));
+            quote.setTextColor(view.getContext().getColor(R.color.chat_accent));
             quote.setTextSize(13);
             quote.setPadding(0, (int) (6 * density), 0, (int) (6 * density));
             quote.setMaxWidth(content.getMaxWidth());
@@ -153,13 +208,17 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             content.setOnLongClickListener(view -> showActions(m, view));
             bindReactions(reactions, m, content);
             boolean voice = m.getType() == Message.Type.VOICE;
+            boolean blueBubble = sent && m.getType() == Message.Type.TEXT;
+            if (sent) ((View) content.getParent()).setBackgroundResource(blueBubble ? R.drawable.bg_bubble_sent_text : R.drawable.bg_bubble_sent);
+            time.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.chat_meta_on_blue : R.color.chat_meta));
+            quote.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.chat_meta_on_blue : R.color.chat_accent));
+            reactions.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.white : R.color.chat_text));
             if (voice) {
                 content.setText(itemView.getContext().getString(R.string.voice_row,
                         com.example.utechat.feature.chat.ui.VoiceDialogs.formatDuration(m.getDurationMs())));
-                content.setTextColor(itemView.getContext().getColor(R.color.utechat_primary));
-            } else {
-                content.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface));
             }
+            content.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.white
+                    : voice ? R.color.chat_accent : R.color.chat_text));
             content.setOnClickListener(voice && m.getMediaUrl() != null && voiceListener != null
                     ? view -> voiceListener.accept(m) : null);
             content.setClickable(voice && m.getMediaUrl() != null && voiceListener != null);
@@ -183,7 +242,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
                 Glide.with(photo).clear(photo);
                 if(showPhoto) Glide.with(photo).load(peerPhoto).circleCrop().error(R.drawable.bg_avatar_circle_accent).into(photo);
             }
-            if(sent){status.setVisibility(View.VISIBLE);status.setOnClickListener(null);status.setMinHeight(0);if(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED){status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));status.setText(R.string.message_send_failed_retry);status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));status.setOnClickListener(v->retryListener.onRetry(m));}else if(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING){status.setText(R.string.message_sending);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}else{status.setText(R.string.message_sent);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}}
+            if (sent) bindStatus(status, m);
             itemView.setContentDescription(sent?content.getText():itemView.getContext().getString(R.string.message_accessibility_received,sender.getText(),content.getText(),time.getText()));}
     }
 
@@ -229,18 +288,8 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
                 options.addView(button);
             }
             boolean sent=currentUserId != null && currentUserId.equals(message.getSenderId());
-            status.setVisibility(sent ? View.VISIBLE : View.GONE);
-            status.setOnClickListener(null); status.setMinHeight(0);
-            if (sent) {
-                status.setText(message.getDeliveryStatus()==Message.DeliveryStatus.FAILED
-                        ? R.string.message_send_failed_retry : message.getDeliveryStatus()==Message.DeliveryStatus.SENDING
-                        ? R.string.message_sending : R.string.message_sent);
-                if (message.getDeliveryStatus() == Message.DeliveryStatus.FAILED) {
-                    status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));
-                    status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));
-                    status.setOnClickListener(v -> retryListener.onRetry(message));
-                } else status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));
-            }
+            if (sent) bindStatus(status, message);
+            else status.setVisibility(View.GONE);
             itemView.setContentDescription(itemView.getContext().getString(R.string.poll_accessibility,
                     sender.getText(), question.getText(), counts.length));
         }
@@ -269,7 +318,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
                 quote.setOnLongClickListener(v -> showActions(m, image));
             }
             image.setContentDescription(itemView.getContext().getString(R.string.message_image_description,sender.getText()));
-            if(sent){status.setVisibility(View.VISIBLE);status.setOnClickListener(null);status.setMinHeight(0);if(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED){status.setText(R.string.message_send_failed_retry);status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));status.setOnClickListener(v->retryListener.onRetry(m));}else if(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING){status.setText(itemView.getContext().getString(R.string.image_upload_progress,m.getUploadProgress()));status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}else{status.setText(R.string.message_sent);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}}
+            if (sent) bindStatus(status, m);
             load(m);itemView.setContentDescription(itemView.getContext().getString(R.string.message_image_description,sender.getText()));}
         void load(Message m){cancelDownload();String local=m.getLocalMediaUri();if(local!=null){progress.setVisibility(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING?View.VISIBLE:View.GONE);Glide.with(image).load(Uri.parse(local)).override(560,560).centerInside().placeholder(R.drawable.bg_bubble_received).error(R.drawable.bg_bubble_received).into(image);return;}
             String path=m.getMediaUrl();if(path==null||path.trim().isEmpty()){image.setImageResource(R.drawable.bg_bubble_received);error.setVisibility(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED?View.VISIBLE:View.GONE);return;}
