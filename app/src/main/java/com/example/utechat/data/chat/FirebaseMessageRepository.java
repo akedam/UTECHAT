@@ -92,6 +92,61 @@ public final class FirebaseMessageRepository implements MessageRepository {
         sendMessage(conversationId, message, "text", callback);
     }
 
+    @Override public Subscription listenRecalls(String conversationId, Listener listener) {
+        var registration = messages(conversationId).whereEqualTo("type", "recalled")
+                .addSnapshotListener((snapshot, error) -> {
+                    if (snapshot != null) listener.onMessages(map(snapshot, null, null, null, false));
+                });
+        return registration::remove;
+    }
+
+    @Override public void recall(String conversationId, String messageId, String senderId, SendCallback callback) {
+        var conversation = firestore.collection("conversations").document(conversationId);
+        var message = messages(conversationId).document(messageId);
+        firestore.runTransaction(transaction -> {
+            var parent = transaction.get(conversation);
+            var original = transaction.get(message);
+            if (!original.exists() || !senderId.equals(original.getString("senderId"))) {
+                throw new IllegalStateException("Invalid message sender");
+            }
+            if (!"recalled".equals(original.getString("type"))) {
+                Map<String, Object> recalled = new HashMap<>();
+                for (String key : List.of("senderId", "senderName", "sentAt", "createdAt", "readBy")) {
+                    if (original.contains(key)) recalled.put(key, original.get(key));
+                }
+                recalled.put("type", "recalled");
+                recalled.put("content", "Tin nhắn đã được thu hồi");
+                transaction.set(message, recalled);
+                Map<String, Object> updates = new HashMap<>();
+                if (messageId.equals(parent.getString("lastMessageId"))) {
+                    updates.put("lastMessageType", "recalled");
+                    updates.put("lastMessage", recalled.get("content"));
+                }
+                if (messageId.equals(parent.getString("pinnedMessageId"))) {
+                    updates.put("pinnedMessageId", com.google.firebase.firestore.FieldValue.delete());
+                }
+                if (!updates.isEmpty()) transaction.update(conversation, updates);
+            }
+            return null;
+        }).addOnSuccessListener(unused -> callback.onSuccess())
+                .addOnFailureListener(error -> callback.onError(context.getString(R.string.message_action_error)));
+    }
+
+    @Override public void react(String conversationId, String messageId, String uid, String emoji, SendCallback callback) {
+        var message = messages(conversationId).document(messageId);
+        firestore.runTransaction(transaction -> {
+            var snapshot = transaction.get(message);
+            if (!snapshot.exists() || "recalled".equals(snapshot.getString("type"))) {
+                throw new IllegalStateException("Message is unavailable");
+            }
+            var field = com.google.firebase.firestore.FieldPath.of("reactions", uid);
+            Object value = emoji.equals(snapshot.get(field)) ? com.google.firebase.firestore.FieldValue.delete() : emoji;
+            transaction.update(message, field, value);
+            return null;
+        }).addOnSuccessListener(unused -> callback.onSuccess())
+                .addOnFailureListener(error -> callback.onError(context.getString(R.string.message_action_error)));
+    }
+
     @Override
     public void sendImage(String conversationId, Message message, SendCallback callback) {
         sendMessage(conversationId, message, "image", callback);
@@ -141,7 +196,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
             payload.put("pollOptions", new ArrayList<>(message.getPollOptions()));
             payload.put("pollVotes", new HashMap<String, Integer>());
         }
-        if ("text".equals(type) && message.getReply() != null) {
+        if (("text".equals(type) || image) && message.getReply() != null) {
             Message.Reply reply = message.getReply();
             payload.put("reply", Map.of("id", reply.id, "name", reply.name, "text", reply.text, "type", reply.type));
         }
@@ -256,6 +311,14 @@ public final class FirebaseMessageRepository implements MessageRepository {
         message.setMediaUrl(document.getString("mediaPath"));
         message.setContentType(document.getString("contentType"));
         message.setDurationMs(epochMillis(document.get("durationMs")));
+        Object rawReactions = document.get("reactions");
+        if (rawReactions instanceof Map) {
+            Map<String, String> reactions = new java.util.TreeMap<>();
+            ((Map<?, ?>) rawReactions).forEach((key, value) -> {
+                if (key instanceof String && value instanceof String) reactions.put((String) key, (String) value);
+            });
+            message.setReactions(reactions);
+        }
         Object rawReply = document.get("reply");
         if (rawReply instanceof Map) {
             Map<?, ?> reply = (Map<?, ?>) rawReply;

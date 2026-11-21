@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tin_personal_history">Lịch sử cá nhân</string>
+    <string name="tin_personal_history_summary">Xem lại Tin đã đăng</string>
+    <string name="moments_title">Tin</string>
+    <string name="moments_camera">Chụp khoảnh khắc</string>
+    <string name="moments_back">Quay lại</string>
+    <string name="moments_notification_title">Tin mới</string>
+    <string name="moments_notification_body">Mở UTEChat để xem ảnh.</string>
+    <string name="moments_widget_label">Khoảnh khắc UTEChat</string>
+    <string name="moments_widget_empty">Chưa có ảnh mới</string>
+    <string name="moments_widget_opt_in">Bật ảnh trên widget</string>
+</resources>

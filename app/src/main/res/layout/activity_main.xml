@@ -50,6 +50,18 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/nav_moments"
+            style="@style/BottomNavigationItem"
+            android:contentDescription="@string/moments_title">
+            <ImageView
+                style="@style/BottomNavigationIcon"
+                android:src="@drawable/ic_nav_tin" />
+            <TextView
+                style="@style/BottomNavigationLabel"
+                android:text="@string/moments_title" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/nav_discover"
             style="@style/BottomNavigationItem"
             android:contentDescription="@string/nav_discover">

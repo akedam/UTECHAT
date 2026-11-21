@@ -24,6 +24,7 @@ public final class AgoraCallController {
         void onRemoteJoined(int uid);
         void onRemoteLeft();
         void onReconnecting();
+        void onReconnected();
         void onTokenRefresh();
         void onError();
         default void onRemoteVideoAvailable(boolean available) { }
@@ -50,20 +51,20 @@ public final class AgoraCallController {
         run(() -> {
             ensureEngine(appId);
             engine.enableAudio();
+            check(engine.enableVideo(), "enableVideo");
             engine.muteLocalAudioStream(micMuted);
             engine.setEnableSpeakerphone(speakerEnabled);
             if (video) {
                 prepareVideo(local);
-                engine.enableLocalVideo(!cameraMuted);
-                engine.muteLocalVideoStream(cameraMuted);
             }
+            check(engine.enableLocalVideo(video && !cameraMuted), "enableLocalVideo");
 
             ChannelMediaOptions options = new ChannelMediaOptions();
             options.clientRoleType = Constants.CLIENT_ROLE_BROADCASTER;
             options.publishMicrophoneTrack = true;
             options.autoSubscribeAudio = true;
-            options.autoSubscribeVideo = video;
-            options.publishCameraTrack = video;
+            options.autoSubscribeVideo = true;
+            options.publishCameraTrack = video && !cameraMuted;
             check(engine.joinChannel(token, channelName, uid, options), "joinChannel");
             joined = true;
         });
@@ -128,6 +129,7 @@ public final class AgoraCallController {
             @Override public void onConnectionStateChanged(int state, int reason) {
                 if (released) return;
                 if (state == Constants.CONNECTION_STATE_RECONNECTING) events.onReconnecting();
+                if (state == Constants.CONNECTION_STATE_CONNECTED) events.onReconnected();
                 if (state == Constants.CONNECTION_STATE_FAILED) events.onError();
             }
             @Override public void onError(int code) {
@@ -160,12 +162,15 @@ public final class AgoraCallController {
         run(() -> { if (engine != null) engine.muteLocalAudioStream(muted); });
     }
 
-    public void muteCamera(boolean muted) {
+    public void setCameraEnabled(boolean enabled, FrameLayout container) {
+        TextureView local = enabled ? localSurface(container) : null;
         run(() -> {
-            if (engine != null) {
-                engine.enableLocalVideo(!muted);
-                engine.muteLocalVideoStream(muted);
-            }
+            if (engine == null || !joined) return;
+            if (enabled) prepareVideo(local);
+            check(engine.enableLocalVideo(enabled), "enableLocalVideo");
+            ChannelMediaOptions options = new ChannelMediaOptions();
+            options.publishCameraTrack = enabled;
+            check(engine.updateChannelMediaOptions(options), "updateChannelMediaOptions");
         });
     }
 

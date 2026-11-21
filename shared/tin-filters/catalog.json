@@ -1,0 +1,20 @@
+[
+  {"id":"berry","label":"Dâu Ngọt · 4 ô","group":"booth","cells":4,"columns":2,"gap":37,"insets":[36,36,36,36],"art":"berry.png"},
+  {"id":"lavender","label":"Tím Mơ · 4 ô","group":"booth","cells":4,"columns":2,"gap":37,"insets":[36,36,36,36],"art":"lavender.png"},
+  {"id":"sky-diary","label":"Nhật Ký Mây · 4 ô","group":"booth","cells":4,"columns":2,"gap":37,"insets":[36,36,36,36],"art":"sky-diary.png"},
+  {"id":"film-four","label":"Phim bốn ô","group":"booth","cells":4,"columns":2,"gap":24,"insets":[94,50,100,50],"art":"film-four.png"},
+  {"id":"tiny-bow","label":"Nơ Nhỏ · 1 ô","group":"booth","cells":1,"columns":1,"gap":0,"insets":[84,57,113,57],"art":"tiny-bow.png"},
+  {"id":"blue-two","label":"Hai ô · Xanh","group":"booth","cells":2,"columns":2,"gap":24,"insets":[24,24,24,24],"fill":"#b2def9"},
+  {"id":"cream-three","label":"Ba ô · Kem","group":"booth","cells":3,"columns":1,"gap":24,"insets":[24,24,24,24],"fill":"#f4dbb4"},
+  {"id":"natural","label":"Không khung","group":"booth","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0]},
+  {"id":"night-flower","label":"Hoa Đêm","group":"trend","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"night-flower.png"},
+  {"id":"trend-note","label":"Ghi chú Trend","group":"trend","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"trend-note.png"},
+  {"id":"ute-vn","label":"UTEChat Việt Nam","group":"trend","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"ute-vn.png"},
+  {"id":"pink-cat","label":"Mèo Nơ Hồng","group":"trend","cells":1,"columns":1,"gap":0,"insets":[29,29,29,29],"art":"pink-cat.png"},
+  {"id":"star-cat","label":"Mèo Sao","group":"trend","cells":1,"columns":1,"gap":0,"insets":[33,33,33,33],"art":"star-cat.png"},
+  {"id":"blond","label":"Tóc Vàng","group":"funny","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"blond.png","anchor":"hair","scale":1.48},
+  {"id":"pout","label":"Môi Chu","group":"funny","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"pout.png","anchor":"mouth","scale":0.77},
+  {"id":"jaw","label":"Cằm Góc Cạnh","group":"funny","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"jaw.png","anchor":"chin","scale":1.12},
+  {"id":"grin","label":"Nụ Cười Sún","group":"funny","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"grin.png","anchor":"mouth","scale":0.85},
+  {"id":"ginger","label":"Tóc Đỏ","group":"funny","cells":1,"columns":1,"gap":0,"insets":[0,0,0,0],"art":"ginger.png","anchor":"hair","scale":1.48}
+]

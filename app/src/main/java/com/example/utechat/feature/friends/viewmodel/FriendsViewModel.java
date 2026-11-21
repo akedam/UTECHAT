@@ -23,6 +23,7 @@ public class FriendsViewModel extends AndroidViewModel {
     private final MutableLiveData<List<Friendship>> requests = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<String> error = new MutableLiveData<>();
     private final MutableLiveData<Boolean> loading = new MutableLiveData<>(false);
+    private final MutableLiveData<Boolean> friendshipsReady = new MutableLiveData<>(false);
     private FriendGroupRepository.Subscription subscription;
     private final PresenceRepository presenceRepository;
     private final Map<String, PresenceRepository.Subscription> presenceSubscriptions = new HashMap<>();
@@ -37,6 +38,7 @@ public class FriendsViewModel extends AndroidViewModel {
     public LiveData<List<Friendship>> getRequests(){return requests;} public LiveData<String> getError(){return error;}
     public LiveData<Boolean> getLoading(){return loading;} public boolean isMock(){return repo==null||repo.isMock();}
     public User getCurrentUser(){return currentUser;}
+    public LiveData<Boolean> getFriendshipsReady() { return friendshipsReady; }
     public void clearSearch(){searchGeneration++;results.setValue(Collections.emptyList());loading.setValue(false);error.setValue(null);}
     public void search(String term){int generation=++searchGeneration;if(repo==null){error.setValue(getApplication().getString(R.string.friends_firebase_required));return;}loading.setValue(true);
         repo.searchUsers(term,new FriendGroupRepository.Result<List<User>>(){public void success(List<User> users){if(generation!=searchGeneration)return;loading.setValue(false);List<User> matches=new ArrayList<>(users);if(currentUser!=null)matches.removeIf(u->currentUser.getUid().equals(u.getUid()));results.setValue(matches);error.setValue(null);}
@@ -53,7 +55,7 @@ public class FriendsViewModel extends AndroidViewModel {
         for(Friendship f:all){if(f.isAccepted()){accepted.add(f);uids.add(peer(f));}else if(f.isPending()){pending.add(f);uids.add(peer(f));}}
         repo.loadUsers(new ArrayList<>(uids),new FriendGroupRepository.Result<List<User>>(){public void success(List<User> users){Map<String,User> byId=new HashMap<>();for(User u:users)byId.put(u.getUid(),u);
             List<User> friendUsers=new ArrayList<>();for(Friendship f:accepted){User u=byId.get(peer(f));if(u!=null)friendUsers.add(u);}publishFriendsAndPresence(friendUsers);
-            for(Friendship f:pending)f.setOtherUser(byId.get(peer(f)));requests.postValue(pending);}
+            for(Friendship f:pending)f.setOtherUser(byId.get(peer(f)));requests.postValue(pending);friendshipsReady.postValue(true);}
             public void error(String message){error.postValue(message);}});
     }
     private void publishFriendsAndPresence(List<User> friendUsers){

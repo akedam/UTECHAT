@@ -315,6 +315,11 @@ test('FCM routing tokens are owner-writable but never client-readable', async ()
   await assertSucceeds(setDoc(webToken, {
     token: 'a-valid-length-web-registration-token-value', platform: 'web', updatedAt: 1234,
   }));
+  await assertSucceeds(updateDoc(webToken, { showPreview: true, mutedChats: ['chat1'] }));
+  await assertFails(updateDoc(webToken, { showPreview: 'true' }));
+  await assertFails(updateDoc(webToken, { mutedChats: Array(501).fill('chat1') }));
+  await assertFails(updateDoc(token, { showPreview: true }));
+  await assertFails(updateDoc(doc(bob, 'users/alice/deviceTokens/web-hash'), { showPreview: true }));
   await assertFails(getDoc(webToken));
   await assertFails(deleteDoc(doc(bob, 'users/alice/deviceTokens/web-hash')));
   await assertSucceeds(deleteDoc(webToken));

@@ -6,6 +6,7 @@ import {
 import { onDisconnect, onValue, push, ref, remove, serverTimestamp as databaseTime, set } from 'firebase/database'
 import { updateProfile } from 'firebase/auth'
 import { api, auth, backend, db, presenceDb } from './firebase'
+import { queueNetworkJob } from './network-jobs'
 
 export const reactions = ['❤️', '😆', '😮', '😢', '😡', '👍', '😂', '😍', '🔥', '👏', '🎉', '💯', '🙌', '🙏', '👎']
 export const qrPrefix = 'utechat://friend/v1/'
@@ -87,6 +88,7 @@ export async function uploadAvatar(file) {
 }
 
 export const watchProfile = (uid, fn, fail) => onSnapshot(doc(db, 'users', uid), snap => fn(snap.exists() ? read(snap) : null), fail)
+export const watchPublicProfile = (uid, fn, fail) => onSnapshot(doc(cards, uid), snap => fn(snap.exists() ? read(snap) : null), fail)
 export const watchConversations = (uid, fn, fail) => watch(
   query(collection(db, 'conversations'), where('participantIds', 'array-contains', uid)), fn, fail
 )
@@ -273,7 +275,7 @@ export async function sendMessage(conversation, data, reply) {
     }
     writeSummary(tx, conversation, target, entry, uid, Math.max(Date.now(), (current.lastMessageAt || 0) + 1))
   })
-  api('/api/message-notify', { body: { conversationId: conversation, messageId: target.id } }).catch(() => {})
+  queueNetworkJob(uid, 'message', target.id, { conversationId: conversation, messageId: target.id }, Date.now() + 86_400_000)
   return target.id
 }
 
@@ -315,6 +317,7 @@ export async function reportUser(conversationId, uid, reason, messageId) {
 export function watchPresence(uid, callback) {
   return onValue(ref(presenceDb, `presence/${uid}`), snap => callback(snap.val()), () => callback(null))
 }
+export const isOnline = presence => presence?.visible === true && Object.values(presence.connections || {}).some(Boolean)
 export function setVisibility(uid, visible) {
   return set(ref(presenceDb, `presence/${uid}/visible`), visible)
 }

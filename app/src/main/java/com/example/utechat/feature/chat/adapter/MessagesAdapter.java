@@ -29,10 +29,11 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     public interface VoteListener { void onVote(Message message, int optionIndex); }
     public interface CallListener { void onCallAgain(String mediaType); }
     private CallListener callListener;
-    private java.util.function.Consumer<Message> actionListener, voiceListener;
+    private java.util.function.BiConsumer<Message, View> actionListener;
+    private java.util.function.Consumer<Message> voiceListener;
     private java.util.function.Consumer<String> originalListener;
 
-    public void setMessageActions(java.util.function.Consumer<Message> actions,
+    public void setMessageActions(java.util.function.BiConsumer<Message, View> actions,
                                   java.util.function.Consumer<String> original,
                                   java.util.function.Consumer<Message> voice) {
         actionListener = actions;
@@ -40,9 +41,9 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         voiceListener = voice;
     }
 
-    private boolean showActions(Message message) {
+    private boolean showActions(Message message, View anchor) {
         if (actionListener == null) return false;
-        actionListener.accept(message);
+        actionListener.accept(message, anchor);
         return true;
     }
 
@@ -69,13 +70,36 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     public Message getMessageAt(int position){return super.getItem(position);}
     private static final DiffUtil.ItemCallback<Message> DIFF_CALLBACK=new DiffUtil.ItemCallback<Message>(){
         @Override public boolean areItemsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getId(),b.getId());}
-        @Override public boolean areContentsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getSenderId(),b.getSenderId())&&Objects.equals(a.getSenderName(),b.getSenderName())&&Objects.equals(a.getType(),b.getType())&&Objects.equals(a.getContent(),b.getContent())&&Objects.equals(a.getMediaUrl(),b.getMediaUrl())&&Objects.equals(a.getLocalMediaUri(),b.getLocalMediaUri())&&Objects.equals(a.getPollOptions(),b.getPollOptions())&&Objects.equals(a.getPollVotes(),b.getPollVotes())&&Objects.equals(a.getReply(),b.getReply())&&a.getDurationMs()==b.getDurationMs()&&a.getSentAt()==b.getSentAt()&&a.getUploadProgress()==b.getUploadProgress()&&a.getDeliveryStatus()==b.getDeliveryStatus();}
+        @Override public boolean areContentsTheSame(@NonNull Message a,@NonNull Message b){return Objects.equals(a.getSenderId(),b.getSenderId())&&Objects.equals(a.getSenderName(),b.getSenderName())&&Objects.equals(a.getType(),b.getType())&&Objects.equals(a.getContent(),b.getContent())&&Objects.equals(a.getMediaUrl(),b.getMediaUrl())&&Objects.equals(a.getLocalMediaUri(),b.getLocalMediaUri())&&Objects.equals(a.getPollOptions(),b.getPollOptions())&&Objects.equals(a.getPollVotes(),b.getPollVotes())&&Objects.equals(a.getReply(),b.getReply())&&a.getReactions().equals(b.getReactions())&&a.getDurationMs()==b.getDurationMs()&&a.getSentAt()==b.getSentAt()&&a.getUploadProgress()==b.getUploadProgress()&&a.getDeliveryStatus()==b.getDeliveryStatus();}
     };
     @Override public int getItemViewType(int position){Message m=getItem(position);boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());if(m.getType()==Message.Type.TEXT&&com.example.utechat.data.calls.CallHistory.isHistoryMessage(m.getId(),m.getContent()))return VIEW_TYPE_CALL;if(m.getType()==Message.Type.POLL)return VIEW_TYPE_POLL;if(m.getType()==Message.Type.IMAGE)return mine?VIEW_TYPE_SENT_IMAGE:VIEW_TYPE_RECEIVED_IMAGE;return mine?VIEW_TYPE_SENT:VIEW_TYPE_RECEIVED;}
     @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent,int type){LayoutInflater inflater=LayoutInflater.from(parent.getContext());switch(type){case VIEW_TYPE_CALL:return new CallHolder(inflater.inflate(R.layout.item_message_call,parent,false));case VIEW_TYPE_POLL:return new PollHolder(inflater.inflate(R.layout.item_message_poll,parent,false));case VIEW_TYPE_SENT_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_sent,parent,false),true);case VIEW_TYPE_RECEIVED_IMAGE:return new ImageHolder(inflater.inflate(R.layout.item_message_image_received,parent,false),false);case VIEW_TYPE_SENT:return new TextHolder(inflater.inflate(R.layout.item_message_sent,parent,false),true);default:return new TextHolder(inflater.inflate(R.layout.item_message_received,parent,false),false);}}
     @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder,int position){Message m=getItem(position);if(holder instanceof CallHolder)((CallHolder)holder).bind(m);else if(holder instanceof ImageHolder)((ImageHolder)holder).bind(m);else if(holder instanceof PollHolder)((PollHolder)holder).bind(m);else ((TextHolder)holder).bind(m);}
-    @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder){if(holder instanceof ImageHolder)((ImageHolder)holder).clear();super.onViewRecycled(holder);}
+    @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+        if (holder instanceof ImageHolder) ((ImageHolder) holder).clear();
+        super.onViewRecycled(holder);
+    }
     private String formattedTime(Message m){return m.getSentAt()>0?TIME_FORMAT.format(new Date(m.getSentAt())):"";}
+
+    private TextView newReactionView(android.widget.LinearLayout parent) {
+        TextView result = new TextView(parent.getContext());
+        result.setTextSize(14);
+        result.setTextColor(parent.getContext().getColor(R.color.utechat_on_surface));
+        int padding = Math.round(4 * parent.getResources().getDisplayMetrics().density);
+        result.setPadding(0, padding, 0, padding);
+        parent.addView(result);
+        return result;
+    }
+
+    private void bindReactions(TextView view, Message message, View anchor) {
+        java.util.Map<String, Integer> totals = new java.util.LinkedHashMap<>();
+        for (String emoji : message.getReactions().values()) totals.merge(emoji, 1, Integer::sum);
+        var labels = new java.util.ArrayList<String>();
+        totals.forEach((emoji, count) -> labels.add(count == 1 ? emoji : emoji + " " + count));
+        view.setText(android.text.TextUtils.join("   ", labels));
+        view.setVisibility(labels.isEmpty() ? View.GONE : View.VISIBLE);
+        view.setOnClickListener(v -> showActions(message, anchor));
+    }
 
     private final class CallHolder extends RecyclerView.ViewHolder {
         final TextView title, time, again;
@@ -103,13 +127,14 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             card.setBackgroundResource(mine?R.drawable.bg_call_history_sent:R.drawable.bg_call_history);
             ((android.widget.LinearLayout)itemView).setGravity(mine?android.view.Gravity.END:android.view.Gravity.START);
             again.setEnabled(callListener!=null);
+            card.setOnLongClickListener(v -> showActions(m, card));
             again.setOnClickListener(v->{if(callListener!=null)callListener.onCallAgain(media);});
             again.setContentDescription(itemView.getContext().getString(R.string.call_card_accessibility,caption,time.getText()));
         }
     }
 
     private final class TextHolder extends RecyclerView.ViewHolder{
-        final TextView content,sender,time,status,quote;final boolean sent;
+        final TextView content,sender,time,status,quote,reactions;final boolean sent;
         TextHolder(View view,boolean sent){super(view);this.sent=sent;content=view.findViewById(R.id.tv_message_content);sender=view.findViewById(R.id.tv_sender_name);time=view.findViewById(R.id.tv_message_time);status=sent?view.findViewById(R.id.tv_message_status):null;
             float density=view.getResources().getDisplayMetrics().density;
             content.setMaxWidth((int)Math.min(280*density,view.getResources().getDisplayMetrics().widthPixels-88*density));
@@ -122,9 +147,11 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             quote.setEllipsize(android.text.TextUtils.TruncateAt.END);
             android.widget.LinearLayout bubble = (android.widget.LinearLayout) content.getParent();
             bubble.addView(quote, bubble.indexOfChild(content));
+            reactions = newReactionView(bubble);
         }
         void bind(Message m){sender.setText(sent?(currentUserName==null?"":currentUserName):(m.getSenderName()==null?"":m.getSenderName()));content.setText(m.getContent()==null?"":m.getContent());time.setText(formattedTime(m));
-            content.setOnLongClickListener(view -> showActions(m));
+            content.setOnLongClickListener(view -> showActions(m, view));
+            bindReactions(reactions, m, content);
             boolean voice = m.getType() == Message.Type.VOICE;
             if (voice) {
                 content.setText(itemView.getContext().getString(R.string.voice_row,
@@ -145,7 +172,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
                 quote.setOnClickListener(view -> {
                     if (originalListener != null) originalListener.accept(reply.id);
                 });
-                quote.setOnLongClickListener(view -> showActions(m));
+                quote.setOnLongClickListener(view -> showActions(m, content));
             }
             sender.setVisibility(!sent && groupConversation ? View.VISIBLE : View.GONE);
             if(!sent){
@@ -161,15 +188,17 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     }
 
     private final class PollHolder extends RecyclerView.ViewHolder {
-        final TextView sender, question, time, status;
+        final TextView sender, question, time, status, reactions;
         final android.widget.LinearLayout options;
         PollHolder(View view) {
             super(view); sender=view.findViewById(R.id.tv_poll_sender); question=view.findViewById(R.id.tv_poll_question);
             time=view.findViewById(R.id.tv_poll_time); status=view.findViewById(R.id.tv_poll_status);
             options=view.findViewById(R.id.layout_poll_options);
+            reactions = newReactionView((android.widget.LinearLayout) time.getParent());
         }
         void bind(Message message) {
-            question.setOnLongClickListener(view -> showActions(message));
+            question.setOnLongClickListener(view -> showActions(message, view));
+            bindReactions(reactions, message, question);
             sender.setText(currentUserId != null && currentUserId.equals(message.getSenderId())
                     ? (currentUserName == null ? "" : currentUserName)
                     : (message.getSenderName() == null ? "" : message.getSenderName()));
@@ -218,11 +247,27 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     }
 
     private final class ImageHolder extends RecyclerView.ViewHolder{
-        final boolean sent;final ImageView image;final ProgressBar progress;final TextView error,sender,time,status;MediaRepository.Transfer download;String boundKey;
-        ImageHolder(View view,boolean sent){super(view);this.sent=sent;image=view.findViewById(R.id.iv_message_image);progress=view.findViewById(R.id.progress_message_image);error=view.findViewById(R.id.tv_image_error);sender=view.findViewById(R.id.tv_sender_name);time=view.findViewById(R.id.tv_message_time);status=sent?view.findViewById(R.id.tv_message_status):null;error.setOnClickListener(v->{Message m=getBoundMessage();if(m!=null)load(m);});}
+        final boolean sent;final ImageView image;final ProgressBar progress;final TextView error,sender,time,status,reactions,quote;MediaRepository.Transfer download;String boundKey;
+        ImageHolder(View view,boolean sent){super(view);this.sent=sent;image=view.findViewById(R.id.iv_message_image);progress=view.findViewById(R.id.progress_message_image);error=view.findViewById(R.id.tv_image_error);sender=view.findViewById(R.id.tv_sender_name);time=view.findViewById(R.id.tv_message_time);status=sent?view.findViewById(R.id.tv_message_status):null;error.setOnClickListener(v->{Message m=getBoundMessage();if(m!=null)load(m);});
+            var parent = (android.widget.LinearLayout) time.getParent();
+            reactions = newReactionView(parent);
+            quote = newReactionView(parent);
+            quote.setTextColor(view.getContext().getColor(R.color.utechat_primary));
+            quote.setMaxLines(3);
+            quote.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        }
         private Message getBoundMessage(){int p=getBindingAdapterPosition();return p==RecyclerView.NO_POSITION?null:getItem(p);}
         void bind(Message m){cancelDownload();boundKey=m.getId()+":"+String.valueOf(m.getMediaUrl());image.setTag(boundKey);sender.setText(sent?(currentUserName==null?"":currentUserName):(m.getSenderName()==null?"":m.getSenderName()));time.setText(formattedTime(m));error.setVisibility(View.GONE);progress.setVisibility(View.GONE);
-            image.setOnLongClickListener(view -> showActions(m));
+            image.setOnLongClickListener(view -> showActions(m, view));
+            bindReactions(reactions, m, image);
+            Message.Reply reply = m.getReply();
+            quote.setVisibility(reply == null ? View.GONE : View.VISIBLE);
+            if (reply != null) {
+                quote.setText(itemView.getContext().getString(R.string.message_reply_excerpt, reply.name,
+                        replyPreview(itemView.getContext(), reply)));
+                quote.setOnClickListener(v -> { if (originalListener != null) originalListener.accept(reply.id); });
+                quote.setOnLongClickListener(v -> showActions(m, image));
+            }
             image.setContentDescription(itemView.getContext().getString(R.string.message_image_description,sender.getText()));
             if(sent){status.setVisibility(View.VISIBLE);status.setOnClickListener(null);status.setMinHeight(0);if(m.getDeliveryStatus()==Message.DeliveryStatus.FAILED){status.setText(R.string.message_send_failed_retry);status.setTextColor(itemView.getContext().getColor(R.color.utechat_error));status.setMinHeight(itemView.getResources().getDimensionPixelSize(R.dimen.touch_target_min));status.setOnClickListener(v->retryListener.onRetry(m));}else if(m.getDeliveryStatus()==Message.DeliveryStatus.SENDING){status.setText(itemView.getContext().getString(R.string.image_upload_progress,m.getUploadProgress()));status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}else{status.setText(R.string.message_sent);status.setTextColor(itemView.getContext().getColor(R.color.utechat_on_surface_variant));}}
             load(m);itemView.setContentDescription(itemView.getContext().getString(R.string.message_image_description,sender.getText()));}

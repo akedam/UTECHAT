@@ -1,6 +1,7 @@
 package com.example.utechat.feature.main.ui;
 
 import android.os.Bundle;
+import com.example.utechat.feature.moments.MomentsFragment;
 import android.content.Intent;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -48,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private FriendsFragment friendsFragment;
     private ProfileFragment profileFragment;
     private DiscoverFragment discoverFragment;
+    private MomentsFragment momentsFragment;
     private Fragment activeFragment;
 
     @Override
@@ -61,13 +63,18 @@ public class MainActivity extends AppCompatActivity {
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
                             | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            boolean tin = selectedTabId == R.id.nav_moments;
+            android.graphics.drawable.Drawable top = tin
+                    ? new android.graphics.drawable.ColorDrawable(getColor(R.color.chat_canvas))
+                    : androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.bg_header_gradient);
             android.graphics.drawable.LayerDrawable background = new android.graphics.drawable.LayerDrawable(
                     new android.graphics.drawable.Drawable[]{
-                            androidx.appcompat.content.res.AppCompatResources.getDrawable(this, R.drawable.bg_header_gradient),
+                            top,
                             new android.graphics.drawable.ColorDrawable(androidx.core.content.ContextCompat.getColor(this, R.color.utechat_surface))});
             background.setLayerGravity(1, android.view.Gravity.BOTTOM);
             background.setLayerHeight(1, bars.bottom);
             view.setBackground(background);
+            androidx.core.view.WindowCompat.getInsetsController(getWindow(), view).setAppearanceLightStatusBars(tin);
             return insets;
         });
         androidx.core.view.WindowCompat.getInsetsController(getWindow(), content).setAppearanceLightStatusBars(false);
@@ -80,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
         setupBottomNav();
         openCommunityIfRequested(getIntent());
         if (savedInstanceState == null) openNotificationConversation(getIntent());
+        if (savedInstanceState == null) openMoment(getIntent());
         explainAndRequestNotifications();
     }
 
@@ -87,6 +95,7 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         openNotificationConversation(intent);
+        openMoment(intent);
         openCommunityIfRequested(intent);
     }
 
@@ -95,6 +104,14 @@ public class MainActivity extends AppCompatActivity {
             intent.removeExtra("open_community");
             showTab(R.id.nav_discover);
         }
+    }
+
+    private void openMoment(Intent intent) {
+        if (intent == null || !intent.hasExtra(MomentsFragment.EXTRA_ID)) return;
+        String id = intent.getStringExtra(MomentsFragment.EXTRA_ID);
+        intent.removeExtra(MomentsFragment.EXTRA_ID);
+        showTab(R.id.nav_moments);
+        momentsFragment.openTarget(id);
     }
 
     private void openNotificationConversation(Intent intent) {
@@ -133,8 +150,9 @@ public class MainActivity extends AppCompatActivity {
         friendsFragment = findOrCreate(manager, "friends", FriendsFragment.class);
         profileFragment = findOrCreate(manager, "profile", ProfileFragment.class);
         discoverFragment = findOrCreate(manager, "discover", DiscoverFragment.class);
+        momentsFragment = findOrCreate(manager, "moments", MomentsFragment.class);
 
-        for (Fragment fragment : new Fragment[]{conversationsFragment, friendsFragment, profileFragment, discoverFragment}) {
+        for (Fragment fragment : new Fragment[]{conversationsFragment, friendsFragment, profileFragment, discoverFragment, momentsFragment}) {
             if (fragment.isAdded() && !fragment.isHidden()) { activeFragment = fragment; break; }
         }
         if (activeFragment == null) activeFragment = conversationsFragment;
@@ -144,6 +162,7 @@ public class MainActivity extends AppCompatActivity {
         addIfNeeded(transaction, friendsFragment, "friends");
         addIfNeeded(transaction, profileFragment, "profile");
         addIfNeeded(transaction, discoverFragment, "discover");
+        addIfNeeded(transaction, momentsFragment, "moments");
         transaction.commitNow();
         if (!activeFragment.isVisible()) manager.beginTransaction().show(activeFragment).commitNow();
     }
@@ -161,12 +180,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupBottomNav() {
-        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_discover, R.id.nav_profile};
+        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_moments, R.id.nav_discover, R.id.nav_profile};
         for (int tabId : tabIds) {
             View tab = bottomNav.findViewById(tabId);
             tab.setOnClickListener(view -> showTab(tabId));
         }
         int selected = activeFragment == friendsFragment ? R.id.nav_friends
+                : activeFragment == momentsFragment ? R.id.nav_moments
                 : activeFragment == profileFragment ? R.id.nav_profile
                 : activeFragment == discoverFragment ? R.id.nav_discover : R.id.nav_conversations;
         showTab(selected);
@@ -174,6 +194,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showTab(int tabId) {
         Fragment target = tabId == R.id.nav_friends ? friendsFragment
+                : tabId == R.id.nav_moments ? momentsFragment
                 : tabId == R.id.nav_discover ? discoverFragment
                 : tabId == R.id.nav_profile ? profileFragment : conversationsFragment;
         if (activeFragment != target) {
@@ -184,14 +205,21 @@ public class MainActivity extends AppCompatActivity {
             activeFragment = target;
         }
         selectedTabId = tabId;
-        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_discover, R.id.nav_profile};
+        androidx.core.view.ViewCompat.requestApplyInsets(findViewById(android.R.id.content));
+        int[] tabIds = {R.id.nav_conversations, R.id.nav_friends, R.id.nav_moments, R.id.nav_discover, R.id.nav_profile};
         for (int id : tabIds) bottomNav.findViewById(id).setSelected(id == tabId);
     }
 
     public void openFriends() { showTab(R.id.nav_friends); }
+    public void openProfile() { showTab(R.id.nav_profile); }
+    public void openMomentHistory() {
+        showTab(R.id.nav_moments);
+        momentsFragment.openHistory();
+    }
 
     @Override
     public void onBackPressed() {
+        if (selectedTabId == R.id.nav_moments && momentsFragment.handleBack()) return;
         if (selectedTabId != R.id.nav_conversations) {
             showTab(R.id.nav_conversations);
         } else {

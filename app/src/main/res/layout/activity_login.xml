@@ -134,6 +134,20 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/btn_forgot_password" />
 
+        <TextView
+            android:id="@+id/tv_login_wait"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_sm"
+            android:accessibilityLiveRegion="polite"
+            android:gravity="center"
+            android:textColor="@color/utechat_on_surface_variant"
+            android:textSize="@dimen/text_sm"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btn_login" />
+
         <!-- Progress bar -->
         <ProgressBar
             android:id="@+id/progress_bar"
@@ -142,7 +156,7 @@
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/btn_login"
+            app:layout_constraintTop_toBottomOf="@id/tv_login_wait"
             android:layout_marginTop="@dimen/space_md" />
 
         <!-- Go to register -->

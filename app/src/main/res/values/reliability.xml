@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="account_change_password">Đổi mật khẩu</string>
+    <string name="account_current_password">Mật khẩu hiện tại</string>
+    <string name="account_new_password">Mật khẩu mới</string>
+    <string name="account_confirm_password">Nhập lại mật khẩu mới</string>
+    <string name="account_password_same">Mật khẩu mới phải khác mật khẩu hiện tại.</string>
+    <string name="account_password_mismatch">Hai mật khẩu mới chưa khớp.</string>
+    <string name="account_password_policy">Mật khẩu mới chưa đáp ứng yêu cầu.</string>
+    <string name="account_wrong_password">Mật khẩu hiện tại chưa đúng.</string>
+    <string name="account_password_changed">Đã đổi mật khẩu.</string>
+    <string name="open_system_notifications">Mở cài đặt thông báo trên thiết bị</string>
+    <string name="chat_no_connection">Mất kết nối. Bạn vẫn có thể soạn tin nhắn.</string>
+    <string name="call_state_reconnecting">Mất kết nối. Đang kết nối lại…</string>
+    <string name="call_reconnect_failed">Cuộc gọi đã kết thúc do mất kết nối.</string>
+</resources>

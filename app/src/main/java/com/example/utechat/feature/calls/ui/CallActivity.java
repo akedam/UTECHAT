@@ -24,10 +24,12 @@ import com.example.utechat.R;
 import com.example.utechat.app.CallRepositoryProvider;
 import com.example.utechat.app.UteChatApplication;
 import com.example.utechat.core.common.AuthGate;
+import com.example.utechat.core.common.NetworkState;
 import com.example.utechat.domain.model.CallSession;
 import com.example.utechat.domain.repository.CallRepository;
 import com.example.utechat.data.calls.AgoraCallController;
 import com.example.utechat.data.calls.AgoraTokenClient;
+import com.example.utechat.data.calls.CallStatusWorker;
 import com.example.utechat.feature.calls.service.CallForegroundService;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -45,6 +47,7 @@ public final class CallActivity extends AppCompatActivity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable mediaTimeout = this::failMediaConnection;
     private ActivityResultLauncher<String[]> permissionRequest;
+    private ActivityResultLauncher<String> cameraPermission;
     private Runnable timeout;
     private Runnable callPoll;
     private CallRepository repository;
@@ -57,6 +60,7 @@ public final class CallActivity extends AppCompatActivity {
     private boolean incoming;
     private boolean startingMedia;
     private boolean connected;
+    private boolean reconnecting;
     private boolean micMuted;
     private boolean cameraMuted;
     private boolean speakerEnabled;
@@ -94,6 +98,11 @@ public final class CallActivity extends AppCompatActivity {
             }
             if (incoming) acceptCall(); else createOutgoing();
         });
+        cameraPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+            if (isFinishing() || isDestroyed() || endingRequested) return;
+            if (granted) setCameraEnabled(true);
+            else showError(R.string.call_permission_denied);
+        });
         timeout = this::handleTimeout;
         callPoll = this::refreshWhileConnecting;
         setContentView(R.layout.activity_call);
@@ -108,10 +117,20 @@ public final class CallActivity extends AppCompatActivity {
         androidx.core.view.WindowCompat.getInsetsController(getWindow(),root).setAppearanceLightNavigationBars(false);
         repository = CallRepositoryProvider.get(this);
         incoming = "incoming".equals(getIntent().getStringExtra(EXTRA_MODE));
+        if (incoming) {
+            if (android.os.Build.VERSION.SDK_INT >= 27) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+            } else {
+                getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        | android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+            }
+        }
         callId = getIntent().getStringExtra(EXTRA_CALL_ID);
         com.example.utechat.feature.notifications.IncomingCallNotification.cancel(this, callId);
         mediaType = getIntent().getStringExtra(EXTRA_MEDIA);
         if (!"video".equals(mediaType)) mediaType = "audio";
+        cameraMuted = !"video".equals(mediaType);
         speakerEnabled = "video".equals(mediaType);
         findViewById(R.id.btn_toggle_speaker).setSelected(speakerEnabled);
         peerTitle = getIntent().getStringExtra(EXTRA_TITLE);
@@ -132,8 +151,9 @@ public final class CallActivity extends AppCompatActivity {
         findViewById(R.id.btn_toggle_camera).setOnClickListener(v -> toggleCamera());
         findViewById(R.id.btn_toggle_speaker).setOnClickListener(v -> toggleSpeaker());
         findViewById(R.id.btn_switch_camera).setOnClickListener(v -> { if (rtc != null) rtc.switchCamera(); });
-        findViewById(R.id.btn_toggle_camera).setVisibility("video".equals(mediaType) ? View.VISIBLE : View.GONE);
-        findViewById(R.id.btn_switch_camera).setVisibility("video".equals(mediaType) ? View.VISIBLE : View.GONE);
+        findViewById(R.id.btn_toggle_camera).setVisibility(View.VISIBLE);
+        findViewById(R.id.btn_toggle_camera).setEnabled(false);
+        updateCameraControls();
         findViewById(R.id.in_call_actions).setVisibility(incoming ? View.GONE : View.VISIBLE);
         findViewById(R.id.btn_end_call).setVisibility(incoming ? View.GONE : View.VISIBLE);
         findViewById(R.id.tv_call_title).setContentDescription(getString(
@@ -201,6 +221,12 @@ public final class CallActivity extends AppCompatActivity {
 
     private void createOutgoing() {
         if (preparingBackend || endingRequested) return;
+        if (!NetworkState.connected(this)) {
+            showError(R.string.call_network_error);
+            setStatus(R.string.call_state_failed);
+            finishSoon();
+            return;
+        }
         preparingBackend = true;
         setStatus(R.string.call_state_waking_backend); showProgress(true);
         com.example.utechat.data.backend.BackendClient.warmUp(new com.example.utechat.data.backend.BackendClient.ReadyCallback() {
@@ -350,13 +376,19 @@ public final class CallActivity extends AppCompatActivity {
         if (call == null) { finish(); return; }
         endingRequested = true;
         findViewById(R.id.btn_end_call).setEnabled(false);
+        if (!NetworkState.connected(this)) {
+            CallStatusWorker.enqueue(this, call.id, "ended");
+            setStatus(R.string.call_state_ended);
+            finishSoon();
+            return;
+        }
         repository.updateStatus(call.id, "ended", new CallRepository.Callback() {
             @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) { setStatus(R.string.call_state_ended); finishSoon(); } }
             @Override public void onError(String error) {
-                endingRequested = false;
                 if (!isFinishing() && !isDestroyed()) {
-                    findViewById(R.id.btn_end_call).setEnabled(true);
-                    showError(R.string.call_network_error);
+                    CallStatusWorker.enqueue(CallActivity.this, call.id, "ended");
+                    setStatus(R.string.call_state_ended);
+                    finishSoon();
                 }
             }
         });
@@ -375,14 +407,15 @@ public final class CallActivity extends AppCompatActivity {
                             if (isFinishing() || isDestroyed() || endingRequested) return;
                             handler.removeCallbacks(mediaTimeout);
                             connected = true;
+                            reconnecting = false;
                             setStatus(R.string.call_state_connected);
-                            if ("video".equals(call.mediaType)) {
-                                remote.setVisibility(View.VISIBLE); local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
-                                rtc.attachRemote(remoteUid, remote);
-                            }
+                            findViewById(R.id.btn_toggle_camera).setEnabled(true);
+                            remote.setVisibility(View.VISIBLE);
+                            local.setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
+                            if (rtc != null) rtc.attachRemote(remoteUid, remote);
                         }); }
                         @Override public void onRemoteVideoAvailable(boolean available) { runOnUiThread(() -> {
-                            if (isFinishing() || isDestroyed() || endingRequested || !"video".equals(mediaType)) return;
+                            if (isFinishing() || isDestroyed() || endingRequested) return;
                             findViewById(R.id.audio_peer_state).setVisibility(available ? View.GONE : View.VISIBLE);
                             findViewById(R.id.tv_call_header_status).setVisibility(available ? View.VISIBLE : View.GONE);
                         }); }
@@ -392,14 +425,25 @@ public final class CallActivity extends AppCompatActivity {
                             findViewById(R.id.tv_call_header_status).setVisibility(View.GONE);
                             remote.setVisibility(View.GONE);
                             connected = false;
-                            setStatus(R.string.call_state_connecting);
+                            findViewById(R.id.btn_toggle_camera).setEnabled(false);
+                            reconnecting = true;
+                            setStatus(R.string.call_state_reconnecting);
                             scheduleMediaTimeout();
                         }); }
                         @Override public void onReconnecting() { runOnUiThread(() -> {
                             if (!isFinishing() && !isDestroyed() && !endingRequested) {
-                                setStatus(R.string.call_state_connecting);
-                                scheduleMediaTimeout();
+                                if (!reconnecting) scheduleMediaTimeout();
+                                reconnecting = true;
+                                setStatus(R.string.call_state_reconnecting);
+                                findViewById(R.id.btn_toggle_camera).setEnabled(false);
                             }
+                        }); }
+                        @Override public void onReconnected() { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed() || endingRequested || !reconnecting || !connected) return;
+                            reconnecting = false;
+                            handler.removeCallbacks(mediaTimeout);
+                            setStatus(R.string.call_state_connected);
+                            findViewById(R.id.btn_toggle_camera).setEnabled(true);
                         }); }
                         @Override public void onTokenRefresh() { runOnUiThread(() -> refreshRtcToken(call)); }
                         @Override public void onError() { runOnUiThread(() -> {
@@ -454,9 +498,9 @@ public final class CallActivity extends AppCompatActivity {
     private void failMediaConnection() {
         if (call == null || failingMedia || endingRequested || isFinishing() || isDestroyed()) return;
         failingMedia = true;
-        showError(R.string.call_network_error);
+        showError(reconnecting ? R.string.call_reconnect_failed : R.string.call_network_error);
         setStatus(R.string.call_state_failed);
-        repository.updateStatus(call.id, "failed", silentCallback());
+        CallStatusWorker.enqueue(this, call.id, "failed");
         finishSoon();
     }
 
@@ -481,14 +525,38 @@ public final class CallActivity extends AppCompatActivity {
                 micMuted ? R.drawable.ic_call_mic_off : R.drawable.ic_call_mic);
     }
     private void toggleCamera() {
-        cameraMuted = !cameraMuted; if (rtc != null) rtc.muteCamera(cameraMuted);
+        if (rtc == null || !connected || endingRequested) return;
+        if (cameraMuted && !hasPermission(Manifest.permission.CAMERA)) {
+            cameraPermission.launch(Manifest.permission.CAMERA);
+            return;
+        }
+        setCameraEnabled(cameraMuted);
+    }
+
+    private void setCameraEnabled(boolean enabled) {
+        if (rtc == null || !connected || endingRequested) return;
+        if (enabled) {
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(this, CallForegroundService.startIntent(this, true));
+            } catch (RuntimeException error) {
+                showError(R.string.call_camera_preview_unavailable);
+                return;
+            }
+        }
+        cameraMuted = !enabled;
+        FrameLayout local = findViewById(R.id.local_video_container);
+        rtc.setCameraEnabled(enabled, local);
+        local.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        updateCameraControls();
+    }
+
+    private void updateCameraControls() {
         int label = cameraMuted ? R.string.call_camera_off : R.string.call_camera_on;
         findViewById(R.id.btn_toggle_camera).setContentDescription(getString(label));
         findViewById(R.id.btn_toggle_camera).setSelected(cameraMuted);
         ((android.widget.ImageButton)findViewById(R.id.btn_toggle_camera)).setImageResource(
                 cameraMuted ? R.drawable.ic_call_video_off : R.drawable.ic_video_outline);
-        if (cameraMuted) findViewById(R.id.local_video_container).setVisibility(View.GONE);
-        else if (rtc != null) startCameraPreview();
+        findViewById(R.id.btn_switch_camera).setVisibility(cameraMuted ? View.GONE : View.VISIBLE);
     }
     private void toggleSpeaker() {
         speakerEnabled = !speakerEnabled; if (rtc != null) rtc.speaker(speakerEnabled);

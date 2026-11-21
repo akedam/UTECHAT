@@ -16,6 +16,17 @@
         app:navigationIconTint="@color/white"
         app:titleTextAppearance="@style/ChatToolbarTitle" />
     <TextView
+        android:id="@+id/chat_connection_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:background="@color/utechat_surface_variant"
+        android:paddingHorizontal="@dimen/list_item_padding_h"
+        android:paddingVertical="@dimen/space_sm"
+        android:text="@string/chat_no_connection"
+        android:textColor="@color/utechat_on_surface"
+        android:visibility="gone" />
+    <TextView
         android:id="@+id/tv_chat_source"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -53,6 +64,19 @@
             android:text="@string/btn_retry"
             android:textSize="@dimen/text_xs" />
     </LinearLayout>
+    <TextView
+        android:id="@+id/tv_pinned_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textColor="@color/utechat_primary"
+        android:background="@color/utechat_surface"
+        android:foreground="?attr/selectableItemBackground"
+        android:visibility="gone" />
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

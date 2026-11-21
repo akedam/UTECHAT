@@ -28,6 +28,12 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
     }
 
     private final OnConversationClickListener listener;
+    private java.util.Set<String> hiddenMessages = java.util.Collections.emptySet();
+
+    public void setHiddenMessages(java.util.Set<String> keys) {
+        hiddenMessages = keys;
+        notifyDataSetChanged();
+    }
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm", Locale.getDefault());
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("dd/MM", Locale.getDefault());
     private static final SimpleDateFormat DATE_YEAR_FORMAT = new SimpleDateFormat("dd/MM/yy", Locale.getDefault());
@@ -97,7 +103,10 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             else if (prefs.enabled("favorite")) safeTitle = "☆ " + safeTitle;
             title.setText(safeTitle);
             String draft = prefs.draft();
-            preview.setText(draft.isEmpty() ? previewText(conversation)
+            boolean hidden = hiddenMessages.contains(com.example.utechat.data.chat.HiddenMessages.key(
+                    conversation.getId(), conversation.getLastMessageId()));
+            preview.setText(draft.isEmpty() ? (hidden ? itemView.getContext().getString(R.string.message_hidden_preview)
+                    : previewText(conversation))
                     : itemView.getContext().getString(R.string.conversation_draft_preview, draft.trim()));
             String formattedTime = formatTime(conversation.getLastMessageAt());
             time.setText(formattedTime);
@@ -120,7 +129,7 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             }
 
             int unreadCount = Math.max(0, conversation.getUnreadCount());
-            boolean hasUnread=conversation.hasUnreadMessages();
+            boolean hasUnread=!hidden && conversation.hasUnreadMessages();
             int weight=hasUnread?android.graphics.Typeface.BOLD:android.graphics.Typeface.NORMAL;
             title.setTypeface(null,weight);
             preview.setTypeface(null,weight);

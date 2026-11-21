@@ -34,6 +34,8 @@ public final class AuthGate {
     }
 
     public static void copyNotificationTarget(Intent source, Intent target) {
+        String moment = com.example.utechat.feature.moments.MomentsFragment.EXTRA_ID;
+        if (source != null && source.hasExtra(moment)) target.putExtra(moment, source.getStringExtra(moment));
         if (source == null || !source.hasExtra(Constants.EXTRA_CONVERSATION_ID)) return;
         target.putExtra(Constants.EXTRA_CONVERSATION_ID, source.getStringExtra(Constants.EXTRA_CONVERSATION_ID));
         target.putExtra(Constants.EXTRA_CONVERSATION_TITLE, source.getStringExtra(Constants.EXTRA_CONVERSATION_TITLE));

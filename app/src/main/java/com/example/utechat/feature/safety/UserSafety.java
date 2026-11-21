@@ -40,7 +40,7 @@ public final class UserSafety {
             String label = name == null || name.trim().isEmpty() ? host.getString(R.string.friends_unknown_user) : name;
             new MaterialAlertDialogBuilder(host).setTitle(label).setItems(options, (dialog, choice) -> {
                 if (choice == 0) confirmBlock(host, peer, label, blocked, null);
-                else report(host, db, me, peer, label, conversationId);
+                else report(host, db, me, peer, label, conversationId, null);
             }).setNegativeButton(R.string.friends_cancel_button, null).show();
         });
     }
@@ -68,8 +68,16 @@ public final class UserSafety {
                 }).show();
     }
 
+    public static void reportMessage(androidx.fragment.app.FragmentActivity host, String peer, String name,
+                                     String conversationId, String messageId) {
+        String me = FirebaseAuth.getInstance().getUid();
+        if (me == null || peer == null || me.equals(peer)) return;
+        String label = name == null || name.isBlank() ? host.getString(R.string.friends_unknown_user) : name;
+        report(host, FirebaseFirestore.getInstance(), me, peer, label, conversationId, messageId);
+    }
+
     private static void report(androidx.fragment.app.FragmentActivity host, FirebaseFirestore db, String me,
-                               String peer, String name, String conversationId) {
+                               String peer, String name, String conversationId, String messageId) {
         String[] reasons = {"spam", "abuse", "other"};
         CharSequence[] labels = {
             host.getString(R.string.report_spam), host.getString(R.string.report_abuse),
@@ -84,8 +92,10 @@ public final class UserSafety {
                     var ref = db.collection("userReports").document(me).collection("targets").document(peer);
                     db.runTransaction(tx -> {
                         if (tx.get(ref).exists()) return false;
-                        tx.set(ref, Map.of("conversationId", conversationId,
+                        var data = new java.util.HashMap<>(Map.of("conversationId", conversationId,
                                 "reason", reasons[selection[0]], "createdAt", FieldValue.serverTimestamp()));
+                        if (messageId != null) data.put("messageId", messageId);
+                        tx.set(ref, data);
                         return true;
                     }).addOnCompleteListener(host, task -> {
                         int message = !task.isSuccessful() ? R.string.safety_update_error

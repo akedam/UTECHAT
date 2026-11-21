@@ -38,6 +38,7 @@ public class ConversationsFragment extends Fragment {
     private TextView errorMessage;
     private TextView pagingErrorMessage;
     private java.util.List<Conversation> loadedItems = java.util.Collections.emptyList();
+    private com.google.firebase.firestore.ListenerRegistration hiddenMessages;
 
     @Override
     public void onResume() {
@@ -84,6 +85,16 @@ public class ConversationsFragment extends Fragment {
         });
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
         recyclerView.setAdapter(adapter);
+        var viewer = com.example.utechat.data.auth.AuthRepositoryProvider.get(requireContext()).getCurrentUser();
+        if (!viewModel.isMock() && viewer != null) {
+            hiddenMessages = com.example.utechat.data.chat.HiddenMessages.forUser(viewer.getUid())
+                    .addSnapshotListener((snapshot, error) -> {
+                        if (snapshot == null || getView() == null) return;
+                        var keys = new java.util.HashSet<String>();
+                        for (var doc : snapshot) keys.add(doc.getId());
+                        adapter.setHiddenMessages(keys);
+                    });
+        }
         androidx.recyclerview.widget.DividerItemDecoration divider = new androidx.recyclerview.widget.DividerItemDecoration(
                 requireContext(), androidx.recyclerview.widget.DividerItemDecoration.VERTICAL);
         divider.setDrawable(java.util.Objects.requireNonNull(
@@ -149,6 +160,12 @@ public class ConversationsFragment extends Fragment {
             if (show) pagingErrorMessage.setText(message);
             loadMoreState.findViewById(R.id.btn_retry_page).setVisibility(show ? View.VISIBLE : View.GONE);
         });
+    }
+
+    @Override public void onDestroyView() {
+        if (hiddenMessages != null) hiddenMessages.remove();
+        hiddenMessages = null;
+        super.onDestroyView();
     }
 
     private void filterConversations() {

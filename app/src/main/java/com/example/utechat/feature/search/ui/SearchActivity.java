@@ -25,6 +25,7 @@ import com.example.utechat.domain.model.User;
 import com.example.utechat.domain.repository.FriendGroupRepository;
 import com.example.utechat.feature.chat.ui.ChatActivity;
 import com.example.utechat.feature.friends.viewmodel.FriendsViewModel;
+import com.example.utechat.feature.friends.qr.FriendQrCode;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +38,7 @@ import java.util.Set;
 
 /** A separate destination: searching never changes the lists or selected tab behind it. */
 public final class SearchActivity extends AppCompatActivity implements SearchResultsAdapter.Listener {
+    public static final String EXTRA_QR_UID = "com.example.utechat.QR_UID";
     private final Handler handler=new Handler(Looper.getMainLooper());
     private FriendsViewModel friends;
     private SearchResultsAdapter adapter;
@@ -47,6 +49,9 @@ public final class SearchActivity extends AppCompatActivity implements SearchRes
     private List<Friendship> requests=Collections.emptyList();
     private String friendError,groupError;
     private boolean openingChat;
+    private String qrUid, qrError;
+    private User qrUser;
+    private boolean qrLoading, friendshipsReady, friendActionBusy;
     private final Runnable searchPeople=()->friends.search(query.getText().toString().trim());
 
     @Override protected void onCreate(Bundle state){
@@ -60,6 +65,10 @@ public final class SearchActivity extends AppCompatActivity implements SearchRes
         results.setLayoutManager(new LinearLayoutManager(this));results.setAdapter(adapter);
         results.setItemAnimator(null);
         findViewById(R.id.btn_search_back).setOnClickListener(v->finish());
+        if (getIntent().hasExtra(EXTRA_QR_UID)) {
+            openQrResult(viewer);
+            return;
+        }
         findViewById(R.id.btn_search_clear).setOnClickListener(v->{query.setText("");query.requestFocus();showKeyboard();});
         query.setOnEditorActionListener((v,action,event)->{
             if(action!=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH)return false;
@@ -93,6 +102,74 @@ public final class SearchActivity extends AppCompatActivity implements SearchRes
         });
         if(state!=null)query.setText(state.getString("query",""));
         query.requestFocus();query.post(this::showKeyboard);
+    }
+
+    private void openQrResult(User viewer) {
+        query.setVisibility(View.GONE);
+        findViewById(R.id.tv_qr_search_title).setVisibility(View.VISIBLE);
+        qrUid = getIntent().getStringExtra(EXTRA_QR_UID);
+        if (!FriendQrCode.isUid(qrUid) || viewer == null) {
+            qrError = getString(R.string.friend_qr_invalid);
+        } else if (qrUid.equals(viewer.getUid())) {
+            qrError = getString(R.string.friend_qr_self);
+        } else {
+            FriendGroupRepository repository = FriendGroupRepositoryProvider.get(this);
+            if (repository == null) {
+                qrError = getString(R.string.friends_firebase_required);
+            } else {
+                qrLoading = true;
+                friends.getFriends().observe(this, items -> { contacts = items; renderQrResult(); });
+                friends.getRequests().observe(this, items -> { requests = items; renderQrResult(); });
+                friends.getFriendshipsReady().observe(this, ready -> {
+                    friendshipsReady = Boolean.TRUE.equals(ready);
+                    renderQrResult();
+                });
+                friends.getError().observe(this, error -> { friendError = error; renderQrResult(); });
+                friends.getLoading().observe(this, busy -> {
+                    friendActionBusy = Boolean.TRUE.equals(busy);
+                    renderQrResult();
+                });
+                repository.findUser(qrUid, new FriendGroupRepository.Result<User>() {
+                    public void success(User user) {
+                        qrUser = user;
+                        if (user == null) qrError = getString(R.string.friend_qr_not_found);
+                        qrLoading = false;
+                        renderQrResult();
+                    }
+                    public void error(String message) {
+                        qrError = message;
+                        qrLoading = false;
+                        renderQrResult();
+                    }
+                });
+            }
+        }
+        renderQrResult();
+    }
+
+    private void renderQrResult() {
+        if (isFinishing() || isDestroyed()) return;
+        boolean waiting = qrError == null && (qrLoading || (!friendshipsReady && friendError == null));
+        findViewById(R.id.progress_search).setVisibility(waiting || friendActionBusy ? View.VISIBLE : View.INVISIBLE);
+        adapter.setBusy(friendActionBusy);
+        String message = qrError == null ? friendError : qrError;
+        TextView error = findViewById(R.id.tv_search_error);
+        error.setText(message);
+        error.setVisibility(message == null ? View.GONE : View.VISIBLE);
+        if (qrUser == null || !friendshipsReady) return;
+        for (User contact : contacts) {
+            if (qrUid.equals(contact.getUid())) {
+                adapter.submit(Collections.singletonList(SearchResultsAdapter.Entry.friend(qrUser)));
+                return;
+            }
+        }
+        for (Friendship request : requests) {
+            if (qrUid.equals(request.getFromUid()) || qrUid.equals(request.getToUid())) {
+                adapter.submit(Collections.singletonList(SearchResultsAdapter.Entry.person(qrUser, request)));
+                return;
+            }
+        }
+        adapter.submit(Collections.singletonList(SearchResultsAdapter.Entry.person(qrUser, null)));
     }
     private void applyInsets(){
         View root=findViewById(R.id.search_root);

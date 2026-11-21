@@ -13,6 +13,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.firestore.Source;
 import com.google.firebase.firestore.WriteBatch;
 import java.util.*;
 
@@ -33,6 +34,12 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
                     for (DocumentSnapshot d : s.getDocuments()) users.add(readUser(d));
                     callback.success(users);
                 }).addOnFailureListener(e -> callback.error(context.getString(R.string.friends_load_error)));
+    }
+
+    @Override public void findUser(String uid, Result<User> callback) {
+        db.collection("publicProfiles").document(uid).get(Source.SERVER)
+                .addOnSuccessListener(doc -> callback.success(doc.exists() ? readUser(doc) : null))
+                .addOnFailureListener(error -> callback.error(context.getString(R.string.friends_load_error)));
     }
 
     @Override public void loadUsers(List<String> uids, Result<List<User>> callback) {

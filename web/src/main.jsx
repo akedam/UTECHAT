@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth'
+import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from 'firebase/auth'
 import {
-  ArrowRight, BellOff, Check, ChevronRight, CircleAlert, ContactRound, Image as ImageIcon,
-  MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, Star, UsersRound, UserRound, X
+  ArrowRight, BellOff, Check, CircleAlert, CircleDot, ContactRound, Image as ImageIcon,
+  MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, Settings, Star, UsersRound, UserRound, X
 } from 'lucide-react'
 import { auth, backend } from './firebase'
 import { useCall, useIncomingTone } from './calls'
 import {
-  answerFriend, downloadMedia, ensureProfile, historyPreview, openDirect, profile, reactions, saveProfile, startPresence, uploadAvatar,
-  unread, watchBlocked, watchConversations, watchFriendships, watchHidden, watchPresence, watchProfile
+  answerFriend, downloadMedia, ensureProfile, historyPreview, openDirect, reactions, saveProfile, startPresence, uploadAvatar,
+  unread, watchBlocked, watchConversations, watchFriendships, watchHidden, watchPresence, watchProfile, watchPublicProfile
 } from './chat-data'
-import { configureNotifications, disableNotifications, installWorker, notificationsEnabled } from './notifications'
+import { configureNotifications, disableNotifications, installWorker, notificationsEnabled, saveNotificationPreferences } from './notifications'
 import { AuthScreen } from './auth-screen'
+import { Moments, momentFromUrl } from './moments'
 import { BlockedList, Community, CreateGroup, Friends, GroupSettings, Profile, QrDialog, SearchDialog } from './people'
 import { CallOverlay, Chat, ChatOptions, ForwardDialog, Gallery, MessageActions, PeerProfile, PollDialog, ReportDialog } from './chat'
 import { Avatar, Brand, Confirm, Empty, errorText, IconButton, listTime, Modal, useLocal } from './ui'
@@ -21,6 +22,7 @@ import './styles.css'
 const tabs = [
   { key: 'messages', label: 'Tin nhắn', icon: MessageCircle },
   { key: 'friends', label: 'Bạn bè', icon: ContactRound },
+  { key: 'moments', label: 'Tin', icon: CircleDot },
   { key: 'community', label: 'Cộng đồng', icon: UsersRound },
   { key: 'profile', label: 'Hồ sơ', icon: UserRound }
 ]
@@ -83,8 +85,10 @@ function Toast({ toast, clear }) {
 }
 
 function Workspace({ user }) {
-  const [tab, setTab] = useState('messages')
-  const [selected, setSelected] = useState(readChat)
+  const workspace = useRef(null)
+  const [tab, setTab] = useState(() => momentFromUrl() ? 'moments' : 'messages')
+  const [selected, setSelected] = useState(() => momentFromUrl() ? '' : readChat())
+  const [momentTarget, setMomentTarget] = useState(() => ({ id: momentFromUrl(), revision: 0 }))
   const [dialogs, setDialog] = useState(null)
   const [confirmation, setConfirmation] = useState(null)
   const [toast, setToast] = useState(null)
@@ -107,25 +111,66 @@ function Workspace({ user }) {
   const error = useCallback(failure => setToast({ message: errorText(failure), type: 'error' }), [])
   const closeToast = useCallback(() => setToast(null), [])
   const close = () => setDialog(null)
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const root = workspace.current
+    const fit = () => {
+      if (Math.abs(viewport.scale - 1) > .01) return
+      root.style.setProperty('--app-height', `${Math.round(viewport.height)}px`)
+      root.style.setProperty('--app-top', `${Math.round(viewport.offsetTop)}px`)
+    }
+    fit()
+    viewport.addEventListener('resize', fit)
+    viewport.addEventListener('scroll', fit)
+    return () => { viewport.removeEventListener('resize', fit); viewport.removeEventListener('scroll', fit) }
+  }, [])
   const setChat = useCallback((id, replace = false) => {
     const next = new URL(location.href)
-    if (id) next.searchParams.set('chat', id)
+    if (id) { next.searchParams.set('chat', id); next.searchParams.delete('moment') }
     else next.searchParams.delete('chat')
     if (next.toString() !== location.href) history[replace ? 'replaceState' : 'pushState'](null, '', next)
     setSelected(id)
     if (id) setTab('messages')
   }, [])
+  const writeMoment = useCallback((id, replace = true) => {
+    const url = new URL(location.href)
+    url.searchParams.delete('chat')
+    if (id) url.searchParams.set('moment', id)
+    else url.searchParams.delete('moment')
+    if (url.href !== location.href) history[replace ? 'replaceState' : 'pushState'](null, '', url)
+  }, [])
+  const openMoment = useCallback((id, personal = false) => {
+    setSelected('')
+    setTab('moments')
+    setDialog(null)
+    setMomentTarget(current => ({ id, personal, revision: current.revision + 1 }))
+    writeMoment(id, false)
+  }, [writeMoment])
   useEffect(() => {
-    const onPop = () => { setSelected(readChat()); if (readChat()) setTab('messages'); setDialog(null) }
+    const onPop = () => {
+      const id = momentFromUrl()
+      setSelected(id ? '' : readChat())
+      if (id) {
+        setTab('moments')
+        setMomentTarget(current => ({ id, revision: current.revision + 1 }))
+      } else if (readChat()) setTab('messages')
+      setDialog(null)
+    }
     const onWorker = event => {
-      if (event.data?.type !== 'conversation' || event.data.uid !== user.uid) return
-      setChat(event.data.id)
+      if (event.data?.uid !== user.uid) return
+      if (event.data.type === 'moment' && /^[a-f0-9]{64}$/.test(event.data.id || '')) {
+        openMoment(event.data.id)
+      } else if (event.data.type === 'conversation') {
+        setDialog(null)
+        setChat(event.data.id)
+      } else return
       event.ports[0]?.postMessage(true)
     }
     window.addEventListener('popstate', onPop)
     navigator.serviceWorker?.addEventListener('message', onWorker)
     return () => { window.removeEventListener('popstate', onPop); navigator.serviceWorker?.removeEventListener('message', onWorker) }
-  }, [user.uid, setChat])
+  }, [user.uid, setChat, openMoment])
 
   useEffect(() => {
     let done = false
@@ -157,18 +202,14 @@ function Workspace({ user }) {
   const peerIds = [...new Set([...friendships.flatMap(row => [row.fromUid, row.toUid]), ...blocked,
     ...conversations.flatMap(row => row.participantIds || [])])].filter(id => id !== user.uid).sort().join(',')
   useEffect(() => {
-    let active = true
     const ids = peerIds ? peerIds.split(',') : []
-    Promise.allSettled(ids.map(id => profile(id))).then(results => {
-      if (!active) return
-      setPeople(Object.fromEntries(results.flatMap(result => result.status === 'fulfilled' && result.value ?
-        [[result.value.id, result.value]] : [])))
-    })
-    return () => { active = false }
+    setPeople(previous => Object.fromEntries(ids.filter(id => previous[id]).map(id => [id, previous[id]])))
+    const stops = ids.map(id => watchPublicProfile(id, card => setPeople(previous => ({ ...previous, [id]: card })), () => {}))
+    return () => stops.forEach(stop => stop())
   }, [peerIds])
 
   const titleOf = row => {
-    if (row.type === 'group') return { name: row.groupName || 'Nhóm UTEChat', photo: row.groupPhotoUrl }
+    if (row.type === 'group') return { name: preferences[row.id]?.nickname || row.groupName || 'Nhóm UTEChat', photo: row.groupPhotoUrl }
     const peer = row.participantIds?.find(uid => uid !== user.uid)
     const data = people[peer] || row.participantSummaries?.[peer]
     return { name: preferences[row.id]?.nickname || data?.displayName || 'Người dùng UTEChat', photo: data?.photoUrl, peer }
@@ -197,15 +238,23 @@ function Workspace({ user }) {
   }, [conversations, loadedChats])
 
   const controller = useCall(user.uid, error)
-  useIncomingTone(controller.displayed?.status === 'ringing' && controller.displayed.calleeUid === user.uid &&
-    !preferences[controller.displayed.conversationId]?.muted, messageCue)
+  useIncomingTone(controller.displayed?.status === 'ringing' && controller.displayed.calleeUid === user.uid, messageCue)
   const open = async uid => {
     try {
       if (blocked.includes(uid)) throw new Error('Bạn đã chặn tài khoản này.')
       setChat(await openDirect(uid))
     } catch (failure) { error(failure) }
   }
+  const callFriend = async (uid, media) => {
+    try {
+      if (blocked.includes(uid)) throw new Error('Bạn đã chặn tài khoản này.')
+      const id = await openDirect(uid)
+      await controller.outgoing({ id, participantIds: [user.uid, uid] }, media)
+    } catch (failure) { error(failure) }
+  }
   const changeTab = item => {
+    if (item === 'moments' && tab !== 'moments') { openMoment(null); return }
+    if (tab === 'moments' && item !== 'moments') writeMoment(null)
     setTab(item)
     if (selected) setChat('', true)
   }
@@ -226,30 +275,42 @@ function Workspace({ user }) {
   const dialogCommon = { ...dialogProps, user, friendships, open }
   const account = own || { displayName: user.displayName || 'Người dùng UTEChat', photoUrl: user.photoURL }
   const install = onIos() && !navigator.standalone && !window.matchMedia('(display-mode: standalone)').matches
+  const managedGroup = dialogs?.type === 'manage' ? conversations.find(row => row.id === dialogs.id) : null
 
-  return <div className={`workspace ${selected ? 'has-chat' : ''}`}>
+  return <div ref={workspace} className={`workspace ${selected ? 'has-chat' : ''} ${tab === 'moments' ? 'tin-active' : ''}`}>
     <aside className="rail"><Brand text={false} />{navigation}
       <button className="rail-profile" onClick={() => changeTab('profile')} aria-label="Hồ sơ của bạn"><Avatar name={account.displayName} photo={account.photoUrl} size={39} /></button></aside>
     <aside className="sidebar">
-      <div className="sidebar-top">
+      {tab !== 'moments' && <div className={`sidebar-top tab-${tab}`}>
         <div className="sidebar-heading"><div className="sidebar-title"><h1>{tabs.find(item => item.key === tab).label}</h1></div>
           <div className="header-tools">
-            <IconButton icon={QrCode} label="Mã QR kết bạn" onClick={() => setDialog({ type: 'qr' })} />
-            <IconButton icon={Plus} label="Tạo nhóm" onClick={() => setDialog({ type: 'create' })} />
+            {tab !== 'community' &&
+              <IconButton icon={QrCode} label="Mã QR kết bạn" onClick={() => setDialog({ type: 'qr' })} />}
+            {tab === 'messages' && <IconButton icon={Plus} label="Tạo nhóm" onClick={() => setDialog({ type: 'create' })} />}
+            {tab === 'profile' && <IconButton icon={Settings} label="Cài đặt hồ sơ" onClick={() => {
+              const target = document.getElementById('profile-settings')
+              target?.scrollIntoView({ block: 'start' })
+              target?.focus({ preventScroll: true })
+            }} />}
           </div>
         </div>
-        <button className="search-trigger" onClick={() => setDialog({ type: 'search' })}><Search size={19} /><span>Tìm kiếm</span><span className="search-key">Tìm bạn, nhóm</span></button>
-      </div>
+        {tab !== 'profile' && <button className="search-trigger" aria-label="Tìm kiếm"
+          onClick={() => setDialog({ type: 'search' })}><Search size={22} /><span>Tìm kiếm</span></button>}
+      </div>}
       <div className="sidebar-scroll">
         {!own && loadError && <div className="sidebar-page"><Empty icon={CircleAlert} title="Chưa tải được hồ sơ"
           action={<button className="secondary" onClick={() => { setLoadError(false); setLoadAttempt(loadAttempt + 1) }}>Thử lại</button>} /></div>}
         {!own && !loadError && <p className="loader" role="status">Đang tải tài khoản…</p>}
         {own && tab === 'messages' && (loadedChats ? <ChatList {...{ sorted, selected, titleOf, hidden, drafts, preferences }}
           uid={user.uid} choose={setChat} openSearch={() => setDialog({ type: 'search' })} /> : <p className="loader" role="status">Đang tải hội thoại…</p>)}
-        {own && tab === 'friends' && <Friends {...{ uid: user.uid, people, friendships, open, error, setDialog }} />}
-        {own && tab === 'community' && <Community groups={sorted.filter(row => row.type === 'group')} select={setChat} create={() => setDialog({ type: 'create' })} />}
+        {own && tab === 'friends' && <Friends {...{ uid: user.uid, people, friendships, open, blocked, error, setDialog }} call={callFriend} />}
+        {own && tab === 'moments' && <Moments key={momentTarget.revision} initialId={momentTarget.id} initialHistory={momentTarget.personal}
+          {...{ people, account, error, notify }} friends={accepted.filter(friend => !blocked.includes(friend.id))}
+          openLink={writeMoment} clearLink={() => writeMoment(null)} enterChat={setChat} openProfile={() => changeTab('profile')} />}
+        {own && tab === 'community' && <Community groups={sorted.filter(row => row.type === 'group')} select={setChat}
+          manage={id => setDialog({ type: 'manage', id })} create={() => setDialog({ type: 'create' })} />}
         {own && tab === 'profile' && <>
-          <Profile {...{ user, presence, blocked, people, setDialog, error, notify }} data={account}
+          <Profile {...{ user, presence, blocked, people, setDialog, error, notify }} data={account} openHistory={() => openMoment(null, true)}
             signout={() => setConfirmation({ title: 'Đăng xuất', description: 'Bạn có thể đăng nhập lại bằng tài khoản hiện tại.', label: 'Đăng xuất', action: doSignOut })} />
           {install && <p className="install-tip">Để mở như ứng dụng trên iPhone, chọn <b>Chia sẻ</b> rồi <b>Thêm vào MH chính</b> trong Safari.</p>}
         </>}
@@ -260,11 +321,16 @@ function Workspace({ user }) {
       {conversation ? <Chat key={conversation.id} {...{ conversation, user, title, people, hidden, error, notify }}
         draft={drafts[conversation.id] || ''} saveDraft={value => setDrafts(previous => {
           const next = { ...previous }
-          if (value) next[conversation.id] = value
+          const text = typeof value === 'function' ? value(previous[conversation.id] || '') : value
+          if (text) next[conversation.id] = text
           else delete next[conversation.id]
           return next
         })}
-        settings={preferences[conversation.id] || {}} setSettings={settings => {
+        settings={preferences[conversation.id] || {}} setSettings={async settings => {
+          if (Boolean(preferences[conversation.id]?.muted) !== Boolean(settings.muted)) {
+            const next = { ...preferences, [conversation.id]: settings }
+            await saveNotificationPreferences(user.uid, { mutedChats: Object.keys(next).filter(id => next[id]?.muted) })
+          }
           setPreferences(previous => ({ ...previous, [conversation.id]: settings }))
           setDialog(data => data?.type === 'options' ? { ...data, settings } : data)
         }}
@@ -280,23 +346,21 @@ function Workspace({ user }) {
         </div>}
     </main>
 
-    {dialogs?.type === 'search' && <SearchDialog {...dialogCommon} {...{ uid: user.uid, conversations: sorted, titleOf }} select={setChat} />}
+    {dialogs?.type === 'search' && <SearchDialog {...dialogCommon} {...{ uid: user.uid, conversations: sorted, titleOf }} friends={accepted} select={setChat} />}
     {dialogs?.type === 'qr' && <QrDialog {...dialogCommon} />}
     {dialogs?.type === 'create' && <CreateGroup {...dialogProps} people={accepted} selectedFirst={dialogs.selectedFirst} created={id => { close(); setChat(id) }} />}
-    {dialogs?.type === 'manage' && conversation && <GroupSettings {...dialogProps} {...{ group: conversation, uid: user.uid, people }}
-      friends={accepted} confirm={setConfirmation} deselect={() => setChat('')}
-      search={() => { close(); dialogs.search() }} gallery={() => setDialog({ type: 'gallery', id: conversation.id })} />}
+    {managedGroup && <GroupSettings key={managedGroup.id} {...dialogProps} {...{ group: managedGroup, uid: user.uid, people }}
+      friends={accepted} confirm={setConfirmation} deselect={() => { if (selected === managedGroup.id) setChat('') }}
+      search={dialogs.search ? () => { close(); dialogs.search() } : undefined}
+      gallery={() => setDialog({ type: 'gallery', id: managedGroup.id })} />}
     {dialogs?.type === 'profile' && <ProfileEditor {...dialogProps} data={account} />}
     {dialogs?.type === 'nickname' && <NicknameEditor data={dialogs} close={close} />}
+    {dialogs?.type === 'wallpaper' && <WallpaperPicker data={dialogs.options} replace={setDialog} error={error} />}
     {dialogs?.type === 'info' && <Modal title={dialogs.title} onClose={close}><p>{dialogs.description}</p></Modal>}
-    {dialogs?.type === 'password' && <Modal title="Đặt lại mật khẩu" onClose={close}>
-      <p>UTEChat sẽ gửi liên kết đặt lại mật khẩu đến {user.email}.</p><button className="primary wide" onClick={async () => {
-        try { await sendPasswordResetEmail(auth, user.email); close(); notify('Đã gửi liên kết đặt lại mật khẩu.') }
-        catch (failure) { error(failure) }
-      }}>Gửi liên kết</button>
-    </Modal>}
+    {dialogs?.type === 'password' && <ChangePassword {...dialogProps} user={user} />}
     {dialogs?.type === 'blocked' && <BlockedList {...dialogProps} {...{ blocked, people }} />}
-    {dialogs?.type === 'options' && <ChatOptions {...dialogProps} data={dialogs} replace={setDialog} confirm={setConfirmation} />}
+    {dialogs?.type === 'options' && <ChatOptions {...dialogProps} data={dialogs} replace={setDialog} confirm={setConfirmation}
+      openCommunity={() => { close(); changeTab('community') }} />}
     {dialogs?.type === 'message' && <MessageActions {...dialogProps} data={dialogs} replace={setDialog} confirm={setConfirmation}
       allowForward={sorted.some(row => row.id !== dialogs.id)} />}
     {dialogs?.type === 'forward' && <ForwardDialog {...dialogProps} data={dialogs} conversations={sorted} titleOf={titleOf} />}
@@ -321,6 +385,39 @@ function Workspace({ user }) {
   </div>
 }
 
+function ChangePassword({ user, close, notify }) {
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  return <Modal title="Đổi mật khẩu" onClose={() => { if (!busy) close() }}>
+    <form className="stack" onSubmit={async event => {
+      event.preventDefault()
+      const fields = new FormData(event.currentTarget)
+      const current = fields.get('current')
+      const next = fields.get('next')
+      if (next !== fields.get('confirm')) { setFeedback('Hai mật khẩu mới chưa khớp.'); return }
+      if (next === current) { setFeedback('Mật khẩu mới phải khác mật khẩu hiện tại.'); return }
+      setBusy(true)
+      setFeedback('')
+      try {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current))
+        await updatePassword(user, next)
+        close()
+        notify('Đã đổi mật khẩu.')
+      } catch (failure) {
+        setFeedback(['auth/invalid-credential', 'auth/wrong-password'].includes(failure.code)
+          ? 'Mật khẩu hiện tại chưa đúng.' : failure.code === 'auth/weak-password' || failure.code === 'auth/password-does-not-meet-requirements'
+            ? 'Mật khẩu mới chưa đáp ứng yêu cầu.' : errorText(failure))
+      } finally { setBusy(false) }
+    }}>
+      <label>Mật khẩu hiện tại<input type="password" name="current" autoComplete="current-password" required autoFocus disabled={busy} /></label>
+      <label>Mật khẩu mới<input type="password" name="next" autoComplete="new-password" minLength={6} required disabled={busy} /></label>
+      <label>Nhập lại mật khẩu mới<input type="password" name="confirm" autoComplete="new-password" required disabled={busy} /></label>
+      {feedback && <p className="feedback error" role="alert">{feedback}</p>}
+      <button className="primary wide" disabled={busy}>{busy ? 'Đang lưu…' : 'Đổi mật khẩu'}</button>
+    </form>
+  </Modal>
+}
+
 function NicknameEditor({ data, close }) {
   const [name, setName] = useState(data.settings.nickname || '')
   return <Modal title="Đổi tên gợi nhớ" onClose={close}><form className="stack" onSubmit={event => {
@@ -333,6 +430,23 @@ function NicknameEditor({ data, close }) {
       <button className="primary">Lưu</button>
     </div>
   </form></Modal>
+}
+
+const wallpapers = [
+  ['cloud', 'Xám nhạt'], ['sky', 'Xanh nhạt'], ['sand', 'Kem nhạt'], ['paper', 'Trắng']
+]
+function WallpaperPicker({ data, replace, error }) {
+  const back = () => replace(data)
+  return <Modal title="Đổi hình nền" onClose={back} onBack={back} className="app-screen">
+    <div className="wallpaper-picker">{wallpapers.map(([value, label]) =>
+      <button key={value} aria-pressed={(data.settings.wallpaper || 'cloud') === value} onClick={async () => {
+        const settings = { ...data.settings, wallpaper: value }
+        try { await data.setSettings(settings); replace({ ...data, settings }) } catch (failure) { error(failure) }
+      }}>
+        <span className={`wallpaper-swatch ${value}`} aria-hidden="true"><i /><i /></span>{label}
+      </button>)}
+    </div>
+  </Modal>
 }
 
 function ProfileEditor({ data, close, error, notify }) {
@@ -348,7 +462,8 @@ function ProfileEditor({ data, close, error, notify }) {
   }, [photo])
   const input = (key, label, maxLength, type) => <label>{label}<input type={type || 'text'} value={form[key]} maxLength={maxLength}
     required={key === 'displayName'} onChange={event => setForm({ ...form, [key]: event.target.value })} /></label>
-  return <Modal title="Chỉnh sửa hồ sơ" onClose={() => !busy && close()}><form className="stack" onSubmit={async event => {
+  const dismiss = () => { if (!busy) close() }
+  return <Modal title="Chỉnh sửa hồ sơ" onClose={dismiss} onBack={dismiss} className="app-screen"><form className="stack" onSubmit={async event => {
     event.preventDefault(); setBusy(true)
     try {
       const photoUrl = photo ? await uploadAvatar(photo) : form.photoUrl

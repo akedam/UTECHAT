@@ -9,7 +9,16 @@ public interface AuthRepository {
         void onError(AuthException error);
     }
     final class AuthException extends Exception {
-        public AuthException(String message) { super(message); }
+        public enum Reason { INVALID_CREDENTIALS, RATE_LIMITED, OTHER }
+
+        private final Reason reason;
+
+        public AuthException(String message) { this(message, Reason.OTHER); }
+        public AuthException(String message, Reason reason) {
+            super(message);
+            this.reason = reason;
+        }
+        public Reason getReason() { return reason; }
     }
     User getCurrentUser();
     default String pendingVerificationEmail() { return null; }
@@ -18,7 +27,14 @@ public interface AuthRepository {
     void loadCurrentUser(Callback<User> callback);
     void signIn(String email, String password, Callback<User> callback);
     void resetPassword(String email, Callback<Void> callback);
+    default void changePassword(String current, String next, Callback<Void> callback) {
+        throw new UnsupportedOperationException();
+    }
     void register(String displayName, String email, String password, Callback<User> callback);
     void updateProfile(String displayName, String bio, Callback<User> callback);
+
+    default void updateProfile(String displayName, String bio, String photoUrl, Callback<User> callback) {
+        updateProfile(displayName, bio, callback);
+    }
     void signOut(Runnable onComplete);
 }
