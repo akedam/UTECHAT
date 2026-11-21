@@ -3,8 +3,10 @@ import {
   collection, doc, getDoc, limit, onSnapshot, orderBy, query,
   runTransaction, setDoc, where
 } from 'firebase/firestore'
-import { api, db } from './firebase'
+import { api, backend, db } from './firebase'
 import { messageRef, profile, read, watch, writeSummary } from './chat-data'
+import { queueNetworkJob, watchNetworkJobs } from './network-jobs'
+import { useOnline } from './ui'
 
 const terminal = ['ended', 'failed', 'missed', 'rejected', 'busy']
 const calls = collection(db, 'calls')
@@ -113,9 +115,12 @@ function connectRtc(call, stream, connected) {
   queue = (async () => {
     Agora = (await import('agora-rtc-sdk-ng')).default
     guard()
-    const token = await api('/api/rtc-token', { body: { callId: call.id } })
+    const token = await api('/api/rtc-token', { body: { callId: call.id }, signal: AbortSignal.timeout?.(30_000) })
     guard()
     client = Agora.createClient({ mode: 'rtc', codec: 'h264' })
+    client.on('connection-state-change', state => {
+      if (!closed) connected({ type: 'connection', state })
+    })
     client.on('user-published', async (remote, type) => {
       if (type !== 'audio' && type !== 'video') return
       try {
@@ -140,7 +145,9 @@ function connectRtc(call, stream, connected) {
       removeRemote('video')
       removeRemote('audio')
       if (reason === 'Quit') connected({ type: 'peer-left' })
+      else connected({ type: 'peer-connection', interrupted: true })
     })
+    client.on('user-joined', () => connected({ type: 'peer-connection', interrupted: false }))
     client.on('token-privilege-will-expire', async () => {
       try {
         const renewed = await api('/api/rtc-token', { body: { callId: call.id } })
@@ -165,6 +172,7 @@ function connectRtc(call, stream, connected) {
 }
 
 export function useCall(uid, error) {
+  const online = useOnline()
   const [active, setActive] = useState(null)
   const [waiting, setWaiting] = useState(null)
   const [media, setMedia] = useState({})
@@ -176,6 +184,11 @@ export function useCall(uid, error) {
   const rtc = useRef(null)
   const busyRef = useRef(false)
   const activeRef = useRef(null)
+  const waitingRef = useRef(null)
+  const dismissed = useRef(new Set())
+  useEffect(() => watchNetworkJobs(uid, ({ id, status }) => setStatus(id, uid, status)), [uid])
+  const closeOnServer = (id, status) =>
+    queueNetworkJob(uid, 'call-status', id, { id, status }, Date.now() + 86_400_000)
   const updateActive = call => { activeRef.current = call; setActive(call) }
   const clear = () => {
     rtc.current?.close()
@@ -194,8 +207,10 @@ export function useCall(uid, error) {
     let fallback
     const receive = list => {
       const ringing = list.filter(call => call.calleeUid === uid && call.status === 'ringing')
-      const next = ringing.find(call => call.expiresAt > Date.now() && call.id !== activeRef.current?.id)
-      setWaiting(next || null)
+      const next = ringing.find(call => call.expiresAt > Date.now() && call.id !== activeRef.current?.id &&
+        !dismissed.current.has(call.id))
+      waitingRef.current = next || null
+      setWaiting(waitingRef.current)
     }
     const cancel = watch(query(calls, users, where('calleeUid', '==', uid),
       where('status', '==', 'ringing'), orderBy('createdAt'), limit(10)), receive, failure => {
@@ -233,7 +248,14 @@ export function useCall(uid, error) {
     const controller = connectRtc(active, stream.current, value => {
       if (activeRef.current?.id !== id) return
       if (value.type === 'error') error(value.error)
-      else if (value.type === 'peer-left') setStatus(id, uid, 'ended').catch(error)
+      else if (value.type === 'peer-left') {
+        closeOnServer(id, 'ended')
+        clear()
+      } else if (value.type === 'connection') {
+        setMedia(previous => ({ ...previous, connection: value.state }))
+      } else if (value.type === 'peer-connection') {
+        setMedia(previous => ({ ...previous, peerInterrupted: value.interrupted }))
+      }
       else setMedia(previous => ({
         ...previous, [value.type]: (value.type === 'ready' || value.type === 'retry-audio') ? true : value.track ?? null
       }))
@@ -243,12 +265,25 @@ export function useCall(uid, error) {
       if (activeRef.current?.id === id) setMedia(previous => ({ ...previous, localTrack: controller.localVideo }))
     }).catch(err => {
       if (activeRef.current?.id !== id) return
-      void setStatus(id, uid, 'failed').catch(() => {}).finally(() => {
-        if (activeRef.current?.id === id) clear()
-      })
+      closeOnServer(id, 'failed')
+      clear()
       error(err)
     })
   }, [active?.id, active?.status, uid, error])
+
+  const reconnecting = active?.status === 'accepted' &&
+    (!online || ['RECONNECTING', 'DISCONNECTED'].includes(media.connection) || media.peerInterrupted === true)
+  useEffect(() => {
+    if (!reconnecting) return
+    const id = active.id
+    const timer = setTimeout(() => {
+      if (activeRef.current?.id !== id) return
+      closeOnServer(id, 'failed')
+      clear()
+      error(new Error('Cuộc gọi đã kết thúc do mất kết nối.'))
+    }, 30_000)
+    return () => clearTimeout(timer)
+  }, [active?.id, reconnecting, uid, error])
 
   useEffect(() => {
     if (!media.ready || (!media.audio && !media.video)) return
@@ -264,11 +299,24 @@ export function useCall(uid, error) {
     try { await fn() } catch (err) { error(err) } finally { setBusy(false); busyRef.current = false }
   }
   return {
-    displayed, busy, media, muted, rear, seconds, preview: stream.current,
+    displayed, busy, media, muted, rear, seconds, reconnecting, preview: stream.current,
     outgoing: (conversation, mediaType) => act(async () => {
       if (activeRef.current || waiting) throw new Error('Bạn đang có một cuộc gọi.')
+      if (!navigator.onLine) throw new Error('Hãy kết nối mạng để gọi.')
       const peer = conversation.participantIds.find(value => value !== uid)
       const local = await openMedia(mediaType)
+      try {
+        const response = await fetch(backend + '/healthz',
+          { cache: 'no-store', signal: AbortSignal.timeout?.(65_000) })
+        if (!response.ok) throw new Error('backend unavailable')
+      } catch {
+        local.getTracks().forEach(track => track.stop())
+        throw new Error('Chưa kết nối được máy chủ cuộc gọi. Hãy thử lại.')
+      }
+      if (activeRef.current || (waitingRef.current?.expiresAt > Date.now())) {
+        local.getTracks().forEach(track => track.stop())
+        throw new Error('Bạn đang có một cuộc gọi.')
+      }
       const target = doc(calls)
       const now = Date.now()
       const data = { conversationId: conversation.id, callerUid: uid, calleeUid: peer,
@@ -277,10 +325,11 @@ export function useCall(uid, error) {
       try { await setDoc(target, data) } catch (err) { local.getTracks().forEach(track => track.stop()); throw err }
       stream.current = local
       updateActive({ id: target.id, ...data })
-      api('/api/call-invite', { body: { callId: target.id } }).catch(() => {})
+      queueNetworkJob(uid, 'invite', target.id, { callId: target.id }, data.expiresAt)
     }),
     answer: () => act(async () => {
       if (!waiting || waiting.expiresAt <= Date.now()) return
+      if (!navigator.onLine) throw new Error('Hãy kết nối mạng để trả lời cuộc gọi.')
       const local = await openMedia(waiting.mediaType)
       try {
         const status = await setStatus(waiting.id, uid, 'accepted')
@@ -293,11 +342,13 @@ export function useCall(uid, error) {
     finish: () => act(async () => {
       if (!displayed) return
       const incoming = !active && displayed.calleeUid === uid
-      try { await setStatus(displayed.id, uid, incoming ? 'rejected' : 'ended') }
-      finally {
-        if (incoming) setWaiting(null)
-        else clear()
+      closeOnServer(displayed.id, incoming ? 'rejected' : 'ended')
+      if (incoming) {
+        dismissed.current.add(displayed.id)
+        waitingRef.current = null
+        setWaiting(null)
       }
+      else clear()
     }),
     toggleMute: () => act(async () => {
       stream.current?.getAudioTracks().forEach(track => { track.enabled = muted })

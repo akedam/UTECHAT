@@ -81,6 +81,7 @@ test('the worker exposes the sender and content only for an explicit preview', a
   await sw.deliver(data)
   assert.equal(sw.shown[0].title, 'UTEChat')
   assert.equal(sw.shown[0].body, 'Bạn có tin nhắn mới.')
+  assert.equal(sw.shown[0].renotify, true)
   await sw.deliver({ ...data, showPreview: 'true' })
   assert.equal(sw.shown[1].title, 'Bob')
   assert.equal(sw.shown[1].body, 'Hello')
@@ -101,4 +102,19 @@ test('a tap navigates an unready client or opens the conversation when the app i
   }
   assert.deepEqual(navigated, [origin + '/?chat=chat1'])
   assert.deepEqual(closed.opened, navigated)
+})
+
+test('Moments push keeps the photo private and opens its authenticated route', async () => {
+  const sw = fixture()
+  const id = 'a'.repeat(64)
+  await sw.bind('bob')
+  await sw.deliver({ eventType: 'moment', recipientUid: 'alice', momentId: id })
+  await sw.deliver({ eventType: 'moment', recipientUid: 'bob', momentId: 'invalid' })
+  await sw.deliver({ eventType: 'moment', recipientUid: 'bob', momentId: id,
+    preview: 'Private caption', senderName: 'Alice', showPreview: 'true' })
+  assert.equal(sw.shown.length, 1)
+  assert.equal(sw.shown[0].title, 'Tin mới')
+  assert.equal(sw.shown[0].body, 'Mở UTEChat để xem ảnh.')
+  await sw.click()
+  assert.deepEqual(sw.opened, [origin + '/?moment=' + id])
 })

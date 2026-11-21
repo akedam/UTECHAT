@@ -40,8 +40,8 @@ android {
         applicationId = "com.example.utechat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 10
-        versionName = "1.0.9"
+        versionCode = 11
+        versionName = "1.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "STORAGE_EMULATOR_HOST", "\"${storageEmulatorHost.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
@@ -90,6 +90,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    sourceSets.getByName("main").assets.srcDir(rootProject.file("shared"))
 }
 
 dependencies {
@@ -99,6 +100,10 @@ dependencies {
     implementation("com.google.firebase:firebase-database")
     implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.work:work-runtime:2.12.0")
+    implementation("androidx.camera:camera-camera2:1.5.3")
+    implementation("androidx.camera:camera-lifecycle:1.5.3")
+    implementation("androidx.camera:camera-view:1.5.3")
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation(libs.firebase.storage)
     implementation(libs.agora.rtc)
     implementation(libs.activity.ktx)

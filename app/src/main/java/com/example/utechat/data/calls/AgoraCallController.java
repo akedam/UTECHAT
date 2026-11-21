@@ -24,6 +24,7 @@ public final class AgoraCallController {
         void onRemoteJoined(int uid);
         void onRemoteLeft();
         void onReconnecting();
+        void onReconnected();
         void onTokenRefresh();
         void onError();
         default void onRemoteVideoAvailable(boolean available) { }
@@ -128,6 +129,7 @@ public final class AgoraCallController {
             @Override public void onConnectionStateChanged(int state, int reason) {
                 if (released) return;
                 if (state == Constants.CONNECTION_STATE_RECONNECTING) events.onReconnecting();
+                if (state == Constants.CONNECTION_STATE_CONNECTED) events.onReconnected();
                 if (state == Constants.CONNECTION_STATE_FAILED) events.onError();
             }
             @Override public void onError(int code) {

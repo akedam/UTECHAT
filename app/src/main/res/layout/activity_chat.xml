@@ -16,6 +16,17 @@
         app:navigationIconTint="@color/white"
         app:titleTextAppearance="@style/ChatToolbarTitle" />
     <TextView
+        android:id="@+id/chat_connection_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:background="@color/utechat_surface_variant"
+        android:paddingHorizontal="@dimen/list_item_padding_h"
+        android:paddingVertical="@dimen/space_sm"
+        android:text="@string/chat_no_connection"
+        android:textColor="@color/utechat_on_surface"
+        android:visibility="gone" />
+    <TextView
         android:id="@+id/tv_chat_source"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

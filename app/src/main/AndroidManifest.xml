@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -46,6 +47,13 @@
             android:exported="false"
             android:foregroundServiceType="microphone|camera" />
         <activity android:name=".feature.chat.ui.ChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <receiver android:name=".feature.moments.MomentWidget" android:exported="false"
+            android:label="@string/moments_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_moment_info" />
+        </receiver>
         <activity android:name=".feature.calls.ui.CallActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".feature.profile.ui.ProfileEditActivity" android:exported="false" />
         <activity android:name=".feature.auth.ui.RegisterActivity" android:exported="false" />

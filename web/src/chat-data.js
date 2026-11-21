@@ -6,6 +6,7 @@ import {
 import { onDisconnect, onValue, push, ref, remove, serverTimestamp as databaseTime, set } from 'firebase/database'
 import { updateProfile } from 'firebase/auth'
 import { api, auth, backend, db, presenceDb } from './firebase'
+import { queueNetworkJob } from './network-jobs'
 
 export const reactions = ['❤️', '😆', '😮', '😢', '😡', '👍', '😂', '😍', '🔥', '👏', '🎉', '💯', '🙌', '🙏', '👎']
 export const qrPrefix = 'utechat://friend/v1/'
@@ -274,7 +275,7 @@ export async function sendMessage(conversation, data, reply) {
     }
     writeSummary(tx, conversation, target, entry, uid, Math.max(Date.now(), (current.lastMessageAt || 0) + 1))
   })
-  api('/api/message-notify', { body: { conversationId: conversation, messageId: target.id } }).catch(() => {})
+  queueNetworkJob(uid, 'message', target.id, { conversationId: conversation, messageId: target.id }, Date.now() + 86_400_000)
   return target.id
 }
 

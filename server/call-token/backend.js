@@ -1,5 +1,6 @@
 "use strict";
 const crypto = require("node:crypto");
+const { createMoments, MAX_PHOTO_BYTES } = require("./moments");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VOICE_BYTES = 512 * 1024;
 const MAX_AVATAR_BYTES = 192 * 1024;
@@ -8,7 +9,8 @@ const WEB_ORIGINS = new Set(["https://utechat-ab9d8.web.app", "https://utechat-a
 const API_METHODS = new Map([
   ["/api/rtc-token", ["POST"]], ["/api/call-invite", ["POST"]],
   ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
-  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]]
+  ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]],
+  ["/api/moments", ["GET", "PUT"]], ["/api/moment", ["GET", "POST", "DELETE"]], ["/api/moment-photo", ["GET"]]
 ]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -60,8 +62,8 @@ async function readBody(req, limit) {
   }
   return Buffer.concat(chunks);
 }
-async function readJson(req) {
-  const raw = await readBody(req, 4096);
+async function readJson(req, limit = 4096) {
+  const raw = await readBody(req, limit);
   try { return JSON.parse(raw.toString("utf8") || "{}"); }
   catch (_) { throw new ApiError(400, "invalid-json"); }
 }
@@ -74,6 +76,7 @@ function send(res, status, body, type = "application/json; charset=utf-8", cache
 function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now, dailyUploadBytes = 32 * 1024 * 1024 }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
   const groupDeletions = new Map();
+  const moments = createMoments({ db, storage, now, dailyUploadBytes, hash, segment, validImage, requireValue, contactAllowed, pushOnce });
   async function contactAllowed(first, second, tx) {
     const refs = [db.doc(`users/${first}/blocked/${second}`), db.doc(`users/${second}/blocked/${first}`)];
     const blocks = await Promise.all(refs.map(ref => tx ? tx.get(ref) : ref.get()));
@@ -228,7 +231,8 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       const message = data.eventType === "message";
       const muted = (device) => message && device.platform === "web" &&
         Array.isArray(device.mutedChats) && device.mutedChats.includes(data.conversationId);
-      const eligible = valid.filter((doc) => !muted(doc.data()));
+      const eligible = valid.filter((doc) => !muted(doc.data()) &&
+        (data.eventType !== "moment-revoked" || doc.data().platform !== "web"));
       const webMessage = (doc) => message && doc.data().platform === "web";
       const { preview, senderName, conversationTitle, ...generic } = data;
       const deliveries = [
@@ -243,7 +247,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         if (!docs.length) continue;
         const result = await messaging.sendEachForMulticast({ tokens: docs.map((doc) => doc.data().token),
           data: { ...payload, recipientUid }, android: { priority: "high", ttl },
-          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)), Urgency: data.eventType === "call" ? "high" : "normal" } } });
+          webpush: { headers: { TTL: String(Math.ceil(ttl / 1000)), Urgency: "high" } } });
         for (let i = 0; i < result.responses.length; i++) {
           const response = result.responses[i];
           if (response.success) {
@@ -277,7 +281,8 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     requireValue(await contactAllowed(call.callerUid, call.calleeUid), 403, "contact-unavailable");
     scheduleExpiry(body.callId, call.expiresAt);
     await pushOnce(`call:${body.callId}`, call.calleeUid,
-      { eventType: "call", callId: body.callId, conversationId: call.conversationId }, Math.max(1, call.expiresAt - now()));
+      { eventType: "call", callId: body.callId, conversationId: call.conversationId },
+      Math.max(1, call.expiresAt - now()));
   }
   async function notifyMessage(body, uid) {
     requireValue(segment(body.conversationId) && segment(body.messageId)); await member(body.conversationId, uid);
@@ -447,7 +452,8 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         });
         return res.end();
       }
-      if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { status: "configured", apiVersion: 1, media: !!storage, voice: true });
+      if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200,
+        { status: "configured", apiVersion: 1, media: !!storage, voice: true, moments: !!storage });
       const voice = url.pathname === "/api/voice";
       const avatar = url.pathname === "/api/avatar";
       if (avatar && req.method === "GET") {
@@ -458,7 +464,31 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }
       requireValue(user.email_verified === true, 403, "email-unverified");
-      rateLimit(user.uid, url.pathname === "/api/media" || voice || avatar ? "media" : "api");
+      const momentImage = url.pathname === "/api/moment-photo" || (url.pathname === "/api/moments" && req.method === "PUT");
+      rateLimit(user.uid, url.pathname === "/api/media" || voice || avatar || momentImage ? "media" : "api");
+      if (url.pathname === "/api/moments") {
+        if (req.method === "GET") return send(res, 200,
+          await moments.list(user.uid, url.searchParams.get("view") || "received", url.searchParams.get("before")));
+        const input = await readJson(req, Math.ceil(MAX_PHOTO_BYTES / 3) * 4 + 16 * 1024);
+        requireValue(input && typeof input === "object" && !Array.isArray(input));
+        return send(res, 200, await moments.send(user.uid, input));
+      }
+      if (url.pathname === "/api/moment-photo") {
+        return send(res, 200, await moments.image(url.searchParams.get("id"), user.uid), "image/jpeg");
+      }
+      if (url.pathname === "/api/moment") {
+        const id = url.searchParams.get("id");
+        if (req.method === "GET") return send(res, 200, await moments.get(id, user.uid));
+        if (req.method === "DELETE") return send(res, 200, await moments.remove(id, user.uid));
+        const input = await readJson(req);
+        requireValue(input && typeof input === "object" && !Array.isArray(input));
+        if (input.action === "reply") {
+          const result = await moments.reply(user.uid, input);
+          await notifyMessage(result, user.uid).catch(() => {});
+          return send(res, 200, result);
+        }
+        return send(res, 200, await moments.respond(user.uid, input));
+      }
       if (avatar) {
         requireValue(req.headers["content-type"] === "image/jpeg", 400, "invalid-avatar");
         return send(res, 200, await uploadAvatar(user.uid, await readBody(req, MAX_AVATAR_BYTES)));

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDownToLine, Bell, Camera, ChevronRight, CircleUserRound, Copy, ImagePlus,
-  Eye, LockKeyhole, LogOut, MessageCircle, Phone, Plus, QrCode, Search, Shield, Users, UsersRound, Video
+  Eye, History, LockKeyhole, LogOut, MessageCircle, Phone, Plus, QrCode, Search, Shield, Users, UsersRound, Video
 } from 'lucide-react'
 import {
   answerFriend, blockUser, changeMembership, createGroup, deleteGroup, isOnline, profile, qrPrefix, renameGroup,
@@ -385,7 +385,7 @@ export function GroupSettings({ group, uid, people, friends, error, close, confi
   </Modal>
 }
 
-export function Profile({ user, data, presence, blocked, people, setDialog, error, notify, signout }) {
+export function Profile({ user, data, presence, blocked, people, setDialog, error, notify, signout, openHistory }) {
   const [enabled, setEnabled] = useState(() => notificationsEnabled(user.uid))
   const [preview, setPreview] = useState(() => notificationPreferences(user.uid).showPreview)
   const [busy, setBusy] = useState(false)
@@ -395,6 +395,7 @@ export function Profile({ user, data, presence, blocked, people, setDialog, erro
       <h3>{data.displayName}</h3><p>{user.email}</p>{data.bio && <p>{data.bio}</p>}
       <button className="secondary" onClick={() => setDialog({ type: 'profile' })}>Chỉnh sửa hồ sơ</button>
     </div>
+    <button className="settings-row" onClick={openHistory}><History /><span><strong>Lịch sử cá nhân</strong><small>Xem lại Tin đã đăng</small></span><ChevronRight /></button>
     <button className="settings-row" onClick={() => setDialog({ type: 'qr' })}><QrCode /><span><strong>Mã QR của tôi</strong><small>Chia sẻ mã để kết bạn</small></span><ChevronRight /></button>
     <label id="profile-settings" tabIndex={-1} className="settings-row"><CircleUserRound /><span><strong>Trạng thái hoạt động</strong><small>Hiển thị khi bạn đang trực tuyến</small></span>
       <input type="checkbox" role="switch" checked={presence?.visible === true} onChange={event => setVisibility(user.uid, event.target.checked).catch(error)} /></label>
@@ -412,7 +413,7 @@ export function Profile({ user, data, presence, blocked, people, setDialog, erro
         try { await saveNotificationPreferences(user.uid, { showPreview: value }); setPreview(value) }
         catch (failure) { error(failure) } finally { setSavingPreview(false) }
       }} /></label>
-    <button className="settings-row" onClick={() => setDialog({ type: 'password' })}><LockKeyhole /><span><strong>Đặt lại mật khẩu</strong><small>Gửi liên kết về email đã xác minh</small></span><ChevronRight /></button>
+    <button className="settings-row" onClick={() => setDialog({ type: 'password' })}><LockKeyhole /><span><strong>Đổi mật khẩu</strong></span><ChevronRight /></button>
     <button className="settings-row" onClick={() => setDialog({ type: 'blocked', blocked, people })}><Shield /><span><strong>Danh sách chặn</strong><small>{blocked.length} tài khoản</small></span><ChevronRight /></button>
     <button className="settings-row danger-text" onClick={signout}><LogOut /><span><strong>Đăng xuất</strong></span><ChevronRight /></button>
   </div>

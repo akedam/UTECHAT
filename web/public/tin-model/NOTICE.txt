@@ -1,0 +1,5 @@
+BlazeFace (short range) was created by Valentin Bazarevsky at Google.
+Model card and license: https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20%28Short%20Range%29.pdf
+Model documentation: https://developers.google.com/edge/mediapipe/solutions/vision/face_detector#blazeface_short-range
+Original release: https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite
+The model is distributed unmodified under the Apache License, Version 2.0. See LICENSE.txt.

@@ -66,6 +66,7 @@ public final class UteChatApplication extends Application
             auth = FirebaseAuth.getInstance();
             callRepository = CallRepositoryProvider.get(this);
             auth.addIdTokenListener(this);
+            auth.addAuthStateListener(firebase -> com.example.utechat.feature.moments.MomentWidget.invalidate(this));
         } catch (RuntimeException ignored) {
             auth = null;
         }

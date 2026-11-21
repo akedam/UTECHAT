@@ -9,7 +9,7 @@ import {
   recall, reportUser, sendMessage, setPin, vote, watchMessage, watchMessages, watchPresence, watchPublicProfile
 } from './chat-data'
 import { callHistoryTitle, callPeer } from './calls'
-import { Avatar, Empty, IconButton, Modal, formatDate, formatTime, sameDay, useLocal } from './ui'
+import { Avatar, Empty, IconButton, Modal, formatDate, formatTime, sameDay, useLocal, useOnline } from './ui'
 import { PersonRow } from './people'
 
 const voiceType = 'audio/mp4'
@@ -204,6 +204,7 @@ function Bubble({ message, group, own, ownUid, person, replies, hidden, action, 
 
 export function Chat({ conversation, user, title, people, hidden, draft, saveDraft, blocked, call,
   showDialog, onBack, error, notify, settings, setSettings }) {
+  const online = useOnline()
   const id = conversation.id
   const group = conversation.type === 'group'
   const ownUid = user.uid
@@ -301,6 +302,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   const submit = async (override) => {
     const content = draft.trim()
     if (sending || blocked || (!content && !photo && !recorder.clip && !override)) return
+    if (!navigator.onLine) return
     setSending(true)
     try {
       const clip = recorder.clip
@@ -382,6 +384,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
       <IconButton icon={X} label="Bỏ ghim tin nhắn" onClick={() => setPin(id, null).catch(error)} />
     </div>}
     <div className="chat-content">
+      {!online && <div className="connection-banner" role="status">Mất kết nối. Tin đang soạn được giữ lại.</div>}
       <div className="messages" ref={log} onScroll={handleScroll} role="log" aria-label="Tin nhắn">
         {hasMore && <button className="secondary load-older" disabled={loadingOld} onClick={loadOlder}>{loadingOld ? 'Đang tải…' : 'Xem tin nhắn trước'}</button>}
         {firstLoaded && !messages.length && <Empty icon={MessageSquare} title="Bắt đầu trò chuyện" description="Tin nhắn sẽ xuất hiện ở đây." />}
@@ -437,7 +440,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
           }} />
         {!recorder.recording && <IconButton icon={Image} label="Chọn ảnh" disabled={sending} onClick={() => imageInput.current?.click()} />}
         {!recorder.recording && (draft.trim() || photo || recorder.clip) &&
-          <button className="send-button" type="submit" aria-label="Gửi tin nhắn" disabled={sending}><Send size={20} /></button>}
+          <button className="send-button" type="submit" aria-label="Gửi tin nhắn" disabled={sending || !online}><Send size={20} /></button>}
       </form>
     </div>}
   </section>
@@ -677,7 +680,9 @@ export function CallOverlay({ controller, uid, error }) {
   const showPeer = !(video && controller.media.video)
   return <dialog ref={modal} className={`call-overlay${incoming ? ' incoming-call' : ''}`} aria-label={video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'} onCancel={event => event.preventDefault()}>
     <div className="call-surface">
-      <header><span className="call-type">{video ? <Video size={20} /> : <Phone size={20} />}{video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}</span></header>
+      <header><span className="call-type">{video ? <Video size={20} /> : <Phone size={20} />}{video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}</span>
+        {controller.reconnecting && <p className="call-reconnecting" role="status">Mất kết nối. Đang kết nối lại…</p>}
+      </header>
       {video && <div className="remote-video" ref={remote} />}
       {showPeer && <div className="call-person">
         <Avatar name={peer?.displayName} photo={peer?.photoUrl} size={100} />
@@ -694,7 +699,7 @@ export function CallOverlay({ controller, uid, error }) {
           {video ? <Video size={23} /> : <Phone size={23} />}<span>Trả lời</span></button> : <>
           <button className="call-button" disabled={controller.busy} onClick={controller.toggleMute}>
             {controller.muted ? <MicOff size={23} /> : <Mic size={23} />}<span>{controller.muted ? 'Bật mic' : 'Tắt mic'}</span></button>
-          <button className="call-button" disabled={controller.busy || !controller.media.ready} onClick={controller.toggleVideo}>
+          <button className="call-button" disabled={controller.busy || !controller.media.ready || controller.reconnecting} onClick={controller.toggleVideo}>
             {cameraOn ? <Video size={23} /> : <VideoOff size={23} />}<span>{cameraOn ? 'Tắt camera' : 'Bật camera'}</span></button>
           {controller.media.localTrack && <button className="call-button" disabled={controller.busy} onClick={controller.switchCamera}>
             <RefreshCw size={23} /><span>Đổi camera</span></button>}

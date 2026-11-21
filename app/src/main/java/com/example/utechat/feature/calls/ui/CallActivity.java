@@ -24,10 +24,12 @@ import com.example.utechat.R;
 import com.example.utechat.app.CallRepositoryProvider;
 import com.example.utechat.app.UteChatApplication;
 import com.example.utechat.core.common.AuthGate;
+import com.example.utechat.core.common.NetworkState;
 import com.example.utechat.domain.model.CallSession;
 import com.example.utechat.domain.repository.CallRepository;
 import com.example.utechat.data.calls.AgoraCallController;
 import com.example.utechat.data.calls.AgoraTokenClient;
+import com.example.utechat.data.calls.CallStatusWorker;
 import com.example.utechat.feature.calls.service.CallForegroundService;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -58,6 +60,7 @@ public final class CallActivity extends AppCompatActivity {
     private boolean incoming;
     private boolean startingMedia;
     private boolean connected;
+    private boolean reconnecting;
     private boolean micMuted;
     private boolean cameraMuted;
     private boolean speakerEnabled;
@@ -218,6 +221,12 @@ public final class CallActivity extends AppCompatActivity {
 
     private void createOutgoing() {
         if (preparingBackend || endingRequested) return;
+        if (!NetworkState.connected(this)) {
+            showError(R.string.call_network_error);
+            setStatus(R.string.call_state_failed);
+            finishSoon();
+            return;
+        }
         preparingBackend = true;
         setStatus(R.string.call_state_waking_backend); showProgress(true);
         com.example.utechat.data.backend.BackendClient.warmUp(new com.example.utechat.data.backend.BackendClient.ReadyCallback() {
@@ -367,13 +376,19 @@ public final class CallActivity extends AppCompatActivity {
         if (call == null) { finish(); return; }
         endingRequested = true;
         findViewById(R.id.btn_end_call).setEnabled(false);
+        if (!NetworkState.connected(this)) {
+            CallStatusWorker.enqueue(this, call.id, "ended");
+            setStatus(R.string.call_state_ended);
+            finishSoon();
+            return;
+        }
         repository.updateStatus(call.id, "ended", new CallRepository.Callback() {
             @Override public void onSuccess(CallSession ignored) { if (!isFinishing() && !isDestroyed()) { setStatus(R.string.call_state_ended); finishSoon(); } }
             @Override public void onError(String error) {
-                endingRequested = false;
                 if (!isFinishing() && !isDestroyed()) {
-                    findViewById(R.id.btn_end_call).setEnabled(true);
-                    showError(R.string.call_network_error);
+                    CallStatusWorker.enqueue(CallActivity.this, call.id, "ended");
+                    setStatus(R.string.call_state_ended);
+                    finishSoon();
                 }
             }
         });
@@ -392,6 +407,7 @@ public final class CallActivity extends AppCompatActivity {
                             if (isFinishing() || isDestroyed() || endingRequested) return;
                             handler.removeCallbacks(mediaTimeout);
                             connected = true;
+                            reconnecting = false;
                             setStatus(R.string.call_state_connected);
                             findViewById(R.id.btn_toggle_camera).setEnabled(true);
                             remote.setVisibility(View.VISIBLE);
@@ -410,14 +426,24 @@ public final class CallActivity extends AppCompatActivity {
                             remote.setVisibility(View.GONE);
                             connected = false;
                             findViewById(R.id.btn_toggle_camera).setEnabled(false);
-                            setStatus(R.string.call_state_connecting);
+                            reconnecting = true;
+                            setStatus(R.string.call_state_reconnecting);
                             scheduleMediaTimeout();
                         }); }
                         @Override public void onReconnecting() { runOnUiThread(() -> {
                             if (!isFinishing() && !isDestroyed() && !endingRequested) {
-                                setStatus(R.string.call_state_connecting);
-                                scheduleMediaTimeout();
+                                if (!reconnecting) scheduleMediaTimeout();
+                                reconnecting = true;
+                                setStatus(R.string.call_state_reconnecting);
+                                findViewById(R.id.btn_toggle_camera).setEnabled(false);
                             }
+                        }); }
+                        @Override public void onReconnected() { runOnUiThread(() -> {
+                            if (isFinishing() || isDestroyed() || endingRequested || !reconnecting || !connected) return;
+                            reconnecting = false;
+                            handler.removeCallbacks(mediaTimeout);
+                            setStatus(R.string.call_state_connected);
+                            findViewById(R.id.btn_toggle_camera).setEnabled(true);
                         }); }
                         @Override public void onTokenRefresh() { runOnUiThread(() -> refreshRtcToken(call)); }
                         @Override public void onError() { runOnUiThread(() -> {
@@ -472,9 +498,9 @@ public final class CallActivity extends AppCompatActivity {
     private void failMediaConnection() {
         if (call == null || failingMedia || endingRequested || isFinishing() || isDestroyed()) return;
         failingMedia = true;
-        showError(R.string.call_network_error);
+        showError(reconnecting ? R.string.call_reconnect_failed : R.string.call_network_error);
         setStatus(R.string.call_state_failed);
-        repository.updateStatus(call.id, "failed", silentCallback());
+        CallStatusWorker.enqueue(this, call.id, "failed");
         finishSoon();
     }
 

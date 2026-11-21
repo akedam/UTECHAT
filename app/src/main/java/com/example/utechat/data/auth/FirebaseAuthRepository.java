@@ -112,6 +112,31 @@ public final class FirebaseAuthRepository implements AuthRepository {
                 });
     }
 
+    @Override public void changePassword(String current, String next, Callback<Void> callback) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null || user.getEmail() == null || !user.isEmailVerified()) {
+            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
+            return;
+        }
+        if (next.equals(current)) {
+            callback.onError(new AuthException(context.getString(R.string.account_password_same)));
+            return;
+        }
+        user.reauthenticate(com.google.firebase.auth.EmailAuthProvider.getCredential(user.getEmail(), current))
+                .addOnFailureListener(error -> {
+                    AuthException failure = signInFailure(error);
+                    callback.onError(failure.getReason() == AuthException.Reason.INVALID_CREDENTIALS
+                            ? new AuthException(context.getString(R.string.account_wrong_password)) : failure);
+                })
+                .addOnSuccessListener(ignored -> user.updatePassword(next)
+                        .addOnSuccessListener(updated -> callback.onSuccess(null))
+                        .addOnFailureListener(error -> {
+                            boolean weak = error instanceof com.google.firebase.auth.FirebaseAuthWeakPasswordException;
+                            callback.onError(new AuthException(weak
+                                    ? context.getString(R.string.account_password_policy) : messageFor(error)));
+                        }));
+    }
+
     @Override public void register(String displayName, String email, String password, Callback<User> callback) {
         auth.createUserWithEmailAndPassword(email, password)
                 .addOnSuccessListener(result -> {

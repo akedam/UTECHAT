@@ -361,6 +361,10 @@ public class ChatActivity extends AppCompatActivity {
 
     private void sendCurrentText() {
         if (blockedByMe) return;
+        if (!com.example.utechat.core.common.NetworkState.connected(this)) {
+            Toast.makeText(this, R.string.chat_no_connection, Toast.LENGTH_SHORT).show();
+            return;
+        }
         String text = etMessage.getText() == null ? "" : etMessage.getText().toString();
         forceScrollToBottom = true;
         if (viewModel.sendText(text, replyTo)) {
@@ -785,14 +789,45 @@ public class ChatActivity extends AppCompatActivity {
                 ? getString(R.string.chat_load_error) : message);
     }
 
+    private final android.net.ConnectivityManager.NetworkCallback chatNetwork =
+            new android.net.ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(@NonNull android.net.Network network) {
+                    runOnUiThread(ChatActivity.this::updateConnectionBanner);
+                }
+                @Override public void onLost(@NonNull android.net.Network network) {
+                    runOnUiThread(ChatActivity.this::updateConnectionBanner);
+                }
+                @Override public void onCapabilitiesChanged(@NonNull android.net.Network network,
+                        @NonNull android.net.NetworkCapabilities capabilities) {
+                    runOnUiThread(ChatActivity.this::updateConnectionBanner);
+                }
+            };
+    private boolean listeningToNetwork;
+
+    private void updateConnectionBanner() {
+        View banner = findViewById(R.id.chat_connection_banner);
+        if (banner != null && listeningToNetwork) banner.setVisibility(
+                com.example.utechat.core.common.NetworkState.connected(this) ? View.GONE : View.VISIBLE);
+    }
+
     @Override protected void onResume() {
         super.onResume();
+        var manager = getSystemService(android.net.ConnectivityManager.class);
+        if (manager != null && !listeningToNetwork) {
+            manager.registerDefaultNetworkCallback(chatNetwork);
+            listeningToNetwork = true;
+            updateConnectionBanner();
+        }
         reading=true;
         if(rvMessages!=null)rvMessages.post(this::markVisibleMessagesRead);
         UteChatApplication.setActiveChat(conversationId);
     }
 
     @Override protected void onPause() {
+        if (listeningToNetwork) {
+            listeningToNetwork = false;
+            getSystemService(android.net.ConnectivityManager.class).unregisterNetworkCallback(chatNetwork);
+        }
         voiceDialogs.close();
         reading=false;
         UteChatApplication.setActiveChat(null);

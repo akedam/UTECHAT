@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth'
+import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from 'firebase/auth'
 import {
-  ArrowRight, BellOff, Check, ChevronRight, CircleAlert, ContactRound, Image as ImageIcon,
+  ArrowRight, BellOff, Check, CircleAlert, CircleDot, ContactRound, Image as ImageIcon,
   MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, Settings, Star, UsersRound, UserRound, X
 } from 'lucide-react'
 import { auth, backend } from './firebase'
@@ -13,6 +13,7 @@ import {
 } from './chat-data'
 import { configureNotifications, disableNotifications, installWorker, notificationsEnabled, saveNotificationPreferences } from './notifications'
 import { AuthScreen } from './auth-screen'
+import { Moments, momentFromUrl } from './moments'
 import { BlockedList, Community, CreateGroup, Friends, GroupSettings, Profile, QrDialog, SearchDialog } from './people'
 import { CallOverlay, Chat, ChatOptions, ForwardDialog, Gallery, MessageActions, PeerProfile, PollDialog, ReportDialog } from './chat'
 import { Avatar, Brand, Confirm, Empty, errorText, IconButton, listTime, Modal, useLocal } from './ui'
@@ -21,6 +22,7 @@ import './styles.css'
 const tabs = [
   { key: 'messages', label: 'Tin nhắn', icon: MessageCircle },
   { key: 'friends', label: 'Bạn bè', icon: ContactRound },
+  { key: 'moments', label: 'Tin', icon: CircleDot },
   { key: 'community', label: 'Cộng đồng', icon: UsersRound },
   { key: 'profile', label: 'Hồ sơ', icon: UserRound }
 ]
@@ -84,8 +86,9 @@ function Toast({ toast, clear }) {
 
 function Workspace({ user }) {
   const workspace = useRef(null)
-  const [tab, setTab] = useState('messages')
-  const [selected, setSelected] = useState(readChat)
+  const [tab, setTab] = useState(() => momentFromUrl() ? 'moments' : 'messages')
+  const [selected, setSelected] = useState(() => momentFromUrl() ? '' : readChat())
+  const [momentTarget, setMomentTarget] = useState(() => ({ id: momentFromUrl(), revision: 0 }))
   const [dialogs, setDialog] = useState(null)
   const [confirmation, setConfirmation] = useState(null)
   const [toast, setToast] = useState(null)
@@ -124,23 +127,50 @@ function Workspace({ user }) {
   }, [])
   const setChat = useCallback((id, replace = false) => {
     const next = new URL(location.href)
-    if (id) next.searchParams.set('chat', id)
+    if (id) { next.searchParams.set('chat', id); next.searchParams.delete('moment') }
     else next.searchParams.delete('chat')
     if (next.toString() !== location.href) history[replace ? 'replaceState' : 'pushState'](null, '', next)
     setSelected(id)
     if (id) setTab('messages')
   }, [])
+  const writeMoment = useCallback((id, replace = true) => {
+    const url = new URL(location.href)
+    url.searchParams.delete('chat')
+    if (id) url.searchParams.set('moment', id)
+    else url.searchParams.delete('moment')
+    if (url.href !== location.href) history[replace ? 'replaceState' : 'pushState'](null, '', url)
+  }, [])
+  const openMoment = useCallback((id, personal = false) => {
+    setSelected('')
+    setTab('moments')
+    setDialog(null)
+    setMomentTarget(current => ({ id, personal, revision: current.revision + 1 }))
+    writeMoment(id, false)
+  }, [writeMoment])
   useEffect(() => {
-    const onPop = () => { setSelected(readChat()); if (readChat()) setTab('messages'); setDialog(null) }
+    const onPop = () => {
+      const id = momentFromUrl()
+      setSelected(id ? '' : readChat())
+      if (id) {
+        setTab('moments')
+        setMomentTarget(current => ({ id, revision: current.revision + 1 }))
+      } else if (readChat()) setTab('messages')
+      setDialog(null)
+    }
     const onWorker = event => {
-      if (event.data?.type !== 'conversation' || event.data.uid !== user.uid) return
-      setChat(event.data.id)
+      if (event.data?.uid !== user.uid) return
+      if (event.data.type === 'moment' && /^[a-f0-9]{64}$/.test(event.data.id || '')) {
+        openMoment(event.data.id)
+      } else if (event.data.type === 'conversation') {
+        setDialog(null)
+        setChat(event.data.id)
+      } else return
       event.ports[0]?.postMessage(true)
     }
     window.addEventListener('popstate', onPop)
     navigator.serviceWorker?.addEventListener('message', onWorker)
     return () => { window.removeEventListener('popstate', onPop); navigator.serviceWorker?.removeEventListener('message', onWorker) }
-  }, [user.uid, setChat])
+  }, [user.uid, setChat, openMoment])
 
   useEffect(() => {
     let done = false
@@ -223,6 +253,8 @@ function Workspace({ user }) {
     } catch (failure) { error(failure) }
   }
   const changeTab = item => {
+    if (item === 'moments' && tab !== 'moments') { openMoment(null); return }
+    if (tab === 'moments' && item !== 'moments') writeMoment(null)
     setTab(item)
     if (selected) setChat('', true)
   }
@@ -245,11 +277,11 @@ function Workspace({ user }) {
   const install = onIos() && !navigator.standalone && !window.matchMedia('(display-mode: standalone)').matches
   const managedGroup = dialogs?.type === 'manage' ? conversations.find(row => row.id === dialogs.id) : null
 
-  return <div ref={workspace} className={`workspace ${selected ? 'has-chat' : ''}`}>
+  return <div ref={workspace} className={`workspace ${selected ? 'has-chat' : ''} ${tab === 'moments' ? 'tin-active' : ''}`}>
     <aside className="rail"><Brand text={false} />{navigation}
       <button className="rail-profile" onClick={() => changeTab('profile')} aria-label="Hồ sơ của bạn"><Avatar name={account.displayName} photo={account.photoUrl} size={39} /></button></aside>
     <aside className="sidebar">
-      <div className={`sidebar-top tab-${tab}`}>
+      {tab !== 'moments' && <div className={`sidebar-top tab-${tab}`}>
         <div className="sidebar-heading"><div className="sidebar-title"><h1>{tabs.find(item => item.key === tab).label}</h1></div>
           <div className="header-tools">
             {tab !== 'community' &&
@@ -264,7 +296,7 @@ function Workspace({ user }) {
         </div>
         {tab !== 'profile' && <button className="search-trigger" aria-label="Tìm kiếm"
           onClick={() => setDialog({ type: 'search' })}><Search size={22} /><span>Tìm kiếm</span></button>}
-      </div>
+      </div>}
       <div className="sidebar-scroll">
         {!own && loadError && <div className="sidebar-page"><Empty icon={CircleAlert} title="Chưa tải được hồ sơ"
           action={<button className="secondary" onClick={() => { setLoadError(false); setLoadAttempt(loadAttempt + 1) }}>Thử lại</button>} /></div>}
@@ -272,10 +304,13 @@ function Workspace({ user }) {
         {own && tab === 'messages' && (loadedChats ? <ChatList {...{ sorted, selected, titleOf, hidden, drafts, preferences }}
           uid={user.uid} choose={setChat} openSearch={() => setDialog({ type: 'search' })} /> : <p className="loader" role="status">Đang tải hội thoại…</p>)}
         {own && tab === 'friends' && <Friends {...{ uid: user.uid, people, friendships, open, blocked, error, setDialog }} call={callFriend} />}
+        {own && tab === 'moments' && <Moments key={momentTarget.revision} initialId={momentTarget.id} initialHistory={momentTarget.personal}
+          {...{ people, account, error, notify }} friends={accepted.filter(friend => !blocked.includes(friend.id))}
+          openLink={writeMoment} clearLink={() => writeMoment(null)} enterChat={setChat} openProfile={() => changeTab('profile')} />}
         {own && tab === 'community' && <Community groups={sorted.filter(row => row.type === 'group')} select={setChat}
           manage={id => setDialog({ type: 'manage', id })} create={() => setDialog({ type: 'create' })} />}
         {own && tab === 'profile' && <>
-          <Profile {...{ user, presence, blocked, people, setDialog, error, notify }} data={account}
+          <Profile {...{ user, presence, blocked, people, setDialog, error, notify }} data={account} openHistory={() => openMoment(null, true)}
             signout={() => setConfirmation({ title: 'Đăng xuất', description: 'Bạn có thể đăng nhập lại bằng tài khoản hiện tại.', label: 'Đăng xuất', action: doSignOut })} />
           {install && <p className="install-tip">Để mở như ứng dụng trên iPhone, chọn <b>Chia sẻ</b> rồi <b>Thêm vào MH chính</b> trong Safari.</p>}
         </>}
@@ -322,12 +357,7 @@ function Workspace({ user }) {
     {dialogs?.type === 'nickname' && <NicknameEditor data={dialogs} close={close} />}
     {dialogs?.type === 'wallpaper' && <WallpaperPicker data={dialogs.options} replace={setDialog} error={error} />}
     {dialogs?.type === 'info' && <Modal title={dialogs.title} onClose={close}><p>{dialogs.description}</p></Modal>}
-    {dialogs?.type === 'password' && <Modal title="Đặt lại mật khẩu" onClose={close}>
-      <p>UTEChat sẽ gửi liên kết đặt lại mật khẩu đến {user.email}.</p><button className="primary wide" onClick={async () => {
-        try { await sendPasswordResetEmail(auth, user.email); close(); notify('Đã gửi liên kết đặt lại mật khẩu.') }
-        catch (failure) { error(failure) }
-      }}>Gửi liên kết</button>
-    </Modal>}
+    {dialogs?.type === 'password' && <ChangePassword {...dialogProps} user={user} />}
     {dialogs?.type === 'blocked' && <BlockedList {...dialogProps} {...{ blocked, people }} />}
     {dialogs?.type === 'options' && <ChatOptions {...dialogProps} data={dialogs} replace={setDialog} confirm={setConfirmation}
       openCommunity={() => { close(); changeTab('community') }} />}
@@ -353,6 +383,39 @@ function Workspace({ user }) {
     <CallOverlay {...{ controller, uid: user.uid, error }} />
     <Toast toast={toast} clear={closeToast} />
   </div>
+}
+
+function ChangePassword({ user, close, notify }) {
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  return <Modal title="Đổi mật khẩu" onClose={() => { if (!busy) close() }}>
+    <form className="stack" onSubmit={async event => {
+      event.preventDefault()
+      const fields = new FormData(event.currentTarget)
+      const current = fields.get('current')
+      const next = fields.get('next')
+      if (next !== fields.get('confirm')) { setFeedback('Hai mật khẩu mới chưa khớp.'); return }
+      if (next === current) { setFeedback('Mật khẩu mới phải khác mật khẩu hiện tại.'); return }
+      setBusy(true)
+      setFeedback('')
+      try {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current))
+        await updatePassword(user, next)
+        close()
+        notify('Đã đổi mật khẩu.')
+      } catch (failure) {
+        setFeedback(['auth/invalid-credential', 'auth/wrong-password'].includes(failure.code)
+          ? 'Mật khẩu hiện tại chưa đúng.' : failure.code === 'auth/weak-password' || failure.code === 'auth/password-does-not-meet-requirements'
+            ? 'Mật khẩu mới chưa đáp ứng yêu cầu.' : errorText(failure))
+      } finally { setBusy(false) }
+    }}>
+      <label>Mật khẩu hiện tại<input type="password" name="current" autoComplete="current-password" required autoFocus disabled={busy} /></label>
+      <label>Mật khẩu mới<input type="password" name="next" autoComplete="new-password" minLength={6} required disabled={busy} /></label>
+      <label>Nhập lại mật khẩu mới<input type="password" name="confirm" autoComplete="new-password" required disabled={busy} /></label>
+      {feedback && <p className="feedback error" role="alert">{feedback}</p>}
+      <button className="primary wide" disabled={busy}>{busy ? 'Đang lưu…' : 'Đổi mật khẩu'}</button>
+    </form>
+  </Modal>
 }
 
 function NicknameEditor({ data, close }) {

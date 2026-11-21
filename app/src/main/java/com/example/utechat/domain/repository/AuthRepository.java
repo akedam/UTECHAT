@@ -27,6 +27,9 @@ public interface AuthRepository {
     void loadCurrentUser(Callback<User> callback);
     void signIn(String email, String password, Callback<User> callback);
     void resetPassword(String email, Callback<Void> callback);
+    default void changePassword(String current, String next, Callback<Void> callback) {
+        throw new UnsupportedOperationException();
+    }
     void register(String displayName, String email, String password, Callback<User> callback);
     void updateProfile(String displayName, String bio, Callback<User> callback);
 

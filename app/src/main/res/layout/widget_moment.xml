@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_moment_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/utechat_surface_variant">
+    <ImageView
+        android:id="@+id/widget_moment_photo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/moments_widget_label"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+    <TextView
+        android:id="@+id/widget_moment_empty"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:padding="12dp"
+        android:text="@string/moments_widget_empty"
+        android:textColor="@color/utechat_on_surface"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</FrameLayout>

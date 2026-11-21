@@ -23,7 +23,18 @@ self.addEventListener('push', event => {
     try { data = event.data?.json()?.data } catch { return }
     const cache = await caches.open(state)
     const uid = await (await cache.match(stateRequest))?.text()
-    if (!uid || data?.recipientUid !== uid || !['call', 'message'].includes(data.eventType)) return
+    if (!uid || data?.recipientUid !== uid || !['call', 'message', 'moment'].includes(data.eventType)) return
+    if (data.eventType === 'moment') {
+      const id = data.momentId
+      if (!/^[a-f0-9]{64}$/.test(id || '')) return
+      await self.registration.showNotification('Tin mới', {
+        body: 'Mở UTEChat để xem ảnh.',
+        icon: '/apple-touch-icon.png',
+        tag: 'moment-' + id,
+        data: { id, uid, kind: 'moment' }
+      })
+      return
+    }
     const call = data.eventType === 'call'
     const id = data.conversationId
     if (!/^[A-Za-z0-9_-]{1,256}$/.test(id || '')) return
@@ -33,6 +44,7 @@ self.addEventListener('push', event => {
       body: call ? 'Mở UTEChat để trả lời cuộc gọi.' : preview || 'Bạn có tin nhắn mới.',
       icon: '/apple-touch-icon.png',
       silent: false,
+      renotify: !call,
       tag: call ? 'call-' + data.callId : 'chat-' + id,
       data: { id, uid }
     })
@@ -42,16 +54,16 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close()
   event.waitUntil((async () => {
-    const { id, uid } = event.notification.data || {}
+    const { id, uid, kind } = event.notification.data || {}
     const cache = await caches.open(state)
     if (!uid || uid !== await (await cache.match(stateRequest))?.text()) return
     const url = new URL('/', self.location.origin)
-    if (id) url.searchParams.set('chat', id)
+    if (id) url.searchParams.set(kind === 'moment' ? 'moment' : 'chat', id)
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const client of clients) {
       let focused
       try { focused = await client.focus() } catch { continue }
-      if (await handOff(focused, { type: 'conversation', id, uid })) return
+      if (await handOff(focused, { type: kind === 'moment' ? 'moment' : 'conversation', id, uid })) return
       try { if (await focused.navigate(url.href)) return } catch { /* Open the link in a new window below. */ }
     }
     await self.clients.openWindow(url.toString())
