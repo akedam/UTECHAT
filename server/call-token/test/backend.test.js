@@ -66,11 +66,14 @@ async function fixture(t,options={}) {
   const backend=createBackend({db,now:()=>TIME,
     auth:{
       async verifyIdToken(token){
-        if(token==="unverified-alice")return{uid:"alice",email_verified:false};
+        if(token==="legacy-alice" || token==="legacy-otp-alice")return{uid:"alice",email:"alice@example.test",email_verified:true,
+          firebase:{sign_in_provider:token==="legacy-alice" ? "password" : "phone"}};
         if(!["alice","bob","mallory"].includes(token))throw Error();
-        return{uid:token,email_verified:true};
+        return{uid:token,phone_number:"+16505550101",utechatPhone:true,firebase:{sign_in_provider:"custom"}};
       },
-      async getUser(uid){return{emailVerified:!(options.unverifiedRecipients||[]).includes(uid)};},
+      async getUser(uid){return (options.unverifiedRecipients || []).includes(uid)
+        ? { email: "legacy@example.test", emailVerified: true }
+        : { phoneNumber: "+16505550101", customClaims: { utechatPhone: true } };},
     },
     messaging:{async sendEachForMulticast(data){pushes.push(data);return{responses:data.tokens.map(()=>({success:true}))};}},
     mintToken(call,uid){tokenCalls++;return{token:"test-rtc-token",uid:call.rtcUidByUser[uid]};},
@@ -108,6 +111,78 @@ test("browser preflight permits UTEChat origins and leaves API authentication in
   assert.equal(anonymous.status,401);
   assert.equal(anonymous.headers.get("access-control-allow-origin"),trusted);
 });
+test("phone authentication is disabled unless the server explicitly enables it", async t => {
+  const { request } = await fixture(t);
+  assert.deepEqual(await request("/api/phone-auth/status", null, null, "GET"),
+    { status: 200, body: { enabled: false } });
+  assert.equal((await request("/api/phone-auth/login", null, {})).status, 503);
+});
+
+test("OTP proofs can set or reset phone passwords without unlocking chat", async t => {
+  const phone = "+16505550101", uid = "phone-user";
+  const legacyPhone = "+16505550102";
+  const account = { uid, phoneNumber: phone };
+  const legacy = { uid: "alice", email: "alice@example.test", emailVerified: true, phoneNumber: legacyPhone, customClaims: { utechatPhone: true } };
+  const accounts = [account, legacy];
+  const start = Math.floor(TIME / 1000);
+  let millis = TIME, revocations = 0;
+  const claims = (user, provider, date) => ({ uid: user.uid, phone_number: user.phoneNumber, email: user.email,
+    firebase: { sign_in_provider: provider }, email_verified: user.emailVerified, auth_time: date, ...user.customClaims });
+  const { db, request } = await fixture(t, { backend: { phoneAuthEnabled: true, now: () => millis, auth: {
+    async verifyIdToken(token) {
+      if (token === "signup-otp") return claims(account, "phone", start);
+      if (token === "reset-otp") return claims(account, "phone", start + 1);
+      if (token === "next-otp") return claims(account, "phone", start + 2);
+      if (token === "ready") return claims(account, "custom", start);
+      if (token === "linked-email") return claims(legacy, "password", start);
+      if (token === "linked-otp") return claims(legacy, "phone", start + 2);
+      if (token === "linked-custom") return claims(legacy, "custom", start);
+      throw new Error("unknown test token");
+    },
+    async getUser(uid) { return accounts.find(user => user.uid === uid); },
+    async getUserByPhoneNumber(number) {
+      const user = accounts.find(candidate => candidate.phoneNumber === number);
+      if (!user) throw Object.assign(new Error("not found"), { code: "auth/user-not-found" });
+      return user;
+    },
+    async setCustomUserClaims(uid, customClaims) { Object.assign(await this.getUser(uid), { customClaims }); },
+    async updateUser(uid, data) { Object.assign(await this.getUser(uid), data); },
+    async revokeRefreshTokens(uid) { assert.equal(uid, account.uid); revocations++; },
+    async createCustomToken(uid, extra) { assert.deepEqual(extra, { utechatPhone: true }); return "session-" + uid; }
+  } } });
+  const action = (name, token, fields) => request("/api/phone-auth/" + name, token, fields);
+  const login = (password, number = phone) => action("login", null, { phone: number, password });
+  const first = "first-password-33", next = "next-password-66";
+  assert.equal((await action("register", null, { password: first })).status, 401);
+  assert.equal((await action("register", "signup-otp", { displayName: "Phone User", password: first })).status, 200);
+  assert.equal(db.rows.get("users/" + uid).email, "");
+  assert.equal(db.rows.get("publicProfiles/" + uid).displayName, "Phone User");
+  assert.equal((await request("/api/rtc-token", "signup-otp", { callId: "call1" })).status, 403);
+  assert.equal((await request("/api/rtc-token", "ready", { callId: "call1" })).body.error, "forbidden");
+  assert.deepEqual(await login(first), { status: 200, body: { token: "session-" + uid } });
+  assert.equal((await login(next)).status, 401);
+  assert.equal((await action("register", "signup-otp", { displayName: "Changed", password: next })).status, 409);
+  assert.equal((await action("reset", "ready", { password: next })).status, 403);
+  millis += 2_000;
+  assert.equal((await action("reset", "reset-otp", { password: next })).status, 200);
+  assert.equal(revocations, 1);
+  assert.equal((await action("reset", "reset-otp", { password: "different-123" })).status, 409);
+  assert.equal((await action("reset", "next-otp", { password: first })).body.error, "phone-password-reused");
+  assert.equal((await login(first)).status, 401);
+  assert.equal((await login(next)).status, 200);
+  db.rows.set("backendPhoneCredentials/alice", { ...db.rows.get("backendPhoneCredentials/" + uid), phone: legacyPhone });
+  assert.equal((await action("link", "linked-otp", { password: first, emailProof: "linked-email" })).status, 404);
+  assert.equal((await action("register", "linked-otp", { password: next, displayName: "Legacy" })).status, 409);
+  assert.equal((await action("reset", "linked-otp", { password: next })).status, 409);
+  assert.equal((await request("/api/rtc-token", "linked-custom", { callId: "call1" })).status, 403);
+  assert.equal(db.rows.get("publicProfiles/alice").displayName, "Alice");
+  assert.equal((await login(next, legacyPhone)).status, 401);
+  for (let attempt = 0; attempt < 6; attempt++) assert.equal((await login(first)).status, 401);
+  assert.equal((await login(next)).status, 429);
+  millis += 15 * 60_000;
+  assert.equal((await login(next)).status, 200);
+});
+
 test("Moments are private, deduplicated, and removable only by their author", async t => {
   const f = await fixture(t, { rows: {
     "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" }
@@ -116,7 +191,7 @@ test("Moments are private, deduplicated, and removable only by their author", as
   const upload = { nonce: "first-capture", caption: "Xin chào", recipients: ["bob"], image: jpeg.toString("base64") };
   const put = (body = upload, uid = "alice") => f.request("/api/moments", uid, body, "PUT");
   const get = (path, uid) => f.request(path, uid, null, "GET");
-  assert.equal((await put(upload, "unverified-alice")).status, 403);
+  assert.equal((await put(upload, "legacy-alice")).status, 403);
   const oversized = Buffer.from(jpeg);
   oversized.writeUInt16BE(961, 7);
   oversized.writeUInt16BE(961, 9);
@@ -218,12 +293,12 @@ test("a Tin reply stores only text in the author's direct conversation", async t
   f.db.rows.set("users/alice/blocked/bob", {});
   assert.equal((await reply("bob", "chat", { nonce: "another" })).status, 404);
 });
-test("email verification gates chat API access and protects notifications on older installations", async t => {
+test("verified email alone gives no chat API access and receives no notifications", async t => {
   const f = await fixture(t, { unverifiedRecipients: ["bob"] });
-  const blocked = await f.request("/api/rtc-token", "unverified-alice", {callId:"call1"});
-  assert.deepEqual(blocked, {status:403,body:{error:"email-unverified"}});
+  const blocked = await f.request("/api/rtc-token", "legacy-alice", {callId:"call1"});
+  assert.deepEqual(blocked, {status:403,body:{error:"phone-session-required"}});
   assert.equal(f.tokenCalls, 0);
-  assert.equal((await f.request("/api/voice?path=conversations/chat/alice/v1", "unverified-alice", null, "GET")).status, 403);
+  assert.equal((await f.request("/api/voice?path=conversations/chat/alice/v1", "legacy-alice", null, "GET")).status, 403);
   assert.equal((await f.request("/api/message-notify", "alice", {conversationId:"chat",messageId:"msg1"})).status, 200);
   assert.equal(f.pushes.length, 0);
 });
@@ -244,7 +319,7 @@ test("avatar uploads require a verified owner, enforce size and keep a single pu
   const jpeg = Buffer.from([255, 216, 255, 224, 0, 6, 74, 70, 73, 70, 255, 217]);
   const put = (uid, bytes = jpeg) => fixtureData.request("/api/avatar?uid=bob", uid, bytes, "PUT", "image/jpeg");
   assert.equal((await put(null)).status, 401);
-  assert.equal((await put("unverified-alice")).status, 403);
+  assert.equal((await put("legacy-alice")).status, 403);
   assert.equal((await put("alice", PNG)).status, 400);
   assert.equal((await put("alice", Buffer.alloc(192 * 1024 + 1))).status, 413);
   const uploaded = await put("alice");

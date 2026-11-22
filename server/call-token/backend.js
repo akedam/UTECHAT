@@ -1,6 +1,7 @@
 "use strict";
 const crypto = require("node:crypto");
 const { createMoments, MAX_PHOTO_BYTES } = require("./moments");
+const { createPhoneAuth, isEmailAccount, verifiedAccount } = require("./phone-auth");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VOICE_BYTES = 512 * 1024;
 const MAX_AVATAR_BYTES = 192 * 1024;
@@ -12,6 +13,8 @@ const API_METHODS = new Map([
   ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]],
   ["/api/moments", ["GET", "PUT"]], ["/api/moment", ["GET", "POST", "DELETE"]], ["/api/moment-photo", ["GET"]]
 ]);
+for (const action of ["login", "register", "reset"]) API_METHODS.set(`/api/phone-auth/${action}`, ["POST"]);
+API_METHODS.set("/api/phone-auth/status", ["GET"]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 class ApiError extends Error { constructor(status, code) { super(code); this.status = status; } }
@@ -73,10 +76,12 @@ function send(res, status, body, type = "application/json; charset=utf-8", cache
 }
 
 /** Dependency injection keeps authorization tests off live Firebase. */
-function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now, dailyUploadBytes = 32 * 1024 * 1024 }) {
+function createBackend({ auth, db, messaging, mintToken, storage = null, now = Date.now,
+  dailyUploadBytes = 32 * 1024 * 1024, phoneAuthEnabled = false, legacyEmailAccess = false }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
   const groupDeletions = new Map();
   const moments = createMoments({ db, storage, now, dailyUploadBytes, hash, segment, validImage, requireValue, contactAllowed, pushOnce });
+  const phoneAuth = createPhoneAuth({ auth, db, now, requireValue });
   async function contactAllowed(first, second, tx) {
     const refs = [db.doc(`users/${first}/blocked/${second}`), db.doc(`users/${second}/blocked/${first}`)];
     const blocks = await Promise.all(refs.map(ref => tx ? tx.get(ref) : ref.get()));
@@ -213,7 +218,9 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
   async function pushOnce(eventId, recipientUid, data, ttl) {
     // Device tokens from older APKs can still exist before the recipient verifies.
     try {
-      if (!(await auth.getUser(recipientUid)).emailVerified) return;
+      const account = await auth.getUser(recipientUid);
+      const phoneAccount = !!account.phoneNumber && account.customClaims?.utechatPhone === true && !isEmailAccount(account);
+      if (account.disabled || !(phoneAccount || (legacyEmailAccess && account.emailVerified === true))) return;
     } catch (error) {
       if (error.code === "auth/user-not-found") return;
       throw error;
@@ -453,16 +460,33 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       }
       if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200,
         { status: "configured", apiVersion: 1, media: !!storage, voice: true, moments: !!storage });
+      if (req.method === "GET" && url.pathname === "/api/phone-auth/status") return send(res, 200, { enabled: phoneAuthEnabled });
       const voice = url.pathname === "/api/voice";
       const avatar = url.pathname === "/api/avatar";
       if (avatar && req.method === "GET") {
         return send(res, 200, await downloadAvatar(url.searchParams.get("uid")), "image/jpeg", "public, max-age=300");
       }
       requireValue(methods?.includes(req.method), 404, "not-found"); const authorization = req.headers.authorization || "";
+      const phoneAction = url.pathname.startsWith("/api/phone-auth/") ? url.pathname.split("/").at(-1) : null;
+      if (phoneAction) {
+        requireValue(phoneAuthEnabled, 503, "phone-auth-unavailable");
+        rateLimit(`phone-auth:${req.socket.remoteAddress}`, "api");
+        if (phoneAction === "login") {
+          const input = await readJson(req);
+          requireValue(input && typeof input === "object" && !Array.isArray(input));
+          return send(res, 200, await phoneAuth.login(input));
+        }
+      }
       requireValue(authorization.startsWith("Bearer ") && authorization.length < 8192, 401, "unauthorized");
       let user;
       try { user = await auth.verifyIdToken(authorization.slice(7), true); } catch (_) { throw new ApiError(401, "unauthorized"); }
-      requireValue(user.email_verified === true, 403, "email-unverified");
+      if (phoneAction) {
+        const input = await readJson(req);
+        requireValue(input && typeof input === "object" && !Array.isArray(input));
+        return send(res, 200, await phoneAuth.update(phoneAction, user, input));
+      }
+      const legacyAccount = legacyEmailAccess && user.email_verified === true && user.firebase?.sign_in_provider !== "phone";
+      requireValue(verifiedAccount(user) || legacyAccount, 403, "phone-session-required");
       const momentImage = url.pathname === "/api/moment-photo" || (url.pathname === "/api/moments" && req.method === "PUT");
       rateLimit(user.uid, url.pathname === "/api/media" || voice || avatar || momentImage ? "media" : "api");
       if (url.pathname === "/api/moments") {

@@ -17,6 +17,8 @@ const storage = process.env.SUPABASE_URL && storageKey
   ? createStorage({ url: process.env.SUPABASE_URL, key: storageKey,
       bucket: process.env.SUPABASE_STORAGE_BUCKET || "utechat-media" }) : null;
 const backend = createBackend({ auth: getAuth(), db: getFirestore(), messaging: getMessaging(), storage,
+  phoneAuthEnabled: process.env.UTECHAT_PHONE_AUTH_ENABLED === "true",
+  legacyEmailAccess: process.env.UTECHAT_LEGACY_EMAIL_ACCESS === "true",
   mintToken: createTokenMinter(appId, appCertificate),
 });
 const server = http.createServer(backend.handle);
