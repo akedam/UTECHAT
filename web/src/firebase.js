@@ -37,6 +37,9 @@ const backendErrors = {
   'not-found': 'Dữ liệu này không còn tồn tại.',
   'phone-session-required': 'Hãy đăng nhập lại bằng số điện thoại để tiếp tục.',
   'rate-limited': 'Bạn thao tác quá nhanh. Hãy thử lại sau.',
+  'daily-upload-limit': 'Bạn đã dùng hết dung lượng tải lên trong ngày.',
+  'invalid-attachment': 'Tệp không hợp lệ. Hãy chọn tệp PDF, DOCX hoặc TXT.',
+  'too-large': 'Tệp vượt quá dung lượng cho phép.',
   'invalid-voice': 'Trình duyệt tạo bản ghi không đúng định dạng AAC.',
   'contact-blocked': 'Hiện không thể liên hệ tài khoản này.'
 }

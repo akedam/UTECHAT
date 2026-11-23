@@ -7,6 +7,7 @@ import { onDisconnect, onValue, push, ref, remove, serverTimestamp as databaseTi
 import { updateProfile } from 'firebase/auth'
 import { api, auth, backend, db, presenceDb } from './firebase'
 import { queueNetworkJob } from './network-jobs'
+import { normalizePhoneNumber } from './phone-number'
 
 export const reactions = ['❤️', '😆', '😮', '😢', '😡', '👍', '😂', '😍', '🔥', '👏', '🎉', '💯', '🙌', '🙏', '👎']
 export const qrPrefix = 'utechat://friend/v1/'
@@ -102,7 +103,12 @@ export const watchFriendships = (uid, fn, fail) => {
   }, fail))
   return () => stops.forEach(stop => stop())
 }
-export async function searchPeople(value) {
+export async function searchPeople(value, signal) {
+  const phone = normalizePhoneNumber(value)
+  if (phone) {
+    const { user } = await api('/api/friends/lookup', { body: { phone }, signal })
+    return user ? [user] : []
+  }
   const start = value.trim().toLowerCase()
   if (!start) return []
   return rows(await getDocs(query(cards, orderBy('searchName'), startAt(start), endAt(start + '\uf8ff'), limit(20))))
@@ -249,12 +255,22 @@ export function writeSummary(tx, conversation, target, message, uid, now) {
     lastMessageId: target.id, lastMessageSenderId: uid, updatedAt: now })
 }
 function mediaRoute(type, path) {
-  return `/api/${type === 'voice' ? 'voice' : 'media'}?path=${encodeURIComponent(path)}`
+  const endpoint = type === 'voice' ? 'voice' : type === 'file' ? 'attachment' : 'media'
+  return `/api/${endpoint}?path=${encodeURIComponent(path)}`
 }
 export const downloadMedia = (message, signal) => api(mediaRoute(message.type, message.mediaPath), { blob: true, signal })
 
 export async function sendMessage(conversation, data, reply) {
   const uid = me()
+  if (data.type === 'file') {
+    const { id, file, contentType } = data.attachment
+    const path = `conversations/${conversation}/${uid}/${id}`
+    await api(mediaRoute('file', path) + '&name=' + encodeURIComponent(file.name), {
+      method: 'PUT', body: file, type: contentType
+    })
+    queueNetworkJob(uid, 'message', id, { conversationId: conversation, messageId: id }, Date.now() + 86_400_000)
+    return id
+  }
   const target = doc(collection(root(conversation), 'messages'))
   const { blob, durationMs, ...message } = data
   if (blob) {

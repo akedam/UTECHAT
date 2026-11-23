@@ -1,8 +1,9 @@
 <resources>
     <string name="search_back">Quay lại</string>
     <string name="search_clear">Xóa nội dung tìm kiếm</string>
-    <string name="search_input_hint">Tìm bạn bè, nhóm, người dùng</string>
-    <string name="search_start_hint">Tìm bạn bè hoặc nhóm của bạn. Nhập từ 2 ký tự để tìm thêm người dùng theo tên.</string>
+    <string name="search_input_hint">Tìm theo tên hoặc số điện thoại</string>
+    <string name="search_start_hint">Nhập tên bạn bè, tên nhóm hoặc đầy đủ số điện thoại đã đăng ký.</string>
+    <string name="search_phone_rate_limited">Bạn đã tìm số điện thoại quá nhiều lần. Hãy chờ một phút rồi thử lại.</string>
     <string name="search_groups">Nhóm</string>
     <string name="search_people">Người dùng</string>
     <string name="search_request_sent">Đã gửi</string>

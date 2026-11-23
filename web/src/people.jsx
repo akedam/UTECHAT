@@ -56,7 +56,7 @@ export function Friends({ uid, people, friendships, open, call, blocked, error, 
         <button className="text-button" onClick={() => answerFriend(row.id, false).catch(error)}>{received ? 'Từ chối' : 'Thu hồi'}</button>
       </PersonRow>
     }) : <Empty icon={UsersRound} title={section === 'online' ? 'Chưa có bạn trực tuyến' : section === 'friends' ? 'Chưa có bạn bè' : 'Chưa có lời mời'}
-      description={section === 'friends' ? 'Tìm bạn theo tên hoặc quét mã QR để kết bạn.' : undefined}
+      description={section === 'friends' ? 'Tìm bạn theo tên, số điện thoại hoặc quét mã QR.' : undefined}
       action={section === 'friends' && <button className="secondary" onClick={() => setDialog({ type: 'search' })}><Plus size={17} />Tìm bạn</button>} />}
   </div>
 }
@@ -83,18 +83,19 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, friends
   const [loading, setLoading] = useState(false)
   const entered = value.trim()
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (!entered) { setFound([]); setLoading(false); return }
     setLoading(true)
     const timer = setTimeout(() => {
-      searchPeople(entered).then(list => { if (!cancelled) setFound(list) })
-        .catch(failure => { if (!cancelled) error(failure) })
-        .finally(() => { if (!cancelled) setLoading(false) })
-    }, 250)
-    return () => { cancelled = true; clearTimeout(timer) }
+      searchPeople(entered, controller.signal).then(list => { if (!controller.signal.aborted) setFound(list) })
+        .catch(failure => { if (!controller.signal.aborted) error(failure) })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    }, 350)
+    return () => { controller.abort(); clearTimeout(timer) }
   }, [entered, error])
   const key = entered.toLocaleLowerCase('vi')
-  const matchingFriends = key ? friends.filter(person => person.displayName.toLocaleLowerCase('vi').includes(key)) : []
+  const foundIds = new Set(found.map(person => person.id))
+  const matchingFriends = key ? friends.filter(person => foundIds.has(person.id) || person.displayName.toLocaleLowerCase('vi').includes(key)) : []
   const friendIds = new Set(matchingFriends.map(person => person.id))
   const matches = key ? conversations.filter(item => {
     const title = titleOf(item)
@@ -102,9 +103,12 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, friends
   }) : []
   const results = found.filter(person => !friendIds.has(person.id))
   return <Modal title="Tìm kiếm" onClose={close} onBack={close} className="search-dialog app-screen">
-    <div className="search-box"><Search size={20} /><input autoFocus aria-label="Tìm bạn hoặc hội thoại" placeholder="Nhập tên bạn hoặc cuộc trò chuyện"
-      value={value} onChange={event => setValue(event.target.value)} /></div>
-    {!entered && <Empty icon={Search} title="Tìm bạn và hội thoại" description="Nhập tên để tìm kiếm." />}
+    <div className="search-box"><Search size={20} /><input autoFocus aria-label="Tìm theo tên hoặc số điện thoại" placeholder="Tên hoặc số điện thoại"
+      value={value} onChange={event => {
+        if (event.target.value.trim() !== entered) setFound([])
+        setValue(event.target.value)
+      }} /></div>
+    {!entered && <Empty icon={Search} title="Tìm bạn và hội thoại" description="Nhập tên hoặc đầy đủ số điện thoại đã đăng ký." />}
     {matchingFriends.length > 0 && <><h3 className="section-label">Bạn bè</h3>{matchingFriends.map(person =>
       <PersonResult key={person.id} {...{ person, friendships, uid, open, error, close }} />)}</>}
     {matches.length > 0 && <><h3 className="section-label">Hội thoại</h3>{matches.map(item => {
@@ -114,7 +118,7 @@ export function SearchDialog({ uid, conversations, titleOf, friendships, friends
     {results.length > 0 && <><h3 className="section-label">Người dùng</h3>{results.map(person =>
       <PersonResult key={person.id} {...{ person, friendships, uid, open, error, close }} />)}</>}
     {loading && <p className="loader" role="status">Đang tìm…</p>}
-    {entered && !loading && !results.length && !matches.length && !matchingFriends.length && <Empty icon={Search} title="Không tìm thấy kết quả" description="Thử tên hiển thị khác." />}
+    {entered && !loading && !results.length && !matches.length && !matchingFriends.length && <Empty icon={Search} title="Không tìm thấy kết quả" description="Kiểm tra tên hoặc số điện thoại rồi thử lại." />}
   </Modal>
 }
 

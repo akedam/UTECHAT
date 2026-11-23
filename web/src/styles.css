@@ -121,9 +121,9 @@ time, .muted { color: var(--subtle); }
 .feedback.success { background: #e7f7ed; color: #12522e; }
 .feedback.error { background: #fff0f2; color: #9f2638; }
 
-.workspace { height: 100%; height: 100dvh; display: grid; grid-template-columns: 79px minmax(300px, 357px) minmax(0, 1fr); overflow: hidden; }
+.workspace { height: 100%; height: 100dvh; display: grid; grid-template-columns: 79px minmax(300px, 357px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .rail { background: #101f38; color: #edf6ff; display: flex; flex-direction: column; align-items: center; padding: 25px 8px 17px;
-  gap: 27px; }
+  gap: 27px; overflow-y: auto; }
 .rail > .brand img { width: 43px; height: 43px; }
 .navigation { display: flex; flex-direction: column; align-items: stretch; gap: 7px; }
 .navigation button { min-height: 58px; display: grid; align-content: center; justify-items: center; gap: 5px; padding: 5px 4px;
@@ -321,6 +321,8 @@ time, .muted { color: var(--subtle); }
 @keyframes chat-dot-bounce { 30% { transform: translateY(-3px); } }
 .to-latest { position: absolute; right: 18px; bottom: 14px; background: #fff; box-shadow: 0 3px 14px #193f7623; color: var(--blue); }
 .attachment-placeholder, .attachment { display: flex; align-items: center; gap: 6px; min-height: 38px; }
+.attachment-file { max-width: 100%; text-align: start; overflow-wrap: anywhere; }
+.attachment-file svg { flex: none; }
 .image-preview { display: block; padding: 0; background: transparent; }
 .image-preview img { display: block; object-fit: contain; max-height: 290px; border-radius: 8px; max-width: min(333px, 100%); }
 .bubble img { -webkit-touch-callout: none; user-select: none; -webkit-user-drag: none; }
@@ -348,6 +350,7 @@ audio { width: min(250px, 56vw); max-width: 100%; height: 34px; display: block; 
 .compose-preview > img { width: 46px; height: 36px; object-fit: cover; border-radius: 7px; }
 .compose-preview > div { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .compose-preview > div small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compose-preview > div strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .compose-preview > .icon-button { margin-left: auto; width: 35px; height: 35px; }
 .composer-tools { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 11px 0; }
 .recording { flex: 1; display: flex; align-items: center; gap: 6px; padding-inline: 7px; color: #ab2537; font-size: .84rem; font-weight: 650; }
@@ -553,7 +556,7 @@ audio { width: min(250px, 56vw); max-width: 100%; height: 34px; display: block; 
 .tin-shot-strip { display: flex; align-items: center; gap: 5px; padding-inline: 6px; }
 .tin-shot-strip img { width: 30px; height: 30px; border-radius: 6px; }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (orientation: landscape) and (max-height: 540px) and (pointer: coarse) {
   .tin-sheet { inset: auto 0 0; margin: 0; width: 100%; max-width: 100%; max-height: 78dvh;
     border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom); }
 }
@@ -594,7 +597,7 @@ audio { width: min(250px, 56vw); max-width: 100%; height: 34px; display: block; 
 .call-button.accept:hover:enabled { background: #068f5d; }
 .permission-status { grid-row: 3; align-self: end; text-align: center; font-size: .74rem; color: #c8d7ee; position: absolute; bottom: 65px; width: 100%; }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (orientation: landscape) and (max-height: 540px) and (pointer: coarse) {
   .auth-layout { display: block; background: radial-gradient(ellipse at 45% 5%, #eaf4ff, #fff 49%); }
   .auth-brand-panel { display: none; }
   .auth-main { min-height: 100dvh; align-items: start; padding: max(34px,calc(env(safe-area-inset-top) + 23px)) 22px max(24px,env(safe-area-inset-bottom)); }

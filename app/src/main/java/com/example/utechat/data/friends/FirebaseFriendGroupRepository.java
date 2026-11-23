@@ -3,6 +3,8 @@ package com.example.utechat.data.friends;
 import android.content.Context;
 import com.example.utechat.R;
 import com.example.utechat.core.common.AppLanguage;
+import com.example.utechat.data.auth.PhoneNumbers;
+import com.example.utechat.data.backend.BackendClient;
 import com.example.utechat.domain.model.Conversation;
 import com.example.utechat.domain.model.ConversationMember;
 import com.example.utechat.domain.model.Friendship;
@@ -16,9 +18,11 @@ import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.SetOptions;
 import com.google.firebase.firestore.Source;
 import com.google.firebase.firestore.WriteBatch;
+import org.json.JSONObject;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/** Firestore implementation. Email stays private; search uses public display-name profiles only. */
+/** Searches public display names in Firestore and exact phone numbers on the authenticated backend. */
 public final class FirebaseFriendGroupRepository implements FriendGroupRepository {
     private static final java.util.concurrent.ExecutorService IO = java.util.concurrent.Executors.newCachedThreadPool();
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -27,6 +31,11 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
     public FirebaseFriendGroupRepository(Context context) { this.context = context.getApplicationContext(); }
 
     @Override public void searchUsers(String prefix, Result<List<User>> callback) {
+        String phone = PhoneNumbers.normalize(prefix);
+        if (phone != null) {
+            searchByPhone(phone, callback);
+            return;
+        }
         String value = prefix == null ? "" : prefix.trim().toLowerCase(Locale.ROOT);
         if (value.length() < 2) { callback.success(Collections.emptyList()); return; }
         db.collection("publicProfiles").orderBy("searchName").startAt(value).endAt(value + "\uf8ff")
@@ -35,6 +44,33 @@ public final class FirebaseFriendGroupRepository implements FriendGroupRepositor
                     for (DocumentSnapshot d : s.getDocuments()) users.add(readUser(d));
                     callback.success(users);
                 }).addOnFailureListener(e -> callback.error(AppLanguage.text(context, R.string.friends_load_error)));
+    }
+
+    private void searchByPhone(String phone, Result<List<User>> callback) {
+        IO.execute(() -> {
+            try {
+                byte[] body = new JSONObject().put("phone", phone).toString().getBytes(StandardCharsets.UTF_8);
+                BackendClient.Response response = BackendClient.request(
+                        "POST", "/api/friends/lookup", body, "application/json", true);
+                if (!response.ok()) {
+                    int error = response.status == 429 ? R.string.search_phone_rate_limited : R.string.friends_load_error;
+                    main.post(() -> callback.error(AppLanguage.text(context, error)));
+                    return;
+                }
+                JSONObject profile = response.json().optJSONObject("user");
+                if (profile == null) {
+                    main.post(() -> callback.success(Collections.emptyList()));
+                    return;
+                }
+                User user = new User();
+                user.setUid(profile.getString("id"));
+                user.setDisplayName(profile.getString("displayName"));
+                user.setPhotoUrl(profile.isNull("photoUrl") ? null : profile.getString("photoUrl"));
+                main.post(() -> callback.success(Collections.singletonList(user)));
+            } catch (Exception error) {
+                main.post(() -> callback.error(AppLanguage.text(context, R.string.friends_load_error)));
+            }
+        });
     }
 
     @Override public void findUser(String uid, Result<User> callback) {

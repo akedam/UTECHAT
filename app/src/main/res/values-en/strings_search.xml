@@ -2,8 +2,9 @@
 <resources>
     <string name="search_back">Back</string>
     <string name="search_clear">Clear search</string>
-    <string name="search_input_hint">Find friends, groups, or people</string>
-    <string name="search_start_hint">Search your friends or groups. Enter at least 2 characters to find more people by name.</string>
+    <string name="search_input_hint">Search by name or phone number</string>
+    <string name="search_start_hint">Enter a friend or group name, or a complete registered phone number.</string>
+    <string name="search_phone_rate_limited">Too many phone lookups. Wait one minute and try again.</string>
     <string name="search_groups">Groups</string>
     <string name="search_people">People</string>
     <string name="search_request_sent">Request sent</string>

@@ -195,7 +195,12 @@ public final class SearchActivity extends AppCompatActivity implements SearchRes
         String term=normalize(query.getText().toString());
         List<SearchResultsAdapter.Entry> rows=new ArrayList<>();Set<String> friendIds=new HashSet<>();
         List<User> matching=new ArrayList<>();
-        for(User user:contacts){friendIds.add(user.getUid());if(normalize(user.getDisplayName()).contains(term))matching.add(user);}
+        Set<String> foundIds = new HashSet<>();
+        for (User user : people) foundIds.add(user.getUid());
+        for (User user : contacts) {
+            friendIds.add(user.getUid());
+            if (normalize(user.getDisplayName()).contains(term) || foundIds.contains(user.getUid())) matching.add(user);
+        }
         matching.sort((a,b)->normalize(a.getDisplayName()).compareTo(normalize(b.getDisplayName())));
         if(!matching.isEmpty()){rows.add(SearchResultsAdapter.Entry.section(getString(R.string.friends_title)));for(User user:matching)rows.add(SearchResultsAdapter.Entry.friend(user));}
         List<Conversation> matchingGroups=new ArrayList<>();

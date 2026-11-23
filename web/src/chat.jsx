@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowLeft, Bell, BellOff, Camera, Check, CheckCheck, ChevronRight, CircleAlert, Copy, RefreshCw,
-  Ellipsis, Flag, Forward, HardDrive, Image, List, MessageSquare, Mic, MicOff, PanelTop, Pencil, Phone, PhoneOff, Pin,
+  Ellipsis, FileText, Flag, Forward, HardDrive, Image, List, MessageSquare, Mic, MicOff, PanelTop, Paperclip, Pencil, Phone, PhoneOff, Pin,
   Plus, Reply, Search, Send, Shield, Smile, Square, Star, Trash2, UserRound, Users, Video, VideoOff, X
 } from 'lucide-react'
 import {
@@ -14,6 +14,11 @@ import { PersonRow } from './people'
 
 const voiceType = 'audio/mp4'
 const imageTypes = ['image/jpeg', 'image/png', 'image/webp']
+const fileTypes = new Map([
+  ['pdf', 'application/pdf'],
+  ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  ['txt', 'text/plain']
+])
 async function convertPhoto(file) {
   if (imageTypes.includes(file.type) && file.size <= 8 * 1024 * 1024) return file
   const url = URL.createObjectURL(file)
@@ -135,6 +140,28 @@ function Attachment({ message, open }) {
     <span className="attachment-placeholder"><Image size={22} /> Đang tải ảnh…</span>
 }
 
+function FileAttachment({ message, error }) {
+  const [loading, setLoading] = useState(false)
+  const name = message.fileName || message.content || 'Tệp đính kèm'
+  const save = async () => {
+    setLoading(true)
+    try {
+      const url = URL.createObjectURL(await downloadMedia(message))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = name
+      document.body.append(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } catch (failure) { error(failure) }
+    finally { setLoading(false) }
+  }
+  return <button type="button" className="text-button attachment attachment-file" disabled={loading} onClick={save}>
+    <FileText size={18} aria-hidden="true" /><span>{loading ? 'Đang tải…' : name}</span>
+  </button>
+}
+
 function Quote({ conversation, reply, hidden, original, jump }) {
   const [status, setStatus] = useState(null)
   useEffect(() => {
@@ -180,6 +207,7 @@ function Bubble({ message, group, own, ownUid, person, replies, hidden, action, 
           <span>{option}</span><small>{count} phiếu</small>
         </button>
       })}</div>
+      : message.mediaPath && message.type === 'file' ? <FileAttachment {...{ message, error }} />
       : message.mediaPath && ['image', 'voice'].includes(message.type) ? <Attachment {...{ message, open }} />
         : <p className={message.type === 'recalled' ? 'recalled' : ''}>{messagePreview(message)}</p>}
     <time className="bubble-time">{formatTime(message.sentAt)}</time>
@@ -218,6 +246,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   const [sending, setSending] = useState(false)
   const [blockedAttempt, setBlockedAttempt] = useState(null)
   const [photo, setPhoto] = useState(null)
+  const [file, setFile] = useState(null)
   const [pinned, setPinned] = useState(null)
   const [presence, setPresence] = useState(null)
   const [near, setNear] = useState(true)
@@ -228,6 +257,7 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   const text = useRef(null)
   const imageInput = useRef(null)
   const photoInput = useRef(null)
+  const fileInput = useRef(null)
   const uiSeen = useRef(null)
   const lastBottom = useRef(0)
   const jumping = useRef(false)
@@ -302,24 +332,27 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
   }
   const submit = async (override) => {
     const content = draft.trim()
-    if (sending || blocked || (!content && !photo && !recorder.clip && !override)) return
+    if (sending || blocked || (!content && !photo && !file && !recorder.clip && !override)) return
     if (!navigator.onLine) return
     setSending(true)
     try {
       const clip = recorder.clip
       const data = override || (clip ? { type: 'voice', content: 'Tin nhắn thoại', blob: clip.blob, durationMs: clip.durationMs }
-        : photo ? { type: 'image', content: '', blob: photo.blob } : { type: 'text', content })
+        : photo ? { type: 'image', content: '', blob: photo.blob }
+        : file ? { type: 'file', content: file.file.name, attachment: file } : { type: 'text', content })
       await sendMessage(id, data, reply)
       if (data.type === 'text') saveDraft(current => current === draft ? '' : current)
-      setReply(null); setPhoto(null); recorder.cancel(); setMore(false); scrollBottom()
+      if (data.type !== 'file') setReply(null)
+      setPhoto(null); setFile(null); recorder.cancel(); setMore(false); scrollBottom()
     } catch (failure) {
       if (title.peer && (failure.code === 'permission-denied' || failure.serverCode === 'contact-unavailable' ||
         failure.serverCode === 'forbidden') && await findIncomingBlock(title.peer)) {
-        const attempted = override ? messagePreview(override) : recorder.clip ? 'Tin nhắn thoại' : photo ? 'Hình ảnh' : content
+        const attempted = override ? messagePreview(override) : recorder.clip ? 'Tin nhắn thoại' : photo ? 'Hình ảnh' : file ? file.file.name : content
         setBlockedAttempt(attempted)
         saveDraft(current => current === draft ? '' : current)
         setReply(null)
         setPhoto(null)
+        setFile(null)
         recorder.cancel()
         requestAnimationFrame(scrollBottom)
       } else error(failure)
@@ -330,9 +363,25 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
     try {
       const blob = await convertPhoto(file)
       recorder.cancel()
+      setFile(null)
       setPhoto({ blob, url: URL.createObjectURL(blob) })
       setMore(false)
     } catch { error(new Error('Không mở được ảnh. Hãy chọn ảnh JPEG, PNG hoặc WebP dưới 8 MB.')) }
+  }
+  const attachFile = selected => {
+    if (!selected) return
+    const name = selected.name.trim()
+    const dot = name.lastIndexOf('.')
+    const contentType = dot > 0 && fileTypes.get(name.slice(dot + 1).toLowerCase())
+    if (!contentType || name !== selected.name || name.length > 120 || /[\\/\p{Cc}\p{Cf}]/u.test(name)
+        || !selected.size || selected.size > 8 * 1024 * 1024) {
+      error(new Error('Chọn tệp PDF, DOCX hoặc TXT có tên hợp lệ và dung lượng tối đa 8 MB.'))
+      return
+    }
+    recorder.cancel()
+    setPhoto(null)
+    setFile({ id: crypto.randomUUID(), file: selected, contentType })
+    setMore(false)
   }
   const openActions = message => showDialog({
     type: 'message', message, id, own: message.senderId === ownUid, isPinned: pinned?.id === message.id,
@@ -419,14 +468,17 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
         <div className="bubble"><p>{blockedAttempt}</p></div>
         <span>Bạn đã bị chặn</span><IconButton icon={X} label="Bỏ thông báo" onClick={() => setBlockedAttempt(null)} />
       </div>}
-      {reply && <div className="compose-preview"><Reply size={20} /><div><strong>Trả lời {reply.senderName || 'tin nhắn'}</strong><small>{messagePreview(reply)}</small></div>
+      {reply && !file && <div className="compose-preview"><Reply size={20} /><div><strong>Trả lời {reply.senderName || 'tin nhắn'}</strong><small>{messagePreview(reply)}</small></div>
         <IconButton icon={X} label="Hủy trả lời" onClick={() => setReply(null)} /></div>}
       {photo && <div className="compose-preview"><img src={photo.url} alt="" /><div><strong>Ảnh đính kèm</strong><small>Bấm gửi để chia sẻ ảnh</small></div>
         <IconButton icon={X} label="Bỏ ảnh" onClick={() => setPhoto(null)} /></div>}
+      {file && <div className="compose-preview"><FileText size={20} /><div><strong>{file.file.name}</strong><small>Tệp đính kèm</small></div>
+        <IconButton icon={X} label="Bỏ tệp" disabled={sending} onClick={() => setFile(null)} /></div>}
       {recorder.clip && <div className="compose-preview"><Mic size={20} /><audio src={recorder.clip.url} controls preload="metadata" />
         <IconButton icon={X} label="Bỏ bản ghi" onClick={recorder.cancel} /></div>}
       {more && <div className="composer-tools">
         <button className="secondary compact" onClick={() => photoInput.current?.click()}><Camera size={17} /> Chụp ảnh</button>
+        <button className="secondary compact" disabled={sending} onClick={() => fileInput.current?.click()}><Paperclip size={17} /> Đính kèm tệp</button>
         <button className="secondary compact" onClick={() => showDialog({ type: 'poll', submit: data => sendMessage(id, data) })}>Tạo bình chọn</button>
       </div>}
       <form className="composer" onSubmit={event => { event.preventDefault(); submit() }}>
@@ -442,17 +494,19 @@ export function Chat({ conversation, user, title, people, hidden, draft, saveDra
               }} />
           </div>}
         <input type="file" hidden accept="image/*" ref={imageInput} onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
+        <input type="file" hidden accept=".pdf,.docx,.txt" ref={fileInput}
+          onChange={event => { attachFile(event.target.files[0]); event.target.value = '' }} />
         <input type="file" hidden accept="image/*" capture="environment" ref={photoInput}
           onChange={event => { attach(event.target.files[0]); event.target.value = '' }} />
         {!recorder.recording && <IconButton icon={Ellipsis} label="Thêm tiện ích" onClick={() => setMore(!more)} aria-expanded={more} />}
         <IconButton icon={recorder.recording ? Square : Mic} label={recorder.recording ? 'Dừng ghi âm' : 'Ghi âm'}
           disabled={recorder.busy || sending} onClick={() => {
             if (recorder.recording) recorder.stop()
-            else { setPhoto(null); recorder.start() }
+            else { setPhoto(null); setFile(null); recorder.start() }
           }} />
         {!recorder.recording && <IconButton icon={Image} label="Chọn ảnh" disabled={sending} onClick={() => imageInput.current?.click()} />}
         {!recorder.recording && <button className="send-button" type="submit" aria-label="Gửi tin nhắn" title="Gửi tin nhắn"
-          aria-busy={sending || undefined} disabled={sending || !online || !(draft.trim() || photo || recorder.clip)}>
+          aria-busy={sending || undefined} disabled={sending || !online || !(draft.trim() || photo || file || recorder.clip)}>
           {sending ? <span className="chat-dots" aria-hidden="true"><i /><i /><i /></span> : <Send size={19} aria-hidden="true" />}
         </button>}
       </form>
@@ -599,7 +653,7 @@ export function ChatOptions({ data, close, replace, confirm, error, openCommunit
       {toggle(Star, 'Đánh dấu liên hệ nhanh', 'favorite')}
     </div>
     <div className="options-group">
-      {optionRow(Image, 'Ảnh và liên kết đã chia sẻ', gallery)}
+      {optionRow(Image, 'Ảnh, tệp và liên kết đã chia sẻ', gallery)}
       {previews.length > 0 && <div className="option-thumbnails">
         {previews.map(message => <Attachment key={message.id} message={message} open={() => replace({ type: 'image', message })} />)}
       </div>}
@@ -643,11 +697,14 @@ export function Gallery({ id, hidden, close, open, error }) {
   useEffect(() => watchMessages(id, list => setMessages(list), error), [id, error])
   const visible = messages.filter(row => !hidden.has(`${id}:${row.id}`))
   const images = visible.filter(row => row.type === 'image')
+  const files = visible.filter(row => row.type === 'file' && row.mediaPath)
   const links = [...new Set(visible.filter(row => row.type === 'text' && !row.id.startsWith('call_'))
     .flatMap(row => row.content?.match(/https?:\/\/[^\s<>"']+/gi) || []))]
-  return <Modal title="Ảnh và liên kết gần đây" onClose={close}>
-    {images.length ? <div className="gallery">{images.map(message => <Attachment key={message.id} {...{ message, open }} />)}</div>
-      : !links.length && <Empty icon={Image} title="Chưa có ảnh hoặc liên kết gần đây" />}
+  return <Modal title="Ảnh, tệp và liên kết gần đây" onClose={close}>
+    {!!images.length && <div className="gallery">{images.map(message => <Attachment key={message.id} {...{ message, open }} />)}</div>}
+    {!!files.length && <><h3 className="section-label">Tệp</h3>{files.map(message =>
+      <FileAttachment key={message.id} {...{ message, error }} />)}</>}
+    {!images.length && !files.length && !links.length && <Empty icon={Image} title="Chưa có ảnh, tệp hoặc liên kết gần đây" />}
     {!!links.length && <><h3 className="section-label">Liên kết</h3>{links.map(link =>
       <a className="shared-link" key={link} href={link} target="_blank" rel="noopener noreferrer">{link}</a>)}</>}
   </Modal>

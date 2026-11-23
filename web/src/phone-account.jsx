@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RecaptchaVerifier, signInWithCustomToken, signInWithPhoneNumber, signOut } from 'firebase/auth'
 import { auth, backend, phoneVerificationAuth } from './firebase'
+import { normalizePhoneNumber } from './phone-number'
 
 const failures = {
   'invalid-phone-credentials': 'Số điện thoại hoặc mật khẩu chưa đúng.',
@@ -19,9 +20,8 @@ export async function phoneAuthAvailable(signal) {
 }
 
 function phoneNumber(input) {
-  const value = String(input || '').trim().replace(/[ .()-]/g, '')
-  const number = /^0[35789]\d{8}$/.test(value) ? '+84' + value.slice(1) : value
-  if (!/^\+[1-9]\d{7,14}$/.test(number)) throw new Error('Nhập số di động hợp lệ, ví dụ 0912345678 hoặc +84912345678.')
+  const number = normalizePhoneNumber(input)
+  if (!number) throw new Error('Nhập số di động hợp lệ, ví dụ 0912345678 hoặc +84912345678.')
   return number
 }
 
