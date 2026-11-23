@@ -1,6 +1,7 @@
 "use strict";
 const http = require("node:http");
-const { initializeApp, applicationDefault } = require("firebase-admin/app");
+const { readFileSync } = require("node:fs");
+const { initializeApp, applicationDefault, cert } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -11,12 +12,20 @@ const port = Number(process.env.PORT || 8787), projectId = process.env.FIREBASE_
 const appId = process.env.AGORA_APP_ID, appCertificate = process.env.AGORA_APP_CERTIFICATE;
 if (!projectId || !/^[a-fA-F0-9]{32}$/.test(appId || "") || !/^[a-fA-F0-9]{32}$/.test(appCertificate || ""))
   throw new Error("Configure FIREBASE_PROJECT_ID, AGORA_APP_ID and AGORA_APP_CERTIFICATE on the backend.");
-initializeApp({ credential: applicationDefault(), projectId });
+const phoneAuthEnabled = process.env.UTECHAT_PHONE_AUTH_ENABLED === "true";
+const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+const credentialFile = phoneAuthEnabled && credentialPath
+  ? JSON.parse(readFileSync(credentialPath, "utf8").replace(/^\uFEFF/, ""))
+  : null;
+const credential = credentialFile?.type === "service_account" ? cert(credentialFile) : applicationDefault();
+initializeApp({ credential, projectId });
 const storageKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const storage = process.env.SUPABASE_URL && storageKey
   ? createStorage({ url: process.env.SUPABASE_URL, key: storageKey,
       bucket: process.env.SUPABASE_STORAGE_BUCKET || "utechat-media" }) : null;
 const backend = createBackend({ auth: getAuth(), db: getFirestore(), messaging: getMessaging(), storage,
+  phoneAuthEnabled,
+  legacyEmailAccess: process.env.UTECHAT_LEGACY_EMAIL_ACCESS === "true",
   mintToken: createTokenMinter(appId, appCertificate),
 });
 const server = http.createServer(backend.handle);
