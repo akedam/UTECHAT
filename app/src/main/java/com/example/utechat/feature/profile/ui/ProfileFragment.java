@@ -17,7 +17,8 @@ import androidx.lifecycle.ViewModelProvider;
 
 import com.example.utechat.R;
 import com.example.utechat.feature.profile.viewmodel.ProfileViewModel;
-import com.example.utechat.feature.auth.ui.LoginActivity;
+import com.example.utechat.core.common.AuthGate;
+import com.example.utechat.feature.auth.ui.PhoneAccountActivity;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 import com.example.utechat.app.DevicePresenceManager;
 import com.example.utechat.feature.notifications.NotificationPreferences;
@@ -94,7 +95,9 @@ public class ProfileFragment extends Fragment {
                 .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, requireContext().getPackageName())));
         View changePassword = view.findViewById(R.id.btn_change_password);
         changePassword.setVisibility(AuthRepositoryProvider.isMock(requireContext()) ? View.GONE : View.VISIBLE);
-        changePassword.setOnClickListener(button -> showChangePassword());
+        changePassword.setOnClickListener(button -> startActivity(new Intent(requireContext(), PhoneAccountActivity.class)
+                .putExtra(PhoneAccountActivity.EXTRA_MODE, PhoneAccountActivity.CHANGE)));
+        view.findViewById(R.id.btn_app_language).setOnClickListener(button -> showLanguageOptions());
         View fullscreen = view.findViewById(R.id.btn_call_full_screen);
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             fullscreen.setVisibility(View.VISIBLE);
@@ -126,57 +129,16 @@ public class ProfileFragment extends Fragment {
         tvName.setOnClickListener(v -> btnEditProfile.performClick());
     }
 
-    private void showChangePassword() {
-        var context = requireContext();
-        var fields = new android.widget.LinearLayout(context);
-        fields.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int padding = getResources().getDimensionPixelSize(R.dimen.space_lg);
-        fields.setPadding(padding, 0, padding, 0);
-        var current = passwordField(fields, R.string.account_current_password, "password");
-        var next = passwordField(fields, R.string.account_new_password, "newPassword");
-        var confirmation = passwordField(fields, R.string.account_confirm_password, "newPassword");
-        var dialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.account_change_password).setView(fields)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.account_change_password, null).create();
-        dialog.setOnShowListener(ignored -> {
-            var save = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
-            save.setOnClickListener(button -> {
-                String currentValue = current.getText().toString();
-                String nextValue = next.getText().toString();
-                if (currentValue.isEmpty()) { current.setError(getString(R.string.account_wrong_password)); return; }
-                if (nextValue.equals(currentValue)) { next.setError(getString(R.string.account_password_same)); return; }
-                if (nextValue.length() < 6) { next.setError(getString(R.string.account_password_policy)); return; }
-                if (!nextValue.contentEquals(confirmation.getText())) {
-                    confirmation.setError(getString(R.string.account_password_mismatch));
-                    return;
-                }
-                save.setEnabled(false);
-                AuthRepositoryProvider.get(context).changePassword(currentValue, nextValue,
-                        new com.example.utechat.domain.repository.AuthRepository.Callback<Void>() {
-                            @Override public void onSuccess(Void unused) {
-                                dialog.dismiss();
-                                Toast.makeText(context, R.string.account_password_changed, Toast.LENGTH_SHORT).show();
-                            }
-                            @Override public void onError(com.example.utechat.domain.repository.AuthRepository.AuthException error) {
-                                if (!dialog.isShowing()) return;
-                                save.setEnabled(true);
-                                Toast.makeText(context, error.getMessage(), Toast.LENGTH_LONG).show();
-                            }
-                        });
-            });
-        });
-        dialog.show();
-    }
-
-    private android.widget.EditText passwordField(android.widget.LinearLayout fields, int label, String autofill) {
-        var field = new android.widget.EditText(fields.getContext());
-        field.setSingleLine(true);
-        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        field.setAutofillHints(autofill);
-        field.setHint(label);
-        fields.addView(field);
-        return field;
+    private void showLanguageOptions() {
+        String[] tags = {"vi", "en"};
+        CharSequence[] choices = {getText(R.string.app_language_vietnamese), getText(R.string.app_language_english)};
+        int checked = "en".equals(com.example.utechat.core.common.AppLanguage.tag(requireContext())) ? 1 : 0;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.app_language).setSingleChoiceItems(choices, checked, (dialog, index) -> {
+                    dialog.dismiss();
+                    androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                            androidx.core.os.LocaleListCompat.forLanguageTags(tags[index]));
+                }).setNegativeButton(R.string.friends_cancel_button, null).show();
     }
 
     private void showMyQr() {
@@ -245,7 +207,8 @@ public class ProfileFragment extends Fragment {
         viewModel.getCurrentUser().observe(getViewLifecycleOwner(), user -> {
             if (user == null) return;
             tvName.setText(user.getDisplayName());
-            tvEmail.setText(user.getEmail());
+            var firebase = AuthRepositoryProvider.isMock(requireContext()) ? null : com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+            tvEmail.setText(firebase != null && firebase.getPhoneNumber() != null ? firebase.getPhoneNumber() : user.getEmail());
             tvBio.setText(user.getBio().isEmpty()
                     ? getString(R.string.profile_no_bio)
                     : user.getBio());
@@ -288,7 +251,7 @@ public class ProfileFragment extends Fragment {
             btnLogout.setEnabled(false);
             AuthRepositoryProvider.get(requireContext()).signOut(() -> {
                 if (!isAdded()) return;
-                Intent intent = new Intent(requireContext(), LoginActivity.class);
+                Intent intent = new Intent(requireContext(), AuthGate.loginScreen(requireActivity()));
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 startActivity(intent);
             });

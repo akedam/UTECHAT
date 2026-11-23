@@ -68,6 +68,7 @@ public class ChatActivity extends AppCompatActivity {
                 else forceScrollToBottom = false;
             });
     private final VoiceDialogs voiceDialogs = new VoiceDialogs(this);
+    private final ChatAttachments chatAttachments = new ChatAttachments(this);
     private final ActivityResultLauncher<String> microphone = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(), granted -> {
                 if (isFinishing() || isDestroyed() || this.blockedByMe) return;
@@ -221,6 +222,7 @@ public class ChatActivity extends AppCompatActivity {
         conversationTitle = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TITLE);
         conversationType = getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_TYPE);
         setContentView(R.layout.activity_chat);
+        chatAttachments.restore(savedInstanceState);
         applyChatInsets(getWindow(), findViewById(R.id.chat_root), this, true);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -252,6 +254,7 @@ public class ChatActivity extends AppCompatActivity {
                 MediaRepositoryProvider.get(this));
         adapter.setGroupConversation("group".equalsIgnoreCase(conversationType));
         adapter.setMessageActions(this::showMessageActions, this::jumpToOriginal, voiceDialogs::play);
+        adapter.setAttachmentListener(this::showAttachment);
         adapter.setPeerPhoto(getIntent().getStringExtra(Constants.EXTRA_CONVERSATION_PHOTO));
         if (!"group".equalsIgnoreCase(conversationType)) adapter.setCallListener(media -> {
             if (!blockedByMe) startActivity(CallActivity.outgoingIntent(this, conversationId, conversationTitle, media));
@@ -303,11 +306,13 @@ public class ChatActivity extends AppCompatActivity {
                 List<CharSequence> tools = new ArrayList<>();
                 tools.add(getString(R.string.cd_attach_image));
                 tools.add(getString(R.string.chat_create_poll));
+                tools.add(getString(R.string.cd_attach_file));
                 if (viewModel.canSendVoice()) tools.add(getString(R.string.voice_record));
                 new MaterialAlertDialogBuilder(this).setTitle(R.string.chat_more)
                         .setItems(tools.toArray(new CharSequence[0]), (dialog, which) -> {
                             if (which == 0) btnAttachImage.performClick();
                             else if (which == 1) showCreatePollDialog();
+                            else if (which == 2) chatAttachments.pick();
                             else requestRecording();
                         }).setNegativeButton(R.string.friends_cancel_button, null).show();
         });
@@ -383,6 +388,21 @@ public class ChatActivity extends AppCompatActivity {
             setReply(null);
         }
         else forceScrollToBottom = false;
+    }
+
+    void showAttachment(Message message) { chatAttachments.show(message); }
+
+    void sendAttachment(Uri uri, String name, long size) {
+        if (blockedByMe) return;
+        if (!com.example.utechat.core.common.NetworkState.connected(this)) {
+            Toast.makeText(this, R.string.chat_no_connection, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        forceScrollToBottom = true;
+        if (!viewModel.sendAttachment(uri, name, size)) {
+            forceScrollToBottom = false;
+            Toast.makeText(this, R.string.attachment_unavailable, Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void requestRecording() {
@@ -622,6 +642,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override protected void onSaveInstanceState(@NonNull Bundle state) {
+        chatAttachments.saveState(state);
         if (replyPhotoUri != null) state.putString("reply_photo_uri", replyPhotoUri.toString());
         if (replyTo != null) {
             state.putString("reply_id", replyTo.id);
@@ -894,6 +915,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     @Override protected void onDestroy() {
+        chatAttachments.close();
         if (headerPresence != null) headerPresence.remove();
         if (hiddenListener != null) hiddenListener.remove();
         if (pinListener != null) pinListener.remove();

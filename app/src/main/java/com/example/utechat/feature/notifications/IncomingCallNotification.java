@@ -1,5 +1,7 @@
 package com.example.utechat.feature.notifications;
 
+import com.example.utechat.data.auth.PhoneAccountClient;
+
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -21,7 +23,7 @@ public final class IncomingCallNotification {
         if(callId==null || !callId.matches("[A-Za-z0-9_-]{1,128}"))return;
         Context app=context.getApplicationContext();
         FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
-        if(user==null || !user.isEmailVerified() || !user.getUid().equals(recipientUid))return;
+        if(!PhoneAccountClient.hasVerifiedContact(user) || !user.getUid().equals(recipientUid))return;
         androidx.work.OneTimeWorkRequest.Builder work=new androidx.work.OneTimeWorkRequest.Builder(IncomingCallWorker.class)
                 .setInputData(new androidx.work.Data.Builder().putString("callId",callId).putString("recipientUid",recipientUid)
                         .putLong("receivedAt",System.currentTimeMillis()).build())
@@ -35,13 +37,13 @@ public final class IncomingCallNotification {
     public static void showVerified(Context app,CallSession call) {
             if(call.expiresAt<=System.currentTimeMillis())return;
             FirebaseUser user=FirebaseAuth.getInstance().getCurrentUser();
-            if(user==null || !user.isEmailVerified() || !user.getUid().equals(call.calleeUid))return;
+            if(!PhoneAccountClient.hasVerifiedContact(user) || !user.getUid().equals(call.calleeUid))return;
             String callId=call.id;
             if(!NotificationPreferences.markEventSeen(app,"call:"+call.calleeUid+":"+callId))return;
             NotificationManager manager=app.getSystemService(NotificationManager.class);
             if(manager==null)return;
             NotificationChannel channel = new NotificationChannel(CHANNEL,
-                    app.getString(R.string.call_notification_channel), NotificationManager.IMPORTANCE_HIGH);
+                    com.example.utechat.core.common.AppLanguage.text(app, R.string.call_notification_channel), NotificationManager.IMPORTANCE_HIGH);
             channel.setSound(android.provider.Settings.System.DEFAULT_RINGTONE_URI,
                     new android.media.AudioAttributes.Builder()
                             .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build());
@@ -50,8 +52,8 @@ public final class IncomingCallNotification {
             PendingIntent open=PendingIntent.getActivity(app,callId.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
             NotificationCompat.Builder notification=new NotificationCompat.Builder(app,CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_utechat).setColor(app.getColor(R.color.utechat_primary))
-                    .setContentTitle(app.getString("video".equals(call.mediaType)?R.string.call_incoming_video:R.string.call_incoming_audio))
-                    .setContentText(app.getString(R.string.call_open_incoming)).setContentIntent(open)
+                    .setContentTitle(com.example.utechat.core.common.AppLanguage.text(app, "video".equals(call.mediaType)?R.string.call_incoming_video:R.string.call_incoming_audio))
+                    .setContentText(com.example.utechat.core.common.AppLanguage.text(app, R.string.call_open_incoming)).setContentIntent(open)
                     .setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setAutoCancel(true)
                     .setTimeoutAfter(Math.max(1,call.expiresAt-System.currentTimeMillis()));

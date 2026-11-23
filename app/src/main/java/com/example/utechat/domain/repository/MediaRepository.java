@@ -29,6 +29,16 @@ public interface MediaRepository {
         listener.onError(getUnavailableReason());
         return () -> { };
     }
+    default boolean supportsAttachments() { return false; }
+    default Transfer uploadAttachment(Uri source, String name, String conversationId, String uid,
+                                      String messageId, UploadListener listener) {
+        listener.onError(getUnavailableReason());
+        return () -> { };
+    }
+    default Transfer downloadAttachment(String path, String name, long size, DownloadListener listener) {
+        listener.onError(getUnavailableReason());
+        return () -> { };
+    }
     boolean isAvailable();
     String getUnavailableReason();
 }

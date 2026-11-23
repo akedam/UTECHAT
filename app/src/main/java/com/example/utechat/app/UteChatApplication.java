@@ -1,5 +1,7 @@
 package com.example.utechat.app;
 
+import com.example.utechat.data.auth.PhoneAccountClient;
+
 import android.app.Activity;
 import android.app.Application;
 import android.app.NotificationChannel;
@@ -12,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.CallSession;
 import com.example.utechat.domain.repository.CallRepository;
 import com.example.utechat.data.notifications.PushTokenRepository;
@@ -80,7 +83,7 @@ public final class UteChatApplication extends Application
 
     private void syncSignedInSession(FirebaseUser user) {
         if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Sync call listener: signedIn=" + (user != null) + ", activities=" + startedActivities);
-        if (user == null || !user.isEmailVerified()) {
+        if (!PhoneAccountClient.hasVerifiedContact(user)) {
             presenceManager.stop();
             if (callRepository != null) callRepository.stopIncomingListener();
             return;
@@ -93,7 +96,7 @@ public final class UteChatApplication extends Application
 
     private void onIncomingCall(CallSession call) {
         FirebaseUser user = auth == null ? null : auth.getCurrentUser();
-        if (user == null || !user.isEmailVerified()) return;
+        if (!PhoneAccountClient.hasVerifiedContact(user)) return;
         if (com.example.utechat.BuildConfig.DEBUG) android.util.Log.d("UTEChatCalls", "Incoming callback: active=" + hasActiveCall() + ", resumed=" + (resumedActivity.get() != null));
         if (call == null || call.id.equals(ACTIVE_CALL.get())) return;
         if (hasActiveCall()) {
@@ -123,15 +126,18 @@ public final class UteChatApplication extends Application
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationChannel channel = new NotificationChannel(
                 getString(R.string.notifications_channel_id),
-                getString(R.string.notifications_channel_name), NotificationManager.IMPORTANCE_DEFAULT);
-        channel.setDescription(getString(R.string.notifications_channel_description));
+                AppLanguage.text(this, R.string.notifications_channel_name), NotificationManager.IMPORTANCE_DEFAULT);
+        channel.setDescription(AppLanguage.text(this, R.string.notifications_channel_description));
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.createNotificationChannel(channel);
     }
 
     @Override public void onActivityStarted(@NonNull Activity activity) {
         startedActivities++;
-        if (startedActivities == 1 && auth != null) syncSignedInSession(auth.getCurrentUser());
+        if (startedActivities == 1) {
+            createNotificationChannel();
+            if (auth != null) syncSignedInSession(auth.getCurrentUser());
+        }
     }
 
     @Override public void onActivityStopped(@NonNull Activity activity) {

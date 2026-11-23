@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tin_personal_history">Your activity</string>
+    <string name="tin_personal_history_summary">View the stories you posted</string>
+    <string name="moments_title">Stories</string>
+    <string name="moments_camera">Capture a story</string>
+    <string name="moments_back">Back</string>
+    <string name="moments_notification_title">New story</string>
+    <string name="moments_notification_body">Open UTEChat to view the photo.</string>
+    <string name="moments_widget_label">UTEChat Stories</string>
+    <string name="moments_widget_empty">No new photos</string>
+    <string name="moments_widget_opt_in">Show photos on the widget</string>
+</resources>

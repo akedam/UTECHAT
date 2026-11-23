@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="groups_set_deputy">Appoint deputy</string>
+    <string name="groups_unset_deputy">Remove deputy role</string>
+    <string name="groups_confirm_deputy">Change this member’s role?</string>
+    <string name="groups_upgrade">Upgrade to a community</string>
+    <string name="groups_upgrade_hint">A group must have 5 to 10 members to upgrade. It currently has %1$d.</string>
+    <string name="groups_confirm_upgrade">Upgrade this group to a community? Its members and messages will be kept.</string>
+    <string name="groups_upgrade_error">Only the owner can upgrade a group with 5 to 10 members.</string>
+    <string name="groups_full">This group is full. Upgrade it to a community to add members.</string>
+    <string name="groups_community_full">This community already has 10 members.</string>
+    <string name="groups_type_group_title">Group</string>
+    <string name="groups_type_community_title">Community</string>
+    <string name="groups_type_group">Group · %1$d members</string>
+    <string name="groups_type_community">Community · %1$d members</string>
+    <string name="groups_delete">Delete group</string>
+    <string name="groups_delete_title">Permanently delete the group?</string>
+    <string name="groups_confirm_delete">The group, its members, messages and attachments will be removed for everyone. This cannot be undone.</string>
+    <string name="groups_delete_error">Could not delete the group. Only the owner or the last member can delete it. If deletion is in progress, tap Continue deletion to retry.</string>
+    <string name="groups_deleting">Deleting group…</string>
+    <string name="groups_delete_retry">Continue deletion</string>
+    <string name="groups_single_leave">You are the last member. Choose Delete group in Members to close the group.</string>
+</resources>

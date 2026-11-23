@@ -52,7 +52,7 @@ export async function saveProfile({ displayName, bio, photoUrl }) {
   const now = Date.now()
   const publicData = { uid: user.uid, displayName: name, searchName: name.toLowerCase(), photoUrl: url || null, updatedAt: now }
   const { searchName, ...common } = publicData
-  const ownData = { ...common, email: user.email, bio: bio.trim().slice(0, 300) }
+  const ownData = { ...common, email: user.email || '', bio: bio.trim().slice(0, 300) }
   const batch = writeBatch(db)
   batch.set(doc(cards, user.uid), publicData)
   batch.set(doc(db, 'users', user.uid), ownData)

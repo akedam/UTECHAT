@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phone_login">Đăng nhập bằng số điện thoại</string>
+    <string name="phone_register">Đăng ký bằng số điện thoại</string>
+    <string name="phone_number">Số điện thoại</string>
+    <string name="phone_email_account_unavailable">Tài khoản đã đăng ký bằng email không dùng được với đăng nhập số điện thoại.</string>
+    <string name="phone_invalid">Nhập số di động hợp lệ, ví dụ 0912345678 hoặc +84912345678.</string>
+    <string name="phone_password_policy">Dùng mật khẩu từ 8 ký tự, tối đa 256 byte.</string>
+    <string name="phone_wrong_credentials">Số điện thoại hoặc mật khẩu chưa đúng.</string>
+    <string name="phone_login_rate_limited">Đăng nhập sai quá nhiều lần. Hãy chờ trước khi thử lại.</string>
+    <string name="phone_password_reused">Mật khẩu mới trùng với một mật khẩu gần đây.</string>
+    <string name="phone_account_exists">Số này đã có tài khoản. Hãy đăng nhập hoặc khôi phục mật khẩu.</string>
+    <string name="phone_reset_unavailable">Số điện thoại này chưa được thiết lập để đăng nhập UTEChat.</string>
+    <string name="phone_otp_expired">Phiên xác minh đã hết hạn hoặc mã đã dùng. Hãy gửi mã mới.</string>
+    <string name="phone_auth_unavailable">Đăng nhập bằng số điện thoại chưa khả dụng. Hãy thử lại sau.</string>
+    <string name="phone_send_code">Gửi mã OTP</string>
+    <string name="phone_resend_code">Gửi lại mã OTP</string>
+    <string name="phone_otp_code">Mã OTP 6 số</string>
+    <string name="phone_verify_continue">Xác minh và tiếp tục</string>
+    <string name="phone_code_sent">Đã gửi mã xác minh tới %1$s.</string>
+    <string name="phone_auto_verified">Thiết bị đã tự xác minh số điện thoại. Bạn có thể tiếp tục.</string>
+    <string name="phone_sms_limited">Đã yêu cầu quá nhiều mã. Hãy đợi trước khi thử lại.</string>
+    <string name="phone_sms_error">Chưa xác minh được số. Hãy kiểm tra kết nối và thử lại.</string>
+    <string name="phone_code_invalid">Nhập đúng mã OTP 6 số còn hiệu lực.</string>
+    <item type="id" name="phone_account_number" />
+</resources>

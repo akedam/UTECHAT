@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="attachment_invalid">Choose a valid PDF, DOCX, or TXT file up to 8 MB.</string>
+    <string name="attachment_unavailable">The server does not support attachments yet.</string>
+    <string name="attachment_progress">Uploading file · %1$d%%</string>
+    <string name="attachment_label">%1$s\n%2$s · Tap to open or save</string>
+    <string name="attachment_open">Open file</string>
+    <string name="attachment_save">Save file</string>
+    <string name="attachment_downloading">Downloading file…</string>
+    <string name="attachment_send_error">Could not send the file. Check your connection and try again.</string>
+    <string name="attachment_download_error">Could not download the file. Check your connection or access.</string>
+    <string name="attachment_open_error">Could not open the file. You can save it to your device.</string>
+    <string name="attachment_saved">File saved.</string>
+    <string name="attachment_save_error">Could not save the file. Choose another location or try again.</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="account_change_password">Change password</string>
+    <string name="account_current_password">Current password</string>
+    <string name="account_new_password">New password</string>
+    <string name="account_confirm_password">Confirm new password</string>
+    <string name="account_password_same">Choose a different password.</string>
+    <string name="account_password_mismatch">The new passwords do not match.</string>
+    <string name="account_password_policy">The new password does not meet the requirements.</string>
+    <string name="account_wrong_password">The current password is incorrect.</string>
+    <string name="account_password_changed">Password updated.</string>
+    <string name="open_system_notifications">Open device notification settings</string>
+    <string name="chat_no_connection">You are offline. You can still compose messages.</string>
+    <string name="call_state_reconnecting">Connection lost. Reconnecting…</string>
+    <string name="call_reconnect_failed">The call ended because the connection was lost.</string>
+</resources>

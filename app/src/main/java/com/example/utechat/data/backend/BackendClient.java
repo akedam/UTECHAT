@@ -56,6 +56,23 @@ public final class BackendClient {
     }
     /** Call from an IO thread. Long read timeout deliberately accommodates Render Free cold starts. */
     public static Response request(String method, String route, byte[] body, String contentType, boolean authenticated) throws Exception {
+        return request(method, route, body, contentType, authenticated, null);
+    }
+
+    public static Response request(String method, String route, byte[] body, String contentType,
+                                   boolean authenticated, java.util.function.IntConsumer progress) throws Exception {
+        return request(method, route, body, contentType, authenticated, progress, null);
+    }
+
+    public static Response phoneAuth(String action, JSONObject data, String proofToken) throws Exception {
+        if (!java.util.Set.of("login", "register", "link", "reset", "status").contains(action)) throw new IllegalArgumentException();
+        byte[] body = data == null ? null : data.toString().getBytes(StandardCharsets.UTF_8);
+        return request(data == null ? "GET" : "POST", "/api/phone-auth/" + action, body,
+                "application/json", false, null, proofToken);
+    }
+
+    private static Response request(String method, String route, byte[] body, String contentType,
+                                    boolean authenticated, java.util.function.IntConsumer progress, String proofToken) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) endpoint(route).openConnection();
         try {
             connection.setInstanceFollowRedirects(false);
@@ -69,10 +86,26 @@ public final class BackendClient {
                 if(token==null || current==null || !uid.equals(current.getUid())) throw new IllegalStateException("Session changed");
                 connection.setRequestProperty("Authorization","Bearer "+token);
             }
+            if (proofToken != null) connection.setRequestProperty("Authorization", "Bearer " + proofToken);
             if (body!=null) {
                 connection.setDoOutput(true); connection.setFixedLengthStreamingMode(body.length);
                 connection.setRequestProperty("Content-Type",contentType);
-                try(java.io.OutputStream output=connection.getOutputStream()) { output.write(body); }
+                try (java.io.OutputStream output = connection.getOutputStream()) {
+                    if (progress == null) output.write(body);
+                    else {
+                        for (int offset = 0, last = -1; offset < body.length;) {
+                            if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException();
+                            int length = Math.min(32 * 1024, body.length - offset);
+                            output.write(body, offset, length);
+                            offset += length;
+                            int percent = offset * 95 / body.length;
+                            if (last < 0 || percent - last >= 5 || offset == body.length) {
+                                progress.accept(percent);
+                                last = percent;
+                            }
+                        }
+                    }
+                }
             }
             int status=connection.getResponseCode();
             InputStream stream=status>=200 && status<300 ? connection.getInputStream() : connection.getErrorStream();

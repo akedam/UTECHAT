@@ -33,6 +33,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
     private CallListener callListener;
     private java.util.function.BiConsumer<Message, View> actionListener;
     private java.util.function.Consumer<Message> voiceListener;
+    private java.util.function.Consumer<Message> attachmentListener;
     private java.util.function.Consumer<String> originalListener;
 
     public void setMessageActions(java.util.function.BiConsumer<Message, View> actions,
@@ -55,6 +56,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         return reply.text;
     }
     public void setCallListener(CallListener listener) { callListener = listener; }
+    public void setAttachmentListener(java.util.function.Consumer<Message> listener) { attachmentListener = listener; }
     private final String currentUserId, currentUserName;
     private final RetryListener retryListener;
     private final VoteListener voteListener;
@@ -127,6 +129,8 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         if (message.getDeliveryStatus() == Message.DeliveryStatus.SENDING) {
             if (message.getType() == Message.Type.IMAGE) {
                 status.setText(status.getContext().getString(R.string.image_upload_progress, message.getUploadProgress()));
+            } else if (message.getType() == Message.Type.FILE) {
+                status.setText(status.getContext().getString(R.string.attachment_progress, message.getUploadProgress()));
             } else {
                 status.setText(R.string.message_sending);
             }
@@ -171,8 +175,8 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
         }
         void bind(Message m) {
             String media=com.example.utechat.data.calls.CallHistory.mediaType(m.getContent());
-            String caption=com.example.utechat.data.calls.CallHistory.cardTitle(m.getContent());
-            title.setText(caption.startsWith("Đã nhỡ") ? caption.replace("gọi ", "gọi\n") : caption);
+            String caption = com.example.utechat.data.calls.CallHistoryLabels.title(itemView.getContext(), m.getContent());
+            title.setText(caption);
             time.setText(formattedTime(m));
             icon.setImageResource("video".equals(media)?R.drawable.ic_call_missed_video:R.drawable.ic_call_missed_voice);
             boolean mine=currentUserId!=null&&currentUserId.equals(m.getSenderId());
@@ -208,6 +212,7 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
             content.setOnLongClickListener(view -> showActions(m, view));
             bindReactions(reactions, m, content);
             boolean voice = m.getType() == Message.Type.VOICE;
+            boolean attachment = m.getType() == Message.Type.FILE;
             boolean blueBubble = sent && m.getType() == Message.Type.TEXT;
             if (sent) ((View) content.getParent()).setBackgroundResource(blueBubble ? R.drawable.bg_bubble_sent_text : R.drawable.bg_bubble_sent);
             time.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.chat_meta_on_blue : R.color.chat_meta));
@@ -217,11 +222,21 @@ public class MessagesAdapter extends ListAdapter<Message, RecyclerView.ViewHolde
                 content.setText(itemView.getContext().getString(R.string.voice_row,
                         com.example.utechat.feature.chat.ui.VoiceDialogs.formatDuration(m.getDurationMs())));
             }
+            if (attachment && m.getFileName() != null) {
+                String size = m.getFileSize() > 0 ? android.text.format.Formatter.formatShortFileSize(itemView.getContext(), m.getFileSize()) : "";
+                content.setText(size.isEmpty() ? m.getFileName()
+                        : itemView.getContext().getString(R.string.attachment_label, m.getFileName(), size));
+            }
+            if (m.getType() == Message.Type.RECALLED) content.setText(R.string.message_recalled);
             content.setTextColor(itemView.getContext().getColor(blueBubble ? R.color.white
-                    : voice ? R.color.chat_accent : R.color.chat_text));
-            content.setOnClickListener(voice && m.getMediaUrl() != null && voiceListener != null
-                    ? view -> voiceListener.accept(m) : null);
-            content.setClickable(voice && m.getMediaUrl() != null && voiceListener != null);
+                    : voice || attachment ? R.color.chat_accent : R.color.chat_text));
+            View.OnClickListener open = null;
+            if (m.getMediaUrl() != null) {
+                if (voice && voiceListener != null) open = view -> voiceListener.accept(m);
+                if (attachment && attachmentListener != null) open = view -> attachmentListener.accept(m);
+            }
+            content.setOnClickListener(open);
+            content.setClickable(open != null);
             Message.Reply reply = m.getReply();
             quote.setVisibility(reply == null ? View.GONE : View.VISIBLE);
             if (reply != null) {

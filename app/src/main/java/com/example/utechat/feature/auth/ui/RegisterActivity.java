@@ -17,7 +17,7 @@ import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
 import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 
-/** Registration form for email-and-password accounts. */
+/** Registration screen for the local mock repository. */
 public class RegisterActivity extends AppCompatActivity {
 
     private EditText etDisplayName, etEmail, etPassword, etConfirmPassword;
@@ -29,6 +29,7 @@ public class RegisterActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthRepositoryProvider.isMock(this)) { AuthGate.openAfterAuth(this); return; }
         setContentView(R.layout.activity_register);
 
         bindViews();

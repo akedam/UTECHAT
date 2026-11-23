@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import com.example.utechat.BuildConfig;
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.repository.MediaRepository;
 import com.google.firebase.storage.FileDownloadTask;
 import com.google.firebase.storage.FirebaseStorage;
@@ -46,12 +47,12 @@ public final class FirebaseMediaRepository implements MediaRepository {
                                           String messageId, UploadListener listener) {
         TransferJob job = new TransferJob();
         if (source == null || !validSegment(conversationId) || !validSegment(uid) || !validSegment(messageId)) {
-            postError(job, listener, context.getString(R.string.image_upload_invalid));
+            postError(job, listener, AppLanguage.text(context, R.string.image_upload_invalid));
             return job;
         }
         String contentType = ImageUploadPolicy.normalizeMimeType(resolveMimeType(source));
         if (!ImageUploadPolicy.isSupportedMimeType(contentType)) {
-            postError(job, listener, context.getString(R.string.image_type_unsupported));
+            postError(job, listener, AppLanguage.text(context, R.string.image_type_unsupported));
             return job;
         }
         String path = "conversations/" + conversationId + "/" + uid + "/" + messageId;
@@ -69,7 +70,7 @@ public final class FirebaseMediaRepository implements MediaRepository {
                 listener.onSuccess(path, metadata.getSizeBytes(), ImageUploadPolicy.normalizeMimeType(metadata.getContentType()));
             } else {
                 job.active = false;
-                listener.onError(context.getString(R.string.image_upload_invalid));
+                listener.onError(AppLanguage.text(context, R.string.image_upload_invalid));
             }
         }).addOnFailureListener(error -> {
             if (!job.active) return;
@@ -84,7 +85,7 @@ public final class FirebaseMediaRepository implements MediaRepository {
                 if (!job.active) return;
                 if (staged == null) {
                     job.active = false;
-                    main.post(() -> listener.onError(context.getString(R.string.image_upload_invalid)));
+                    main.post(() -> listener.onError(AppLanguage.text(context, R.string.image_upload_invalid)));
                     return;
                 }
                 StorageMetadata metadata = new StorageMetadata.Builder().setContentType(contentType)
@@ -145,7 +146,7 @@ public final class FirebaseMediaRepository implements MediaRepository {
                         if (valid) listener.onSuccess(destination);
                         else {
                             destination.delete();
-                            listener.onError(context.getString(R.string.image_download_error));
+                            listener.onError(AppLanguage.text(context, R.string.image_download_error));
                         }
                     });
                 });
@@ -240,17 +241,17 @@ public final class FirebaseMediaRepository implements MediaRepository {
             if (!job.active) return;
             job.active = false;
             destination.delete();
-            listener.onError(context.getString(R.string.image_download_error));
+            listener.onError(AppLanguage.text(context, R.string.image_download_error));
         });
     }
     private String storageError(Exception error) {
         if (error instanceof StorageException) {
             int code = ((StorageException) error).getErrorCode();
-            if (code == StorageException.ERROR_NOT_AUTHENTICATED) return context.getString(R.string.auth_session_expired);
-            if (code == StorageException.ERROR_NOT_AUTHORIZED) return context.getString(R.string.image_permission_error);
-            if (code == StorageException.ERROR_QUOTA_EXCEEDED || code == 402) return context.getString(R.string.image_storage_setup_error);
+            if (code == StorageException.ERROR_NOT_AUTHENTICATED) return AppLanguage.text(context, R.string.auth_session_expired);
+            if (code == StorageException.ERROR_NOT_AUTHORIZED) return AppLanguage.text(context, R.string.image_permission_error);
+            if (code == StorageException.ERROR_QUOTA_EXCEEDED || code == 402) return AppLanguage.text(context, R.string.image_storage_setup_error);
         }
-        return context.getString(R.string.image_upload_error);
+        return AppLanguage.text(context, R.string.image_upload_error);
     }
     private String resolveMimeType(Uri source) {
         String mimeType = context.getContentResolver().getType(source);
@@ -267,7 +268,7 @@ public final class FirebaseMediaRepository implements MediaRepository {
         main.post(() -> { if (job.active) { job.active = false; listener.onError(message); } });
     }
     private void postDownloadError(TransferJob job, DownloadListener listener) {
-        main.post(() -> { if (job.active) { job.active = false; listener.onError(context.getString(R.string.image_download_error)); } });
+        main.post(() -> { if (job.active) { job.active = false; listener.onError(AppLanguage.text(context, R.string.image_download_error)); } });
     }
     private final class TransferJob implements Transfer {
         volatile boolean active = true;

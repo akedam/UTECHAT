@@ -14,4 +14,9 @@
         <item name="android:tint">@color/call_control_tint</item>
         <item name="android:foreground">?attr/selectableItemBackgroundBorderless</item>
     </style>
+    <string name="call_history_ended">%1$s · Đã kết thúc</string>
+    <string name="call_history_missed">%1$s · Bỏ lỡ</string>
+    <string name="call_history_rejected">%1$s · Đã từ chối</string>
+    <string name="call_history_busy">%1$s · Người nhận đang bận</string>
+    <string name="call_history_failed">%1$s · Không kết nối được</string>
 </resources>

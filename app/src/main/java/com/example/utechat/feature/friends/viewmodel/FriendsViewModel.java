@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.app.FriendGroupRepositoryProvider;
 import com.example.utechat.app.PresenceRepositoryProvider;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
@@ -40,14 +41,14 @@ public class FriendsViewModel extends AndroidViewModel {
     public User getCurrentUser(){return currentUser;}
     public LiveData<Boolean> getFriendshipsReady() { return friendshipsReady; }
     public void clearSearch(){searchGeneration++;results.setValue(Collections.emptyList());loading.setValue(false);error.setValue(null);}
-    public void search(String term){int generation=++searchGeneration;if(repo==null){error.setValue(getApplication().getString(R.string.friends_firebase_required));return;}loading.setValue(true);
+    public void search(String term){int generation=++searchGeneration;if(repo==null){error.setValue(AppLanguage.text(getApplication(), R.string.friends_firebase_required));return;}loading.setValue(true);
         repo.searchUsers(term,new FriendGroupRepository.Result<List<User>>(){public void success(List<User> users){if(generation!=searchGeneration)return;loading.setValue(false);List<User> matches=new ArrayList<>(users);if(currentUser!=null)matches.removeIf(u->currentUser.getUid().equals(u.getUid()));results.setValue(matches);error.setValue(null);}
             public void error(String s){if(generation!=searchGeneration)return;loading.setValue(false);error.setValue(s);}});}
     public void sendRequest(User user){if(repo==null||currentUser==null)return;loading.setValue(true);repo.requestFriend(currentUser.getUid(),user.getUid(),done());}
     public void accept(Friendship f){repo.respondFriend(f.getId(),true,done());}
     public void decline(Friendship f){repo.respondFriend(f.getId(),false,done());}
     public void remove(Friendship f){repo.removeFriend(f.getId(),done());}
-    public void openDirect(User user,FriendGroupRepository.Result<String> callback){if(repo==null||currentUser==null){callback.error(getApplication().getString(R.string.friends_firebase_required));return;}repo.openDirect(currentUser.getUid(),user.getUid(),callback);}
+    public void openDirect(User user,FriendGroupRepository.Result<String> callback){if(repo==null||currentUser==null){callback.error(AppLanguage.text(getApplication(), R.string.friends_firebase_required));return;}repo.openDirect(currentUser.getUid(),user.getUid(),callback);}
     private FriendGroupRepository.Result<Void> done(){return new FriendGroupRepository.Result<Void>(){public void success(Void v){loading.setValue(false);error.setValue(null);}
         public void error(String message){loading.setValue(false);error.setValue(message);}};}
     private void onFriendships(List<Friendship> all,String failure){if(failure!=null){error.postValue(failure);return;}error.postValue(null);if(currentUser==null)return;

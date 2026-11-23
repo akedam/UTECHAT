@@ -56,7 +56,9 @@ final class TinFilters {
                 var option = records.getJSONObject(index);
                 var margins = option.getJSONArray("insets");
                 int[] insets = {margins.getInt(0), margins.getInt(1), margins.getInt(2), margins.getInt(3)};
-                loaded.add(new Filter(option.getString("id"), option.getString("label"), option.getString("group"),
+                String label = "en".equals(context.getResources().getConfiguration().getLocales().get(0).getLanguage())
+                        ? option.optString("labelEn", option.getString("label")) : option.getString("label");
+                loaded.add(new Filter(option.getString("id"), label, option.getString("group"),
                         option.getInt("cells"), option.getInt("columns"), option.getInt("gap"), insets,
                         Color.parseColor(option.optString("fill", "#cbdced")), option.optString("art", null),
                         option.optString("anchor", null), (float) option.optDouble("scale", 1)));

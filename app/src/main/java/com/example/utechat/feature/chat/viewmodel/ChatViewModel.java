@@ -10,6 +10,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.app.MessageRepositoryProvider;
 import com.example.utechat.app.MediaRepositoryProvider;
 import com.example.utechat.core.common.Resource;
@@ -43,6 +44,7 @@ public class ChatViewModel extends AndroidViewModel {
     private final Set<String> sendingIds = new HashSet<>();
     private final Map<String, Message> localOutgoing = new LinkedHashMap<>();
     private final Map<String, Uri> pendingImageUris = new LinkedHashMap<>();
+    private final Map<String, Uri> pendingAttachments = new LinkedHashMap<>();
     private final Map<String, java.io.File> pendingVoiceFiles = new LinkedHashMap<>();
     private final Map<String, MediaRepository.Transfer> activeUploads = new LinkedHashMap<>();
     private final String currentUserId;
@@ -86,7 +88,7 @@ public class ChatViewModel extends AndroidViewModel {
 
     public void init(String conversationId, String peerName) {
         if (conversationId == null || conversationId.trim().isEmpty()) {
-            messages.setValue(Resource.error(getApplication().getString(R.string.chat_invalid_conversation)));
+            messages.setValue(Resource.error(AppLanguage.text(getApplication(), R.string.chat_invalid_conversation)));
             return;
         }
         if (conversationId.equals(this.conversationId) && subscription != null) return;
@@ -94,13 +96,14 @@ public class ChatViewModel extends AndroidViewModel {
         if (recallSubscription != null) recallSubscription.remove();
         this.conversationId = conversationId;
         this.peerName = peerName == null || peerName.trim().isEmpty()
-                ? getApplication().getString(R.string.conversation_unknown_title) : peerName;
+                ? AppLanguage.text(getApplication(), R.string.conversation_unknown_title) : peerName;
         olderMessages = new ArrayList<>();
         recalls.clear();
         hidden = Collections.emptySet();
         latestMessages = new ArrayList<>();
         localOutgoing.clear();
         pendingImageUris.clear();
+        pendingAttachments.clear();
         loadingHistory = false;
         loadingOlder.setValue(false);
         hasMoreHistory.setValue(false);
@@ -140,10 +143,10 @@ public class ChatViewModel extends AndroidViewModel {
                         if (generation != listenerGeneration) return;
                         if (messages.getValue() == null || messages.getValue().getData() == null) {
                             messages.setValue(Resource.error(message == null || message.trim().isEmpty()
-                                    ? getApplication().getString(R.string.chat_load_error) : message));
+                                    ? AppLanguage.text(getApplication(), R.string.chat_load_error) : message));
                         } else {
                             sendError.setValue(message == null || message.trim().isEmpty()
-                                    ? getApplication().getString(R.string.chat_load_error) : message);
+                                    ? AppLanguage.text(getApplication(), R.string.chat_load_error) : message);
                         }
                     }
                 });
@@ -196,7 +199,7 @@ public class ChatViewModel extends AndroidViewModel {
                         loadingOlder.setValue(false);
                         failedHistoryCursor = cursor;
                         sendError.setValue(message == null || message.trim().isEmpty()
-                                ? getApplication().getString(R.string.chat_history_error) : message);
+                                ? AppLanguage.text(getApplication(), R.string.chat_history_error) : message);
                     }
                 });
     }
@@ -205,11 +208,11 @@ public class ChatViewModel extends AndroidViewModel {
         if (value == null || value.trim().isEmpty()) return false;
         String text = value.trim();
         if (text.length() > MAX_MESSAGE_LENGTH) {
-            sendError.setValue(getApplication().getString(R.string.chat_message_too_long));
+            sendError.setValue(AppLanguage.text(getApplication(), R.string.chat_message_too_long));
             return false;
         }
         if (currentUserId == null || conversationId == null) {
-            sendError.setValue(getApplication().getString(R.string.chat_send_error));
+            sendError.setValue(AppLanguage.text(getApplication(), R.string.chat_send_error));
             return false;
         }
         long now = SystemClock.elapsedRealtime();
@@ -245,7 +248,7 @@ public class ChatViewModel extends AndroidViewModel {
         if (currentUserId == null || conversationId == null) return;
         com.example.utechat.data.chat.HiddenMessages.hide(currentUserId, conversationId, id)
                 .addOnFailureListener(error -> {
-                    if (!cleared) sendError.setValue(getApplication().getString(R.string.message_action_error));
+                    if (!cleared) sendError.setValue(AppLanguage.text(getApplication(), R.string.message_action_error));
                 });
     }
 
@@ -267,7 +270,7 @@ public class ChatViewModel extends AndroidViewModel {
         if (normalizedQuestion.isEmpty() || normalizedQuestion.length() > 200
                 || options.size() < 2 || options.size() > 6
                 || currentUserId == null || conversationId == null) {
-            sendError.setValue(getApplication().getString(R.string.poll_invalid));
+            sendError.setValue(AppLanguage.text(getApplication(), R.string.poll_invalid));
             return false;
         }
         for (String option : options) if (option.length() > 80) {
@@ -295,13 +298,18 @@ public class ChatViewModel extends AndroidViewModel {
                     @Override public void onSuccess() { if (!cleared) sendError.setValue(null); }
                     @Override public void onError(String error) {
                         if (!cleared) sendError.setValue(error == null || error.trim().isEmpty()
-                                ? getApplication().getString(R.string.poll_vote_error) : error);
+                                ? AppLanguage.text(getApplication(), R.string.poll_vote_error) : error);
                     }
                 });
     }
 
     public void retryMessage(String messageId) {
         if (messageId == null || sendingIds.contains(messageId)) return;
+        Message attachment = localOutgoing.get(messageId);
+        if (attachment != null && attachment.getType() == Message.Type.FILE) {
+            if (attachment.getDeliveryStatus() == Message.DeliveryStatus.FAILED) uploadAttachment(attachment);
+            return;
+        }
         for (Message message : currentList()) {
             if (messageId.equals(message.getId())
                     && message.getDeliveryStatus() == Message.DeliveryStatus.FAILED) {
@@ -312,7 +320,7 @@ public class ChatViewModel extends AndroidViewModel {
                     Uri source = pendingImageUris.get(messageId);
                     if (source != null) uploadImage(message, source);
                     else if (message.getMediaUrl() != null) submit(message);
-                    else { updateStatus(messageId, Message.DeliveryStatus.FAILED); sendError.setValue(getApplication().getString(R.string.image_upload_error)); }
+                    else { updateStatus(messageId, Message.DeliveryStatus.FAILED); sendError.setValue(AppLanguage.text(getApplication(), R.string.image_upload_error)); }
                 } else if (message.getType() == Message.Type.VOICE && message.getMediaUrl() == null) {
                     java.io.File source = pendingVoiceFiles.get(messageId);
                     if (source != null) upload(message, source, null);
@@ -321,6 +329,61 @@ public class ChatViewModel extends AndroidViewModel {
                 return;
             }
         }
+    }
+
+    public boolean sendAttachment(Uri source, String name, long size) {
+        if (source == null || currentUserId == null || conversationId == null || repository.isMock()
+                || !mediaRepository.supportsAttachments()) return false;
+        Message message = new Message();
+        message.setId(UUID.randomUUID().toString());
+        message.setConversationId(conversationId);
+        message.setSenderId(currentUserId);
+        message.setSenderName(currentUserName);
+        message.setType(Message.Type.FILE);
+        message.setFileName(name);
+        message.setFileSize(Math.max(0, size));
+        message.setContent(name);
+        message.setSentAt(System.currentTimeMillis());
+        pendingAttachments.put(message.getId(), source);
+        localOutgoing.put(message.getId(), message);
+        uploadAttachment(message);
+        return true;
+    }
+
+    private void uploadAttachment(Message message) {
+        String id = message.getId();
+        Uri uri = pendingAttachments.get(id);
+        if (cleared || uri == null || activeUploads.containsKey(id)) return;
+        message.setDeliveryStatus(Message.DeliveryStatus.SENDING);
+        message.setUploadProgress(0);
+        sendError.setValue(null);
+        publishMessages();
+        MediaRepository.Transfer upload = mediaRepository.uploadAttachment(uri, message.getFileName(),
+                message.getConversationId(), currentUserId, id, new MediaRepository.UploadListener() {
+                    @Override public void onProgress(int percent) {
+                        if (cleared) return;
+                        message.setUploadProgress(percent);
+                        publishMessages();
+                    }
+                    @Override public void onSuccess(String path, long bytes, String type) {
+                        if (cleared) return;
+                        activeUploads.remove(id);
+                        pendingAttachments.remove(id);
+                        message.setMediaUrl(path);
+                        message.setFileSize(bytes);
+                        message.setContentType(type);
+                        updateStatus(id, Message.DeliveryStatus.SENT);
+                        com.example.utechat.data.backend.BackendEvents.message(getApplication(), message.getConversationId(), id);
+                    }
+                    @Override public void onError(String error) {
+                        if (cleared) return;
+                        activeUploads.remove(id);
+                        if (!localOutgoing.containsKey(id)) return;
+                        updateStatus(id, Message.DeliveryStatus.FAILED);
+                        reportSendFailure(id, error);
+                    }
+                });
+        activeUploads.put(id, upload);
     }
 
     private void submit(Message message) {
@@ -362,7 +425,7 @@ public class ChatViewModel extends AndroidViewModel {
     public boolean sendImage(Uri uri, Message.Reply reply) {
         if (uri == null) return false;
         if (!canSendImage()) { sendError.setValue(mediaRepository.getUnavailableReason()); return false; }
-        if (currentUserId == null || conversationId == null) { sendError.setValue(getApplication().getString(R.string.chat_send_error)); return false; }
+        if (currentUserId == null || conversationId == null) { sendError.setValue(AppLanguage.text(getApplication(), R.string.chat_send_error)); return false; }
         Message message = new Message();
         message.setId(UUID.randomUUID().toString()); message.setConversationId(conversationId);
         message.setSenderId(currentUserId); message.setSenderName(currentUserName); message.setType(Message.Type.IMAGE);
@@ -408,7 +471,7 @@ public class ChatViewModel extends AndroidViewModel {
 
     public void forward(Message original, String destination, MessageRepository.SendCallback callback) {
         if (!canForward(original) || currentUserId == null) {
-            callback.onError(getApplication().getString(R.string.message_action_error));
+            callback.onError(AppLanguage.text(getApplication(), R.string.message_action_error));
             return;
         }
         Message message = new Message();
@@ -478,7 +541,7 @@ public class ChatViewModel extends AndroidViewModel {
                         activeUploads.remove(message.getId());
                         updateStatus(message.getId(), Message.DeliveryStatus.FAILED);
                         reportSendFailure(message.getId(), error == null || error.trim().isEmpty()
-                                ? getApplication().getString(R.string.image_upload_error) : error);
+                                ? AppLanguage.text(getApplication(), R.string.image_upload_error) : error);
                     }
                 };
         MediaRepository.Transfer transfer = voice == null
@@ -498,7 +561,7 @@ public class ChatViewModel extends AndroidViewModel {
                     Message pending = localOutgoing.get(id);
                     if (cleared || pending == null || pending.getDeliveryStatus() != Message.DeliveryStatus.FAILED) return;
                     boolean blocked = result.isSuccessful() && result.getResult().exists();
-                    sendError.setValue(blocked ? getApplication().getString(R.string.chat_blocked_by_peer) : error);
+                    sendError.setValue(blocked ? AppLanguage.text(getApplication(), R.string.chat_blocked_by_peer) : error);
                 });
     }
 
@@ -530,7 +593,7 @@ public class ChatViewModel extends AndroidViewModel {
             Message.Reply reply = message.getReply();
             if (reply != null && (recalls.containsKey(reply.id) || hidden.contains(reply.id))) {
                 message.setReply(new Message.Reply(reply.id, reply.name,
-                        getApplication().getString(R.string.message_unavailable), "text"));
+                        AppLanguage.text(getApplication(), R.string.message_unavailable), "text"));
             }
         }
         merged.sort(Comparator.comparingLong(Message::getSentAt).thenComparing(
@@ -599,6 +662,7 @@ public class ChatViewModel extends AndroidViewModel {
         activeUploads.clear(); pendingImageUris.clear();
         for (java.io.File file : pendingVoiceFiles.values()) file.delete();
         pendingVoiceFiles.clear();
+        pendingAttachments.clear();
         removeSubscription();
         super.onCleared();
     }

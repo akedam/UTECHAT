@@ -155,6 +155,10 @@ public class ConversationsAdapter extends ListAdapter<Conversation, Conversation
             if ("image".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.conversation_preview_image);
             if ("voice".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.voice_message);
             if ("file".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.conversation_preview_file);
+            if ("recalled".equalsIgnoreCase(type)) return itemView.getContext().getString(R.string.message_recalled);
+            if (com.example.utechat.data.calls.CallHistory.isHistoryMessage(conversation.getLastMessageId(), message)) {
+                return com.example.utechat.data.calls.CallHistoryLabels.title(itemView.getContext(), message);
+            }
             if (hasText(message)) return message.trim();
             return itemView.getContext().getString(R.string.conversation_no_preview);
         }

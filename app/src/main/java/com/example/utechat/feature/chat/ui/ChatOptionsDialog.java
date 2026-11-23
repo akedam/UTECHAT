@@ -183,7 +183,7 @@ final class ChatOptionsDialog extends Dialog {
         EditText input = new EditText(host); input.setSingleLine(true); input.setText(prefs.title(originalTitle));
         input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(80)});
         new MaterialAlertDialogBuilder(host).setTitle(R.string.chat_nickname).setMessage(R.string.chat_local_setting).setView(input)
-                .setNegativeButton(R.string.friends_cancel_button,null).setNeutralButton("Mặc định",(d,w)->{prefs.setTitle("");title.setText(originalTitle);host.applyConversationAppearance();})
+                .setNegativeButton(R.string.friends_cancel_button,null).setNeutralButton(R.string.chat_use_default,(d,w)->{prefs.setTitle("");title.setText(originalTitle);host.applyConversationAppearance();})
                 .setPositiveButton(R.string.community_close,(d,w)->{prefs.setTitle(input.getText().toString());title.setText(prefs.title(originalTitle));host.applyConversationAppearance();}).show();
     }
     private void wallpaper() {
@@ -273,7 +273,13 @@ final class ChatOptionsDialog extends Dialog {
         content.addView(label(host.getString(R.string.chat_loaded_scope),12));int count=0;
         for(Message m:messages){
             if(m.getType()==Message.Type.IMAGE){ImageView image=thumbnail(m);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(180));lp.topMargin=dp(12);content.addView(image,lp);count++;}
-            if(m.getType()==Message.Type.FILE){TextView file=label(m.getFileName()==null?"Tệp đính kèm":m.getFileName(),15);file.setPadding(0,dp(12),0,dp(12));content.addView(file);count++;}
+            if (m.getType() == Message.Type.FILE) {
+                TextView file = label(m.getFileName() == null ? host.getString(R.string.cd_attach_file) : m.getFileName(), 15);
+                file.setPadding(0, dp(12), 0, dp(12));
+                if (m.getMediaUrl() != null) file.setOnClickListener(view -> host.showAttachment(m));
+                content.addView(file);
+                count++;
+            }
             java.util.regex.Matcher matcher=android.util.Patterns.WEB_URL.matcher(m.getContent()==null?"":m.getContent());
             while(matcher.find()){String url=matcher.group();if(!url.startsWith("https://")&&!url.startsWith("http://"))continue;
                 TextView link=label(url,14);link.setTextColor(color(R.color.utechat_primary));link.setPadding(0,dp(12),0,dp(12));link.setMinHeight(dp(48));link.setOnClickListener(v->{try{host.startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(android.content.ActivityNotFoundException e){Toast.makeText(host,url,Toast.LENGTH_LONG).show();}});content.addView(link);count++;

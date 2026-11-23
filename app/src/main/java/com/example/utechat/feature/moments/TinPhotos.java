@@ -11,6 +11,7 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.os.Build;
+import com.example.utechat.R;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -19,11 +20,11 @@ import java.util.List;
 final class TinPhotos {
     static final int SIZE = 960;
     enum Tone {
-        NORMAL("Tự nhiên", 1, 1, 1), PEACH("Hồng đào", 1.12f, 1.02f, .91f),
-        SKY("Xanh mây", .89f, 1.04f, 1.13f), MONO("Đen trắng", 1, 1, 1);
-        final String label;
+        NORMAL(R.string.tin_tone_natural, 1, 1, 1), PEACH(R.string.tin_tone_peach, 1.12f, 1.02f, .91f),
+        SKY(R.string.tin_tone_sky, .89f, 1.04f, 1.13f), MONO(R.string.tin_tone_mono, 1, 1, 1);
+        final int label;
         final float red, green, blue;
-        Tone(String label, float red, float green, float blue) {
+        Tone(int label, float red, float green, float blue) {
             this.label = label; this.red = red; this.green = green; this.blue = blue;
         }
         ColorMatrixColorFilter filter() {

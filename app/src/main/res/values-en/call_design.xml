@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="call_again">Call back</string>
+    <string name="call_card_accessibility">%1$s, %2$s. Call back</string>
+    <string name="call_camera_preview_unavailable">The camera preview is unavailable.</string>
+    <string name="call_history_ended">%1$s · Ended</string>
+    <string name="call_history_missed">%1$s · Missed</string>
+    <string name="call_history_rejected">%1$s · Declined</string>
+    <string name="call_history_busy">%1$s · Recipient busy</string>
+    <string name="call_history_failed">%1$s · Connection failed</string>
+</resources>

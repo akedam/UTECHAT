@@ -2,4 +2,5 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="friend_qr" path="friend-qr/" />
     <cache-path name="reply_photos" path="reply-photos/" />
+    <cache-path name="chat_attachments" path="chat-attachments/" />
 </paths>

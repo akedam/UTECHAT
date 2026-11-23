@@ -23,9 +23,14 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/app_locales"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.UTEChat">
+        <service android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false" android:exported="false">
+            <meta-data android:name="autoStoreLocales" android:value="true" />
+        </service>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_utechat" />
@@ -57,8 +62,9 @@
         <activity android:name=".feature.calls.ui.CallActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".feature.profile.ui.ProfileEditActivity" android:exported="false" />
         <activity android:name=".feature.auth.ui.RegisterActivity" android:exported="false" />
-        <activity android:name=".feature.auth.ui.VerifyEmailActivity" android:exported="false" />
         <activity android:name=".feature.auth.ui.LoginActivity" android:exported="false" />
+        <activity android:name=".feature.auth.ui.PhoneAccountActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity android:name=".feature.main.ui.MainActivity" android:exported="false" />
         <activity android:name=".feature.search.ui.SearchActivity" android:exported="false" android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
         <activity android:name=".feature.friends.qr.PortraitQrScannerActivity" android:exported="false"

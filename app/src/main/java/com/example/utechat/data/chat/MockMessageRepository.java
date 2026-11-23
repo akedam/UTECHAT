@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.Message;
 import com.example.utechat.domain.model.MessagePage;
 import com.example.utechat.domain.repository.MessageRepository;
@@ -51,7 +52,7 @@ public final class MockMessageRepository implements MessageRepository {
     @Override
     public synchronized void sendText(String conversationId, Message message, SendCallback callback) {
         ensureSamples(conversationId, message.getSenderId(), message.getSenderName(),
-                context.getString(R.string.mock_peer_name));
+                AppLanguage.text(context, R.string.mock_peer_name));
         List<Message> list = conversations.get(conversationId);
         for (Message existing : list) {
             if (existing.getId().equals(message.getId())) {
@@ -68,11 +69,11 @@ public final class MockMessageRepository implements MessageRepository {
 
     @Override
     public synchronized void sendImage(String conversationId, Message message, SendCallback callback) {
-        mainHandler.post(() -> callback.onError(context.getString(R.string.image_storage_setup_error)));
+        mainHandler.post(() -> callback.onError(AppLanguage.text(context, R.string.image_storage_setup_error)));
     }
 
     @Override public void sendVoice(String conversationId, Message message, SendCallback callback) {
-        mainHandler.post(() -> callback.onError(context.getString(R.string.voice_unavailable)));
+        mainHandler.post(() -> callback.onError(AppLanguage.text(context, R.string.voice_unavailable)));
     }
 
     @Override public synchronized void sendPoll(String conversationId, Message message, SendCallback callback) {
@@ -103,7 +104,7 @@ public final class MockMessageRepository implements MessageRepository {
                 notifyListeners(conversationId); mainHandler.post(callback::onSuccess); return;
             }
         }
-        mainHandler.post(() -> callback.onError(context.getString(R.string.poll_vote_error)));
+        mainHandler.post(() -> callback.onError(AppLanguage.text(context, R.string.poll_vote_error)));
     }
 
     @Override
@@ -115,11 +116,11 @@ public final class MockMessageRepository implements MessageRepository {
         long now = System.currentTimeMillis();
         List<Message> sample = new ArrayList<>();
         sample.add(sample("mock_message_1", "mock_peer_uid", peerName,
-                context.getString(R.string.mock_chat_received_one), now - 10 * 60_000L));
+                AppLanguage.text(context, R.string.mock_chat_received_one), now - 10 * 60_000L));
         sample.add(sample("mock_message_2", currentUserId, currentUserName,
-                context.getString(R.string.mock_chat_sent_one), now - 9 * 60_000L));
+                AppLanguage.text(context, R.string.mock_chat_sent_one), now - 9 * 60_000L));
         sample.add(sample("mock_message_3", "mock_peer_uid", peerName,
-                context.getString(R.string.mock_chat_received_two), now - 8 * 60_000L));
+                AppLanguage.text(context, R.string.mock_chat_received_two), now - 8 * 60_000L));
         conversations.put(conversationId, sample);
     }
 

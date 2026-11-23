@@ -8,7 +8,11 @@ service firebase.storage {
       return /databases/(default)/documents/conversations/$(conversationId)/members/$(uid);
     }
     function isParticipant(conversationId) {
-      return request.auth != null && request.auth.token.email_verified == true
+      return request.auth != null
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'custom'
+        && request.auth.token.get('utechatPhone', false) == true
+        && request.auth.token.get('phone_number', '') != ''
+        && request.auth.token.get('email', '') == ''
         && firestore.exists(conversationPath(conversationId))
         && firestore.get(conversationPath(conversationId)).data.get('lifecycle', 'active') == 'active'
         && request.auth.uid in firestore.get(conversationPath(conversationId)).data.participantIds

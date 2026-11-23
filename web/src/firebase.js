@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectAuthEmulator, getAuth, inMemoryPersistence, initializeAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import config from './firebase-config.json'
@@ -21,13 +21,21 @@ if (emulator) {
   connectDatabaseEmulator(presenceDb, '127.0.0.1', 9000)
 }
 
+let smsAuth
+export function phoneVerificationAuth() {
+  if (smsAuth) return smsAuth
+  smsAuth = initializeAuth(initializeApp(app.options, 'utechat-sms-verification'), { persistence: inMemoryPersistence })
+  if (emulator) connectAuthEmulator(smsAuth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  return smsAuth
+}
+
 export const backend = (import.meta.env.VITE_BACKEND_URL ||
   (import.meta.env.DEV ? '' : 'https://utechat-test-backend.onrender.com')).replace(/\/$/, '')
 
 const backendErrors = {
   'group-delete-forbidden': 'Chỉ trưởng nhóm hoặc thành viên cuối cùng có thể xóa nhóm.',
   'not-found': 'Dữ liệu này không còn tồn tại.',
-  'email-unverified': 'Bạn cần xác minh email trước.',
+  'phone-session-required': 'Hãy đăng nhập lại bằng số điện thoại để tiếp tục.',
   'rate-limited': 'Bạn thao tác quá nhanh. Hãy thử lại sau.',
   'invalid-voice': 'Trình duyệt tạo bản ghi không đúng định dạng AAC.',
   'contact-blocked': 'Hiện không thể liên hệ tài khoản này.'

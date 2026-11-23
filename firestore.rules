@@ -1,7 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'custom'
+        && request.auth.token.get('utechatPhone', false) == true
+        && request.auth.token.get('phone_number', '') != ''
+        && request.auth.token.get('email', '') == '';
+    }
     function contactAllowed(first, second) {
       return !exists(/databases/$(database)/documents/users/$(first)/blocked/$(second))
         && !exists(/databases/$(database)/documents/users/$(second)/blocked/$(first));
@@ -35,7 +41,7 @@ service cloud.firestore {
       function validProfile() {
         return request.resource.data.keys().hasOnly(['uid','displayName','email','bio','photoUrl','updatedAt'])
           && request.resource.data.uid == userId
-          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.email == request.auth.token.get('email', '')
           && request.resource.data.displayName is string
           && request.resource.data.displayName.size() > 0
           && request.resource.data.displayName.size() <= 80
@@ -502,7 +508,7 @@ service cloud.firestore {
             && reply.name is string && reply.name == original.data.get('senderName', '')
             && reply.text is string && reply.text == original.data.get('content', '')
             && reply.type == original.data.type
-            && reply.type in ['text', 'poll', 'image', 'voice'];
+            && reply.type in ['text', 'poll', 'image', 'voice', 'file'];
         }
         function validTextMessage() {
           let profile = /databases/$(database)/documents/publicProfiles/$(request.auth.uid);

@@ -1,8 +1,10 @@
 package com.example.utechat.feature.moments;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import com.example.utechat.R;
 import com.example.utechat.data.backend.BackendClient;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
@@ -37,22 +39,22 @@ public final class MomentApi {
                 .put("action", action).put("value", value));
     }
 
-    static String publishError(Exception error) {
-        if (!(error instanceof Failure)) return "Chưa gửi được ảnh. Kiểm tra kết nối và thử lại.";
+    static String publishError(Context context, Exception error) {
+        if (!(error instanceof Failure)) return context.getString(R.string.tin_publish_network);
         Failure failure = (Failure) error;
-        if (failure.status == 404) return "Máy chủ đang chạy phiên bản chưa hỗ trợ đăng Tin.";
-        if (failure.status == 401) return "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.";
+        if (failure.status == 404) return context.getString(R.string.tin_publish_unavailable);
+        if (failure.status == 401) return context.getString(R.string.auth_session_expired);
         switch (failure.getMessage()) {
-            case "moment-friend-required": return "Một người nhận không còn có thể xem tin. Hãy chọn lại.";
-            case "media-not-configured": return "Máy chủ chưa bật kho ảnh cho Tin. Ảnh vẫn ở màn hình này.";
-            case "moment-storage-unavailable": return "Kho ảnh đang gián đoạn. Hãy thử đăng lại.";
+            case "moment-friend-required": return context.getString(R.string.tin_publish_recipient);
+            case "media-not-configured": return context.getString(R.string.tin_publish_setup);
+            case "moment-storage-unavailable": return context.getString(R.string.tin_publish_storage_error);
             case "invalid-image":
-            case "too-large": return "Ảnh không hợp lệ hoặc quá lớn. Hãy chọn hoặc chụp ảnh khác.";
-            case "daily-upload-limit": return "Bạn đã dùng hết dung lượng đăng ảnh trong ngày.";
-            case "rate-limited": return "Bạn thao tác quá nhanh. Hãy thử lại sau.";
-            case "moment-conflict": return "Lần đăng trước đã thay đổi. Hãy bỏ ảnh và chọn lại.";
-            case "email-unverified": return "Bạn cần xác minh email trước khi đăng tin.";
-            default: return "Chưa đăng được tin. Bạn có thể thử lại.";
+            case "too-large": return context.getString(R.string.tin_publish_invalid);
+            case "daily-upload-limit": return context.getString(R.string.tin_publish_quota);
+            case "rate-limited": return context.getString(R.string.tin_publish_rate);
+            case "moment-conflict": return context.getString(R.string.tin_publish_conflict);
+            case "phone-session-required": return context.getString(R.string.auth_session_expired);
+            default: return context.getString(R.string.tin_publish_error);
         }
     }
 

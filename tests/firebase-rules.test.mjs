@@ -15,8 +15,32 @@ const databasePort = Number(process.env.FIREBASE_DATABASE_EMULATOR_PORT ?? 19000
 let testEnv;
 
 function verifiedContext(uid) {
-  return testEnv.authenticatedContext(uid, { email: `${uid}@example.test`, email_verified: true });
+  return testEnv.authenticatedContext(uid, {
+    phone_number: '+16505550101', utechatPhone: true, firebase: { sign_in_provider: 'custom' }
+  });
 }
+
+test('only established phone sessions can use their profile and presence', async () => {
+  const uid = 'phone-session-user';
+  const profile = { uid, displayName: 'Phone User', photoUrl: null, updatedAt: 1, email: '', bio: '' };
+  const context = (provider, established, email = undefined) => testEnv.authenticatedContext(uid, {
+    phone_number: '+16505550101', firebase: { sign_in_provider: provider },
+    utechatPhone: established, ...(email ? { email, email_verified: true } : {})
+  });
+  const active = context('custom', true);
+  const untrusted = [context('phone', true), context('custom', false), context('password', false, 'old@example.test'),
+    context('custom', true, 'old@example.test')];
+  await assertSucceeds(setDoc(doc(active.firestore(), 'users', uid), profile));
+  await assertSucceeds(getDoc(doc(active.firestore(), 'users', uid)));
+  for (const [path, value] of [['visible', true], ['lastSeen', 1800000000000], ['connections/device', true]]) {
+    await assertSucceeds(setDatabaseValue(databaseRef(active.database(), `presence/${uid}/${path}`), value));
+  }
+  for (const proof of untrusted) {
+    await assertFails(getDoc(doc(proof.firestore(), 'users', uid)));
+    await assertFails(setDatabaseValue(databaseRef(proof.database(), `presence/${uid}/lastSeen`), 1800000000001));
+  }
+  await assertFails(getDoc(doc(active.firestore(), 'backendPhoneCredentials', uid)));
+});
 
 test('message reactions are own-only; only the sender can recall and clear summary and pin atomically', async () => {
   const id = 'actions-test';
@@ -60,6 +84,31 @@ test('hidden messages are private to the account and leave the shared message in
   await assertFails(getDoc(doc(bob, path)));
   await assertFails(setDoc(doc(bob, path), {conversationId, messageId: 'private-hide'}));
   await assertFails(setDoc(doc(alice, path), {conversationId, messageId: 'wrong'}));
+});
+
+test('server-published attachments are readable and quotable only in their conversation', async () => {
+  const id = 'attachment-chat';
+  const root = `conversations/${id}`;
+  const file = { senderId: 'alice', senderName: 'Alice', type: 'file', content: 'notes.pdf',
+    fileName: 'notes.pdf', fileSize: 100, contentType: 'application/pdf', mediaPath: `${root}/alice/document`,
+    sentAt: 80, createdAt: 80, readBy: ['alice'] };
+  await testEnv.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, root), { type: 'direct', participantIds: ['alice', 'bob'], lastMessage: file.fileName,
+      lastMessageType: 'file', lastMessageAt: 80, lastMessageId: 'document' });
+    await setDoc(doc(db, root, 'messages', 'document'), file);
+  });
+  const alice = verifiedContext('alice').firestore();
+  const bob = verifiedContext('bob').firestore();
+  const outsider = verifiedContext('mallory').firestore();
+  await assertSucceeds(getDoc(doc(bob, root, 'messages', 'document')));
+  await assertFails(getDoc(doc(outsider, root, 'messages', 'document')));
+  await assertFails(setDoc(doc(alice, root, 'messages', 'forged'), { ...file, mediaPath: `${root}/alice/forged` }));
+  const quote = { id: 'document', name: file.senderName, text: file.fileName, type: 'file' };
+  const reply = { senderId: 'bob', senderName: 'Bob', type: 'text', content: 'Thanks!',
+    sentAt: 81, createdAt: 81, readBy: ['bob'], reply: quote };
+  await assertFails(setDoc(doc(bob, root, 'messages', 'altered'), { ...reply, reply: { ...quote, text: 'other.pdf' } }));
+  await assertSucceeds(setDoc(doc(bob, root, 'messages', 'reply'), reply));
 });
 
 test('an unverified account cannot access profiles, chat, presence or media', async () => {

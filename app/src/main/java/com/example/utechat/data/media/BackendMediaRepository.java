@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.data.backend.BackendClient;
 import com.example.utechat.domain.repository.MediaRepository;
 import com.google.firebase.auth.FirebaseAuth;
@@ -52,7 +53,7 @@ public final class BackendMediaRepository implements MediaRepository {
                         || !type.equals(result.getString("contentType")))throw new Exception();
                 main.post(() -> {if(job.active){job.active=false;listener.onSuccess(path,bytes.length,contentType);}});
             } catch(Exception error) {
-                main.post(() -> {if(job.active){job.active=false;listener.onError(context.getString(R.string.image_upload_error));}});
+                main.post(() -> {if(job.active){job.active=false;listener.onError(AppLanguage.text(context, R.string.image_upload_error));}});
             }
         });
         return job;
@@ -62,6 +63,83 @@ public final class BackendMediaRepository implements MediaRepository {
     }
 
     @Override public boolean supportsVoice() { return isAvailable(); }
+    @Override public boolean supportsAttachments() { return isAvailable(); }
+
+    @Override public Transfer uploadAttachment(Uri source, String name, String conversationId, String uid,
+                                               String messageId, UploadListener listener) {
+        Job job = new Job();
+        job.future = IO.submit(() -> {
+            try {
+                String type = AttachmentPolicy.typeForName(name);
+                if (type == null || !segment(conversationId) || !segment(uid) || !segment(messageId)) throw new IllegalArgumentException();
+                byte[] bytes;
+                try (InputStream input = context.getContentResolver().openInputStream(source)) {
+                    bytes = readBounded(input, AttachmentPolicy.MAX_BYTES);
+                }
+                if (bytes.length == 0) { failUpload(job, listener, R.string.attachment_invalid); return; }
+                if (!job.active) return;
+                String path = "conversations/" + conversationId + "/" + uid + "/" + messageId;
+                var response = BackendClient.request("PUT", attachmentRoute(path) + "&name=" + URLEncoder.encode(name, "UTF-8"),
+                        bytes, type, true, percent -> main.post(() -> { if (job.active) listener.onProgress(percent); }));
+                if (!response.ok()) {
+                    int error = response.status == 400 || response.status == 413 ? R.string.attachment_invalid
+                            : response.status == 404 ? R.string.attachment_unavailable : R.string.attachment_send_error;
+                    failUpload(job, listener, error);
+                    return;
+                }
+                var result = response.json();
+                if (!path.equals(result.getString("path")) || result.getLong("size") != bytes.length
+                        || !type.equals(result.getString("contentType"))) throw new IllegalStateException();
+                main.post(() -> {
+                    if (!job.active) return;
+                    job.active = false;
+                    listener.onSuccess(path, bytes.length, type);
+                });
+            } catch (AttachmentTooLarge error) {
+                failUpload(job, listener, R.string.attachment_invalid);
+            } catch (Exception error) {
+                failUpload(job, listener, R.string.attachment_send_error);
+            }
+        });
+        return job;
+    }
+
+    @Override public Transfer downloadAttachment(String path, String name, long size, DownloadListener listener) {
+        Job job = new Job();
+        job.future = IO.submit(() -> {
+            File file = null;
+            try {
+                String type = AttachmentPolicy.typeForName(name);
+                String uid = FirebaseAuth.getInstance().getUid();
+                if (uid == null || !validPath(path) || type == null || size <= 0 || size > AttachmentPolicy.MAX_BYTES) throw new IllegalArgumentException();
+                var response = BackendClient.request("GET", attachmentRoute(path), null, null, true);
+                if (!response.ok() || !type.equals(response.contentType) || response.body.length != size
+                        || !uid.equals(FirebaseAuth.getInstance().getUid())) throw new IllegalStateException();
+                if (!job.active) return;
+                File base = new File(context.getCacheDir(), "chat-attachments");
+                if (!base.isDirectory() && !base.mkdirs() && !base.isDirectory()) throw new java.io.IOException();
+                File directory = java.nio.file.Files.createTempDirectory(base.toPath(), "download-").toFile();
+                file = new File(directory, name);
+                try (FileOutputStream output = new FileOutputStream(file)) { output.write(response.body); }
+                File downloaded = file;
+                main.post(() -> {
+                    if (!job.active || !uid.equals(FirebaseAuth.getInstance().getUid())) {
+                        downloaded.delete(); downloaded.getParentFile().delete(); return;
+                    }
+                    job.active = false;
+                    listener.onSuccess(downloaded);
+                });
+            } catch (Exception error) {
+                if (file != null) { file.delete(); file.getParentFile().delete(); }
+                main.post(() -> {
+                    if (!job.active) return;
+                    job.active = false;
+                    listener.onError(AppLanguage.text(context, R.string.attachment_download_error));
+                });
+            }
+        });
+        return job;
+    }
 
     @Override public Transfer uploadVoice(File source, String conversationId, String uid, String messageId,
                                           UploadListener listener) {
@@ -101,7 +179,7 @@ public final class BackendMediaRepository implements MediaRepository {
         main.post(() -> {
             if (job.active) {
                 job.active = false;
-                listener.onError(context.getString(error));
+                listener.onError(AppLanguage.text(context, error));
             }
         });
     }
@@ -133,7 +211,7 @@ public final class BackendMediaRepository implements MediaRepository {
                 main.post(() -> {if(job.active){job.active=false;listener.onSuccess(destination);}});
             } catch(Exception error) {
                 if(temporary!=null)temporary.delete();
-                main.post(() -> {if(job.active){job.active=false;listener.onError(context.getString(
+                main.post(() -> {if(job.active){job.active=false;listener.onError(AppLanguage.text(context,
                         voice ? R.string.voice_play_error : R.string.image_download_error));}});
             }
         });
@@ -154,6 +232,7 @@ public final class BackendMediaRepository implements MediaRepository {
     }
     private static String route(String path) throws Exception {return "/api/media?path="+URLEncoder.encode(path,"UTF-8");}
     private static String voiceRoute(String path) throws Exception {return "/api/voice?path="+URLEncoder.encode(path,"UTF-8");}
+    private static String attachmentRoute(String path) throws Exception { return "/api/attachment?path=" + URLEncoder.encode(path, "UTF-8"); }
     private static boolean segment(String value) {return value!=null && value.matches("[A-Za-z0-9_-]{1,128}");}
     private static boolean validPath(String value) {
         if(value==null)return false;String[] parts=value.split("/",-1);
@@ -166,7 +245,7 @@ public final class BackendMediaRepository implements MediaRepository {
         if(input==null)throw new Exception();ByteArrayOutputStream output=new ByteArrayOutputStream();
         byte[] buffer=new byte[32768];int count;
         while((count=input.read(buffer))!=-1){
-            if(output.size()+count>limit)throw new Exception();output.write(buffer,0,count);
+            if(output.size()+count>limit)throw new AttachmentTooLarge();output.write(buffer,0,count);
         }
         return output.toByteArray();
     }
@@ -187,6 +266,7 @@ public final class BackendMediaRepository implements MediaRepository {
         volatile boolean active=true;volatile Future<?> future;
         @Override public void cancel(){active=false;if(future!=null)future.cancel(true);}
     }
+    private static final class AttachmentTooLarge extends java.io.IOException { }
     @Override public boolean isAvailable(){return BackendClient.configured();}
-    @Override public String getUnavailableReason(){return context.getString(R.string.image_storage_setup_error);}
+    @Override public String getUnavailableReason(){return AppLanguage.text(context, R.string.image_storage_setup_error);}
 }

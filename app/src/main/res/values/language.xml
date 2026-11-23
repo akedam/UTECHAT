@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_language">Ngôn ngữ</string>
+    <string name="app_language_vietnamese">Tiếng Việt</string>
+    <string name="app_language_english">English</string>
+    <string name="chat_use_default">Mặc định</string>
+</resources>

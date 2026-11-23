@@ -396,7 +396,7 @@ export function Profile({ user, data, presence, blocked, people, setDialog, erro
   const [savingPreview, setSavingPreview] = useState(false)
   return <div className="tab-page profile-page">
     <div className="profile-hero"><Avatar name={data.displayName} photo={data.photoUrl} size={76} />
-      <h3>{data.displayName}</h3><p>{user.email}</p>{data.bio && <p>{data.bio}</p>}
+      <h3>{data.displayName}</h3><p>{user.phoneNumber || user.email}</p>{data.bio && <p>{data.bio}</p>}
       <button className="secondary" onClick={() => setDialog({ type: 'profile' })}>Chỉnh sửa hồ sơ</button>
     </div>
     <button className="settings-row" onClick={openHistory}><History /><span><strong>Lịch sử cá nhân</strong><small>Xem lại Tin đã đăng</small></span><ChevronRight /></button>

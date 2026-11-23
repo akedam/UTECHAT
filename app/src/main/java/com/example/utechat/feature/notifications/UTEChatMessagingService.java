@@ -1,5 +1,7 @@
 package com.example.utechat.feature.notifications;
 
+import com.example.utechat.data.auth.PhoneAccountClient;
+
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.Uri;
@@ -11,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat;
 import com.example.utechat.R;
 import com.example.utechat.app.UteChatApplication;
 import com.example.utechat.core.common.Constants;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.data.notifications.PushTokenRepository;
 import com.example.utechat.feature.main.ui.MainActivity;
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -48,7 +51,7 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         FirebaseUser currentUser;
         try { currentUser = FirebaseAuth.getInstance().getCurrentUser(); }
         catch (RuntimeException unavailable) { return; }
-        if (currentUser == null || !currentUser.isEmailVerified() || !recipientUid.equals(currentUser.getUid())) return;
+        if (!PhoneAccountClient.hasVerifiedContact(currentUser) || !recipientUid.equals(currentUser.getUid())) return;
         if (new com.example.utechat.feature.chat.ui.ChatPreferences(this, conversationId).enabled("muted")) return;
         if (!NotificationPreferences.markEventSeen(this, conversationId + ":" + messageId)) return;
         if (UteChatApplication.isChatVisible(conversationId)) {
@@ -57,15 +60,18 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         }
 
         boolean showPreview = NotificationPreferences.showPreview(this);
-        String title = getString(R.string.notifications_generic_title);
-        String body = getString(R.string.notifications_generic_body);
+        String title = AppLanguage.text(this, R.string.notifications_generic_title);
+        String body = AppLanguage.text(this, R.string.notifications_generic_body);
         if (showPreview) {
             String sender = data.get("senderName");
             String conversationTitle = data.get("conversationTitle");
             title = !empty(conversationTitle) ? conversationTitle
-                    : !empty(sender) ? getString(R.string.notifications_new_message_title, limit(sender, 80)) : title;
+                    : !empty(sender) ? AppLanguage.text(this, R.string.notifications_new_message_title, limit(sender, 80)) : title;
             title = limit(title, 120);
-            if (!empty(data.get("preview"))) body = limit(data.get("preview"), 300);
+            String messageType = data.get("messageType");
+            if ("image".equals(messageType)) body = AppLanguage.text(this, R.string.conversation_preview_image);
+            else if ("voice".equals(messageType)) body = AppLanguage.text(this, R.string.voice_message);
+            else if (!empty(data.get("preview"))) body = limit(data.get("preview"), 300);
         }
         String type = "group".equals(data.get("conversationType")) ? "group" : "direct";
         postNotification(conversationId, title, body, type,
@@ -87,7 +93,7 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
 
     private void receiveMoment(String id, String recipient, boolean revoked) {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        if (id == null || !id.matches("[a-f0-9]{64}") || user == null || !user.isEmailVerified()
+        if (id == null || !id.matches("[a-f0-9]{64}") || !PhoneAccountClient.hasVerifiedContact(user)
                 || !user.getUid().equals(recipient)) return;
         if (revoked) {
             NotificationManagerCompat.from(this).cancel("utechat_moment_" + id, 0);
@@ -104,8 +110,8 @@ public final class UTEChatMessagingService extends FirebaseMessagingService {
         NotificationCompat.Builder notification = new NotificationCompat.Builder(this, getString(R.string.notifications_channel_id))
                 .setSmallIcon(R.drawable.ic_stat_utechat)
                 .setColor(getColor(R.color.utechat_primary))
-                .setContentTitle(getString(R.string.moments_notification_title))
-                .setContentText(getString(R.string.moments_notification_body))
+                .setContentTitle(AppLanguage.text(this, R.string.moments_notification_title))
+                .setContentText(AppLanguage.text(this, R.string.moments_notification_body))
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setCategory(NotificationCompat.CATEGORY_SOCIAL)
                 .setAutoCancel(true)

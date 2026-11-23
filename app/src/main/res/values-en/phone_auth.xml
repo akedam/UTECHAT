@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="phone_login">Sign in with phone number</string>
+    <string name="phone_register">Sign up with phone number</string>
+    <string name="phone_number">Phone number</string>
+    <string name="phone_email_account_unavailable">Accounts registered by email are no longer eligible for phone sign-in.</string>
+    <string name="phone_invalid">Enter a valid mobile number, such as 0912345678 or +84912345678.</string>
+    <string name="phone_password_policy">Use a password with at least 8 characters and at most 256 bytes.</string>
+    <string name="phone_wrong_credentials">Incorrect phone number or password.</string>
+    <string name="phone_login_rate_limited">Too many attempts. Wait before trying again.</string>
+    <string name="phone_password_reused">Choose a different password from your recent passwords.</string>
+    <string name="phone_account_exists">This number already has an account. Sign in or reset the password.</string>
+    <string name="phone_reset_unavailable">This number is not set up for UTEChat sign-in.</string>
+    <string name="phone_otp_expired">The verification expired or was already used. Request a new code.</string>
+    <string name="phone_auth_unavailable">Phone sign-in is unavailable. Try again later.</string>
+    <string name="phone_send_code">Send OTP</string>
+    <string name="phone_resend_code">Resend OTP</string>
+    <string name="phone_otp_code">6-digit OTP</string>
+    <string name="phone_verify_continue">Verify and continue</string>
+    <string name="phone_code_sent">A verification code was sent to %1$s.</string>
+    <string name="phone_auto_verified">This device verified your number automatically. You can continue.</string>
+    <string name="phone_sms_limited">Too many code requests. Wait before trying again.</string>
+    <string name="phone_sms_error">Could not verify this number. Check your connection and try again.</string>
+    <string name="phone_code_invalid">Enter a valid, unexpired 6-digit OTP.</string>
+</resources>

@@ -3,6 +3,7 @@ package com.example.utechat.data.chat;
 import android.content.Context;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.Conversation;
 import com.example.utechat.domain.model.ConversationPage;
 import com.example.utechat.domain.repository.ConversationRepository;
@@ -26,12 +27,12 @@ public final class FirebaseConversationRepository implements ConversationReposit
 
     @Override
     public Subscription listenFirstPage(String userId, int pageSize, Callback callback) {
-        if(userId==null){callback.onError(context.getString(R.string.auth_not_signed_in));return ()->{};}
+        if(userId==null){callback.onError(AppLanguage.text(context, R.string.auth_not_signed_in));return ()->{};}
         int size=Math.max(1,Math.min(pageSize,50));
         var registration=firestore.collection("conversations").whereArrayContains("participantIds",userId)
                 .orderBy("lastMessageAt",Query.Direction.DESCENDING).limit(size+1L)
                 .addSnapshotListener((snapshot,error)->{
-                    if(error!=null)callback.onError(context.getString(R.string.conversations_load_error));
+                    if(error!=null)callback.onError(AppLanguage.text(context, R.string.conversations_load_error));
                     else if(snapshot!=null)callback.onSuccess(toPage(snapshot,size,userId));
                 });
         return registration::remove;
@@ -40,7 +41,7 @@ public final class FirebaseConversationRepository implements ConversationReposit
     @Override
     public void loadPage(String userId, String cursor, int pageSize, Callback callback) {
         if (userId == null || userId.trim().isEmpty()) {
-            callback.onError(context.getString(R.string.auth_not_signed_in));
+            callback.onError(AppLanguage.text(context, R.string.auth_not_signed_in));
             return;
         }
         int safePageSize = Math.max(1, Math.min(pageSize, 50));
@@ -58,12 +59,12 @@ public final class FirebaseConversationRepository implements ConversationReposit
                 .addOnSuccessListener(cursorSnapshot -> {
                     if (!cursorSnapshot.exists()
                             || !containsUser(cursorSnapshot, userId)) {
-                        callback.onError(context.getString(R.string.conversations_cursor_error));
+                        callback.onError(AppLanguage.text(context, R.string.conversations_cursor_error));
                         return;
                     }
                     fetch(base.startAfter(cursorSnapshot), safePageSize, userId, callback);
                 })
-                .addOnFailureListener(error -> callback.onError(context.getString(R.string.conversations_load_error)));
+                .addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.conversations_load_error)));
     }
 
     private void fetch(Query query, int pageSize, String userId, Callback callback) {

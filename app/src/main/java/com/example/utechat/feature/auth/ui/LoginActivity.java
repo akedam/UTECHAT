@@ -18,7 +18,7 @@ import com.example.utechat.feature.auth.viewmodel.AuthViewModel;
 import com.example.utechat.core.common.AuthGate;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 
-/** Sign in with email and password or request a password reset link. */
+/** Sign-in screen for the local mock repository. */
 public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
@@ -33,6 +33,7 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!AuthRepositoryProvider.isMock(this)) { AuthGate.openAfterAuth(this); return; }
         setContentView(R.layout.activity_login);
 
         bindViews();
@@ -55,11 +56,11 @@ public class LoginActivity extends AppCompatActivity {
 
     @Override protected void onStart() {
         super.onStart();
-        updateLoginButton();
+        if (btnLogin != null) updateLoginButton();
     }
 
     @Override protected void onStop() {
-        btnLogin.removeCallbacks(refreshLoginButton);
+        if (btnLogin != null) btnLogin.removeCallbacks(refreshLoginButton);
         super.onStop();
     }
 

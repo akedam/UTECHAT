@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.app.ConversationRepositoryProvider;
 import com.example.utechat.core.common.Resource;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
@@ -113,7 +114,7 @@ public class ConversationsViewModel extends AndroidViewModel {
                 if (append && conversations.getValue() != null
                         && conversations.getValue().getData() != null) {
                     pagingError.setValue(message == null || message.trim().isEmpty()
-                            ? getApplication().getString(R.string.conversations_load_error)
+                            ? AppLanguage.text(getApplication(), R.string.conversations_load_error)
                             : message);
                 } else {
                     conversations.setValue(Resource.error(message == null || message.trim().isEmpty()

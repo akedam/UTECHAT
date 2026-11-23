@@ -3,6 +3,7 @@ package com.example.utechat.data.calls;
 import android.content.Context;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.CallSession;
 import com.example.utechat.domain.repository.CallRepository;
 import com.google.firebase.auth.FirebaseAuth;
@@ -36,7 +37,7 @@ public final class FirebaseCallRepository implements CallRepository {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null || conversationId == null || conversationId.trim().isEmpty()
                 || !("audio".equals(mediaType) || "video".equals(mediaType))) {
-            callback.onError(context.getString(R.string.call_invalid_conversation)); return;
+            callback.onError(AppLanguage.text(context, R.string.call_invalid_conversation)); return;
         }
         db.collection("conversations").document(conversationId).get()
                 .addOnSuccessListener(parent -> {
@@ -45,13 +46,13 @@ public final class FirebaseCallRepository implements CallRepository {
                             || !(members instanceof java.util.List)
                             || ((java.util.List<?>) members).size() != 2
                             || !((java.util.List<?>) members).contains(user.getUid())) {
-                        callback.onError(context.getString(R.string.call_invalid_conversation)); return;
+                        callback.onError(AppLanguage.text(context, R.string.call_invalid_conversation)); return;
                     }
                     String peer = null;
                     for (Object member : (java.util.List<?>) members) {
                         if (member instanceof String && !user.getUid().equals(member)) peer = (String) member;
                     }
-                    if (peer == null) { callback.onError(context.getString(R.string.call_invalid_conversation)); return; }
+                    if (peer == null) { callback.onError(AppLanguage.text(context, R.string.call_invalid_conversation)); return; }
                     final String calleeUid = peer;
                     DocumentReference ref = db.collection("calls").document();
                     long now = System.currentTimeMillis();
@@ -71,15 +72,15 @@ public final class FirebaseCallRepository implements CallRepository {
                             callback.onSuccess(new CallSession(ref.getId(), conversationId, user.getUid(), calleeUid,
                                     ref.getId(), mediaType, "ringing", now, now + RING_TIMEOUT_MS));
                         })
-                            .addOnFailureListener(error -> callback.onError(context.getString(R.string.call_network_error)));
-                }).addOnFailureListener(error -> callback.onError(context.getString(R.string.call_network_error)));
+                            .addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.call_network_error)));
+                }).addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.call_network_error)));
     }
 
     @Override public void listen(String callId, Listener listener) {
         removeListener(callId);
         ListenerRegistration registration = db.collection("calls").document(callId)
                 .addSnapshotListener((snapshot, error) -> {
-                    if (error != null) { listener.onChanged(null, context.getString(R.string.call_network_error)); return; }
+                    if (error != null) { listener.onChanged(null, AppLanguage.text(context, R.string.call_network_error)); return; }
                     CallSession call = snapshot == null || !snapshot.exists() ? null : map(snapshot);
                     listener.onChanged(call, null);
                 });
@@ -138,7 +139,7 @@ public final class FirebaseCallRepository implements CallRepository {
     @Override public void refresh(String callId, Listener listener) {
         db.collection("calls").document(callId).get(com.google.firebase.firestore.Source.SERVER)
                 .addOnSuccessListener(doc -> listener.onChanged(doc.exists() ? map(doc) : null, null))
-                .addOnFailureListener(error -> listener.onChanged(null, context.getString(R.string.call_network_error)));
+                .addOnFailureListener(error -> listener.onChanged(null, AppLanguage.text(context, R.string.call_network_error)));
     }
     @Override public void expireRinging(String callId, Callback callback) {
         // "ended" is permitted for the caller and "missed" for the callee.
@@ -151,7 +152,7 @@ public final class FirebaseCallRepository implements CallRepository {
         if (ringingOnly) status = "ended";
         if (!("accepted".equals(status) || "rejected".equals(status) || "busy".equals(status)
                 || "ended".equals(status) || "failed".equals(status) || "missed".equals(status))) {
-            callback.onError(context.getString(R.string.call_network_error)); return;
+            callback.onError(AppLanguage.text(context, R.string.call_network_error)); return;
         }
         DocumentReference ref = db.collection("calls").document(callId);
         db.<CallSession>runTransaction(transaction -> {
@@ -209,15 +210,15 @@ public final class FirebaseCallRepository implements CallRepository {
                     ref.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener(ended -> {
                         String conversation = ended.getString("conversationId");
                         if (!CallHistory.isTerminal(ended.getString("status")) || conversation == null) {
-                            callback.onError(context.getString(R.string.call_network_error)); return;
+                            callback.onError(AppLanguage.text(context, R.string.call_network_error)); return;
                         }
                         db.collection("conversations").document(conversation).collection("messages")
                                 .document("call_" + callId).get(com.google.firebase.firestore.Source.SERVER)
                                 .addOnSuccessListener(history -> {
                                     if (history.exists()) callback.onSuccess(null);
-                                    else callback.onError(context.getString(R.string.call_network_error));
-                                }).addOnFailureListener(failed -> callback.onError(context.getString(R.string.call_network_error)));
-                    }).addOnFailureListener(failed -> callback.onError(context.getString(R.string.call_network_error)));
+                                    else callback.onError(AppLanguage.text(context, R.string.call_network_error));
+                                }).addOnFailureListener(failed -> callback.onError(AppLanguage.text(context, R.string.call_network_error)));
+                    }).addOnFailureListener(failed -> callback.onError(AppLanguage.text(context, R.string.call_network_error)));
                 });
     }
 

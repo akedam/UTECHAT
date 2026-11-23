@@ -145,7 +145,7 @@ public final class MomentsFragment extends Fragment {
                         output.write(bytes);
                     }
                     return true;
-                }, ignored -> toast("Đã lưu ảnh."), failure -> toast("Chưa lưu được ảnh."));
+                }, ignored -> toast(getString(R.string.tin_photo_saved)), failure -> toast(getString(R.string.tin_photo_save_error)));
             });
     private final ActivityResultLauncher<String> cameraPermission = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(), allowed -> {
@@ -394,7 +394,7 @@ public final class MomentsFragment extends Fragment {
         body.setPadding(dp(12), dp(next == Page.PREVIEW || next == Page.DETAIL || next == Page.FEED && !grid ? 28 : 10), dp(12), dp(18));
         backButton.setVisibility(next == Page.PREVIEW ? View.INVISIBLE : View.VISIBLE);
         backButton.setImageResource(R.drawable.ic_chat_back);
-        backButton.setContentDescription("Quay lại Tin");
+        backButton.setContentDescription(getString(R.string.tin_back_to_stories));
         backButton.setOnClickListener(v -> back());
         toolbarAction.setVisibility(View.INVISIBLE);
         body.removeAllViews();
@@ -437,7 +437,7 @@ public final class MomentsFragment extends Fragment {
     }
 
     private String filterName() {
-        return "mine".equals(view) ? "Bạn" : authorFilter.isEmpty() ? "Mọi người" : name(friends.get(authorFilter));
+        return "mine".equals(view) ? getString(R.string.tin_you) : authorFilter.isEmpty() ? getString(R.string.tin_everyone) : name(friends.get(authorFilter));
     }
 
     private void showAllStories() {
@@ -456,12 +456,12 @@ public final class MomentsFragment extends Fragment {
 
     private void chooseAuthor() {
         var keys = new java.util.ArrayList<>(java.util.List.of("", "mine"));
-        var labels = new java.util.ArrayList<>(java.util.List.of("Mọi người", "Bạn"));
+        var labels = new java.util.ArrayList<>(java.util.List.of(getString(R.string.tin_everyone), getString(R.string.tin_you)));
         for (User user : friends.values()) {
             if (blocked.contains(user.getUid())) continue;
             keys.add(user.getUid()); labels.add(name(user));
         }
-        new MaterialAlertDialogBuilder(requireContext()).setTitle("Lọc người đăng")
+        new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_filter_authors))
                 .setItems(labels.toArray(new String[0]), (dialog, position) -> {
                     String key = keys.get(position);
                     authorFilter = "mine".equals(key) ? "" : key;
@@ -479,9 +479,9 @@ public final class MomentsFragment extends Fragment {
         widget.setOnCheckedChangeListener((v, enabled) -> {
             if (enabled) new MaterialAlertDialogBuilder(requireContext())
                     .setTitle(R.string.moments_widget_label)
-                    .setMessage("Ảnh mới từ bạn bè có thể hiện trên màn hình chính. Thêm widget Khoảnh khắc UTEChat từ danh sách widget của thiết bị.")
-                    .setPositiveButton("Bật", (dialog, choice) -> MomentWidget.setEnabled(requireContext(), uid, true))
-                    .setNegativeButton("Hủy", (dialog, choice) -> widget.setChecked(false))
+                    .setMessage(getString(R.string.tin_widget_description))
+                    .setPositiveButton(getString(R.string.tin_enable), (dialog, choice) -> MomentWidget.setEnabled(requireContext(), uid, true))
+                    .setNegativeButton(getString(R.string.friends_cancel_button), (dialog, choice) -> widget.setChecked(false))
                     .setOnCancelListener(dialog -> widget.setChecked(false)).show();
             else MomentWidget.setEnabled(requireContext(), uid, false);
         });
@@ -496,7 +496,7 @@ public final class MomentsFragment extends Fragment {
         updateStreamStatus(false);
         if (grid) {
             feedFooter.removeAllViews();
-            feedFooter.addView(text("Đang tải…", 14, false));
+            feedFooter.addView(text(getString(R.string.tin_loading), 14, false));
         }
         run(() -> MomentApi.list(requestedView, before), result -> {
             lastFeedLoaded = android.os.SystemClock.elapsedRealtime();
@@ -514,8 +514,8 @@ public final class MomentsFragment extends Fragment {
             }
             if (grid) {
                 if (feedCards.isEmpty() && cursor.isEmpty())
-                    feedFooter.addView(text("mine".equals(view) ? "Bạn chưa đăng tin nào." : "Chưa có Tin.", 15, true));
-                if (!cursor.isEmpty()) feedFooter.addView(button("Xem thêm", false, this::fetchFeed));
+                    feedFooter.addView(text("mine".equals(view) ? getString(R.string.tin_no_posts) : getString(R.string.tin_empty), 15, true));
+                if (!cursor.isEmpty()) feedFooter.addView(button(getString(R.string.tin_more), false, this::fetchFeed));
             } else {
                 if (first < feedCards.size()) storyAdapter.notifyItemRangeInserted(first + 1, feedCards.size() - first);
                 updateStreamStatus(false);
@@ -525,8 +525,8 @@ public final class MomentsFragment extends Fragment {
             loading = false;
             if (grid) {
                 feedFooter.removeAllViews();
-                feedFooter.addView(text("Chưa tải được tin.", 14, false));
-                feedFooter.addView(button("Thử lại", false, this::fetchFeed));
+                feedFooter.addView(text(getString(R.string.tin_feed_error), 14, false));
+                feedFooter.addView(button(getString(R.string.btn_retry), false, this::fetchFeed));
             } else updateStreamStatus(true);
         });
     }
@@ -579,7 +579,7 @@ public final class MomentsFragment extends Fragment {
         backButton.setVisibility(!grid && storyIndex >= 0 ? View.INVISIBLE : View.VISIBLE);
         backButton.setImageResource(toProfile ? R.drawable.ic_chat_back
                 : grid ? R.drawable.ic_message_camera : R.drawable.ic_tin_refresh);
-        backButton.setContentDescription(toProfile ? "Về hồ sơ" : grid ? "Về máy ảnh" : "Làm mới tin");
+        backButton.setContentDescription(toProfile ? getString(R.string.tin_back_to_profile) : grid ? getString(R.string.tin_back_to_camera) : getString(R.string.tin_refresh));
         backButton.setOnClickListener(v -> {
             if (toProfile) back();
             else if (grid) showCameraFeed();
@@ -589,10 +589,10 @@ public final class MomentsFragment extends Fragment {
 
     private void updateStreamStatus(boolean failed) {
         if (storyAdapter == null) return;
-        cameraHint.setText(!feedCards.isEmpty() || !cursor.isEmpty() ? "↓  Vuốt lên để xem Tin"
-                : loading ? "Đang tải Tin…" : failed ? "" : "Chưa có Tin");
+        cameraHint.setText(!feedCards.isEmpty() || !cursor.isEmpty() ? getString(R.string.tin_swipe)
+                : loading ? getString(R.string.tin_feed_loading) : failed ? "" : getString(R.string.tin_empty));
         streamStatus.setVisibility(failed ? View.VISIBLE : View.GONE);
-        streamStatus.setText(failed ? "Chưa tải được Tin · Thử lại" : "");
+        streamStatus.setText(failed ? getString(R.string.tin_feed_error_retry) : "");
         streamStatus.setOnClickListener(failed ? v -> fetchFeed() : null);
     }
 
@@ -654,21 +654,21 @@ public final class MomentsFragment extends Fragment {
     private void open(String id) {
         detailId = id;
         detail = null;
-        startPage(Page.DETAIL, "Chi tiết ảnh");
-        body.addView(text("Đang tải ảnh…", 14, false));
+        startPage(Page.DETAIL, getString(R.string.tin_details));
+        body.addView(text(getString(R.string.tin_photo_loading), 14, false));
         run(() -> MomentApi.json("GET", MomentApi.route(id), null), item -> {
             detail = item;
             showDetail();
         }, failure -> {
             body.removeAllViews();
             boolean unavailable = failure instanceof MomentApi.Failure && ((MomentApi.Failure) failure).status == 404;
-            body.addView(text(unavailable ? "Ảnh đã bị xóa hoặc không còn khả dụng." : "Chưa tải được ảnh.", 16, true));
-            if (!unavailable) body.addView(button("Thử lại", false, () -> open(id)));
+            body.addView(text(unavailable ? getString(R.string.tin_photo_removed) : getString(R.string.tin_photo_load_error), 16, true));
+            if (!unavailable) body.addView(button(getString(R.string.btn_retry), false, () -> open(id)));
         });
     }
 
     private void showDetail() {
-        startPage(Page.DETAIL, "Xem tin");
+        startPage(Page.DETAIL, getString(R.string.tin_view_story));
         JSONObject item = detail;
         boolean own = item.optBoolean("own");
         setTitleTool(filterName(), this::chooseAuthor);
@@ -676,11 +676,11 @@ public final class MomentsFragment extends Fragment {
         body.addView(photoWithCaption(item, false, this::fullPhoto, () -> markSeen(item)));
         body.addView(author(item));
         if (own) {
-            body.addView(text("Người nhận", 16, true));
+            body.addView(text(getString(R.string.tin_recipients), 16, true));
             JSONArray recipients = item.optJSONArray("recipients");
             for (int index = 0; index < recipients.length(); index++) {
                 JSONObject peer = recipients.optJSONObject(index);
-                String state = peer.optBoolean("seen") ? "Đã xem" : "Chưa xem";
+                String state = peer.optBoolean("seen") ? getString(R.string.chat_message_seen) : getString(R.string.tin_unseen);
                 String reaction = peer.isNull("reaction") ? "" : peer.optString("reaction");
                 body.addView(text(name(friends.get(peer.optString("id"))) + " · " + state + " " + reaction, 14, false));
             }
@@ -693,15 +693,15 @@ public final class MomentsFragment extends Fragment {
     private View storyTools(JSONObject item) {
         LinearLayout tools = row();
         tools.setPadding(0, dp(8), 0, dp(5));
-        tools.addView(icon(R.drawable.ic_tin_grid, "Xem tất cả tin", this::showAllStories), new LinearLayout.LayoutParams(dp(46), dp(46)));
+        tools.addView(icon(R.drawable.ic_tin_grid, getString(R.string.tin_view_all), this::showAllStories), new LinearLayout.LayoutParams(dp(46), dp(46)));
         tools.addView(new View(requireContext()), new LinearLayout.LayoutParams(0, 1, 1));
-        tools.addView(icon(R.drawable.ic_tin_share, "Chia sẻ tin", () -> showOptions(item)), new LinearLayout.LayoutParams(dp(46), dp(46)));
+        tools.addView(icon(R.drawable.ic_tin_share, getString(R.string.tin_share_story), () -> showOptions(item)), new LinearLayout.LayoutParams(dp(46), dp(46)));
         return tools;
     }
 
     private void fullPhoto() {
         String id = detailId;
-        startPage(Page.FULL, "Ảnh Khoảnh khắc");
+        startPage(Page.FULL, getString(R.string.tin_photo));
         body.addView(photo(id, true, false, null, () -> {
             if (!detail.optBoolean("own") && !detail.optBoolean("seen"))
                 run(() -> MomentApi.respond(id, "seen", JSONObject.NULL), seen -> detail = seen, ignored -> {});
@@ -725,7 +725,7 @@ public final class MomentsFragment extends Fragment {
         layout.topMargin = dp(9);
         line.setLayoutParams(layout);
         EditText input = new EditText(requireContext());
-        input.setHint("Trả lời tin…");
+        input.setHint(getString(R.string.tin_reply_hint));
         input.setTextSize(15);
         input.setTextColor(0xFF102139);
         input.setHintTextColor(0xFF445C77);
@@ -737,7 +737,7 @@ public final class MomentsFragment extends Fragment {
         line.addView(input, new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout quick = quickReactions(item);
         line.addView(quick);
-        ImageButton send = icon(R.drawable.ic_chat_send, "Gửi trả lời", () -> {});
+        ImageButton send = icon(R.drawable.ic_chat_send, getString(R.string.tin_send_reply), () -> {});
         send.setBackground(null);
         line.addView(send, new LinearLayout.LayoutParams(dp(44), dp(44)));
         String[] retryKey = {null};
@@ -769,7 +769,7 @@ public final class MomentsFragment extends Fragment {
                 busy = false;
                 if (storyAdapter != null) storyPager.setUserInputEnabled(true);
                 input.setEnabled(true); send.setEnabled(true);
-                toast("Chưa gửi được trả lời. Hãy thử lại.");
+                toast(getString(R.string.tin_reply_error));
             };
             repository.openDirect(uid, owner, new FriendGroupRepository.Result<String>() {
                 @Override public void success(String conversationId) {
@@ -809,7 +809,7 @@ public final class MomentsFragment extends Fragment {
                     buttons[index].setSelected(active);
                     buttons[index].setBackground(active ? rounded(0xFFDFEDFF, 11) : null);
                 }
-            }, failure -> toast("Chưa gửi được cảm xúc."));
+            }, failure -> toast(getString(R.string.tin_reaction_error)));
         };
         for (int index = 0; index < quick.length; index++) {
             String emoji = quick[index];
@@ -821,8 +821,8 @@ public final class MomentsFragment extends Fragment {
             buttons[index] = option;
             controls.addView(option, new LinearLayout.LayoutParams(dp(35), dp(44)));
         }
-        ImageButton more = icon(R.drawable.ic_chat_smile, "Thêm cảm xúc", () ->
-                new MaterialAlertDialogBuilder(requireContext()).setTitle("Cảm xúc về tin").setItems(EMOJI,
+        ImageButton more = icon(R.drawable.ic_chat_smile, getString(R.string.reaction_more), () ->
+                new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_reaction_title)).setItems(EMOJI,
                         (dialog, index) -> react.accept(EMOJI[index])).show());
         more.setBackground(null);
         controls.addView(more, new LinearLayout.LayoutParams(dp(41), dp(44)));
@@ -838,7 +838,7 @@ public final class MomentsFragment extends Fragment {
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setBackground(rounded(CONTROL_SURFACE, 22));
         menu.setPadding(dp(16), dp(12), dp(16), dp(16));
-        TextView heading = text("Chia sẻ tin", 19, true);
+        TextView heading = text(getString(R.string.tin_share_story), 19, true);
         heading.setGravity(Gravity.CENTER);
         menu.addView(heading);
         FrameLayout thumb = photoWithCaption(item, false, null, () -> {});
@@ -847,32 +847,32 @@ public final class MomentsFragment extends Fragment {
         thumbnail.bottomMargin = dp(14);
         menu.addView(thumb, thumbnail);
         LinearLayout actions = row();
-        shareChoice(actions, R.drawable.ic_tin_download, "Lưu", false, () -> { sheet.dismiss(); saveImage(() -> MomentApi.bytes(id)); });
-        shareChoice(actions, R.drawable.ic_tin_share, "Chia sẻ", false, () -> {
+        shareChoice(actions, R.drawable.ic_tin_download, getString(R.string.btn_save), false, () -> { sheet.dismiss(); saveImage(() -> MomentApi.bytes(id)); });
+        shareChoice(actions, R.drawable.ic_tin_share, getString(R.string.tin_share), false, () -> {
             sheet.dismiss();
             String link = "https://utechat-ab9d8.web.app/?moment=" + id;
-            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Chia sẻ tin"));
+            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), getString(R.string.tin_share_story)));
         });
         if (!own) {
-            shareChoice(actions, R.drawable.ic_chat_warning, "Báo cáo", false, () -> { sheet.dismiss(); report(id); });
-            shareChoice(actions, R.drawable.ic_chat_block, "Chặn", false, () -> {
+            shareChoice(actions, R.drawable.ic_chat_warning, getString(R.string.message_report), false, () -> { sheet.dismiss(); report(id); });
+            shareChoice(actions, R.drawable.ic_chat_block, getString(R.string.tin_block), false, () -> {
                 sheet.dismiss();
                 UserSafety.confirmBlock(requireActivity(), item.optString("owner"), item.optString("name"), false, () -> showFeed(view));
             });
         }
-        shareChoice(actions, R.drawable.ic_chat_trash, "Xóa", true, () -> {
+        shareChoice(actions, R.drawable.ic_chat_trash, getString(R.string.message_delete), true, () -> {
             sheet.dismiss();
-            new MaterialAlertDialogBuilder(requireContext()).setTitle("Xóa tin?")
-                    .setMessage(own ? "Ảnh sẽ biến mất khỏi Tin của bạn và của người nhận." : "Tin sẽ được ẩn khỏi bảng Tin của riêng bạn.")
-                    .setNegativeButton("Hủy", null).setPositiveButton("Xóa tin", (dialog, choice) -> {
+            new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_delete_title))
+                    .setMessage(own ? getString(R.string.tin_delete_own_confirm) : getString(R.string.tin_hide_confirm))
+                    .setNegativeButton(getString(R.string.friends_cancel_button), null).setPositiveButton(getString(R.string.tin_delete), (dialog, choice) -> {
                         busy = true;
                         run(() -> own ? MomentApi.json("DELETE", MomentApi.route(id), null)
                                         : MomentApi.respond(id, "hide", JSONObject.NULL),
                                 result -> {
                                     if (!own) MomentWidget.invalidate(requireContext());
-                                    toast(own ? "Đã xóa tin." : "Đã ẩn tin.");
+                                    toast(own ? getString(R.string.tin_deleted) : getString(R.string.tin_hidden));
                                     showFeed(own ? "mine" : view);
-                                }, failure -> toast("Chưa xóa được ảnh. Hãy thử lại."));
+                                }, failure -> toast(getString(R.string.tin_delete_error)));
                     }).show();
         });
         menu.addView(actions);
@@ -922,24 +922,24 @@ public final class MomentsFragment extends Fragment {
             }
             return null;
         }, bytes -> {
-            if (bytes == null) toast("Đã lưu ảnh vào album.");
+            if (bytes == null) toast(getString(R.string.tin_album_saved));
             else {
                 exportBytes = bytes;
                 saveDocument.launch("UTEChat-Tin.jpg");
             }
-        }, failure -> toast("Chưa lưu được ảnh."));
+        }, failure -> toast(getString(R.string.tin_photo_save_error)));
     }
 
     private void report(String id) {
         int[] chosen = {0};
         String[] reasons = {"spam", "abuse", "other"};
-        new MaterialAlertDialogBuilder(requireContext()).setTitle("Báo cáo ảnh")
-                .setSingleChoiceItems(new String[]{"Tin rác", "Nội dung không phù hợp", "Lý do khác"},
+        new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_report_photo))
+                .setSingleChoiceItems(new String[]{getString(R.string.tin_report_spam), getString(R.string.tin_report_inappropriate), getString(R.string.report_other)},
                         0, (dialog, which) -> chosen[0] = which)
-                .setNegativeButton("Hủy", null).setPositiveButton("Gửi báo cáo", (dialog, choice) -> {
+                .setNegativeButton(getString(R.string.friends_cancel_button), null).setPositiveButton(getString(R.string.report_submit), (dialog, choice) -> {
                     busy = true;
                     run(() -> MomentApi.respond(id, "report", reasons[chosen[0]]),
-                            result -> toast("Đã gửi báo cáo."), failure -> toast("Chưa gửi được báo cáo."));
+                            result -> toast(getString(R.string.tin_report_sent)), failure -> toast(getString(R.string.tin_report_error)));
                 }).show();
     }
 
@@ -959,7 +959,7 @@ public final class MomentsFragment extends Fragment {
     }
 
     private void setProfileTool() {
-        setToolbar(R.drawable.ic_nav_profile, "Mở hồ sơ của bạn", () -> ((MainActivity) requireActivity()).openProfile());
+        setToolbar(R.drawable.ic_nav_profile, getString(R.string.tin_open_profile), () -> ((MainActivity) requireActivity()).openProfile());
         if (ownPhoto != null && !ownPhoto.isBlank()) {
             toolbarAction.setPadding(dp(4), dp(4), dp(4), dp(4));
             toolbarAction.setImageTintList(null);
@@ -976,7 +976,7 @@ public final class MomentsFragment extends Fragment {
         cameraView = new PreviewView(requireContext());
         cameraView.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         cameraView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
-        cameraView.setContentDescription("Xem trước camera");
+        cameraView.setContentDescription(getString(R.string.tin_camera_preview));
         cameraFrame.addView(cameraView, new FrameLayout.LayoutParams(-1, -1));
         cameraFrame.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> {
             if (v == cameraViewParent()) positionCamera();
@@ -999,14 +999,14 @@ public final class MomentsFragment extends Fragment {
         FrameLayout.LayoutParams hintLayout = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         hintLayout.bottomMargin = dp(10);
         cameraFrame.addView(effectStatus, hintLayout);
-        filtersButton = icon(R.drawable.ic_tin_filter, "Bộ lọc và khung ảnh", this::chooseTone);
+        filtersButton = icon(R.drawable.ic_tin_filter, getString(R.string.tin_filters), this::chooseTone);
         FrameLayout.LayoutParams filterLayout = new FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP | Gravity.END);
         filterLayout.setMargins(dp(12), dp(12), dp(12), 0);
         cameraFrame.addView(filtersButton, filterLayout);
-        flashButton = icon(R.drawable.ic_tin_flash, "Bật đèn", () -> {
+        flashButton = icon(R.drawable.ic_tin_flash, getString(R.string.tin_flash_on), () -> {
             flash = !flash;
             liveCamera.setFlash(flash);
-            flashButton.setContentDescription(flash ? "Tắt đèn" : "Bật đèn");
+            flashButton.setContentDescription(flash ? getString(R.string.tin_flash_off) : getString(R.string.tin_flash_on));
             flashButton.setSelected(flash);
         });
         FrameLayout.LayoutParams flashLayout = new FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP | Gravity.START);
@@ -1018,9 +1018,9 @@ public final class MomentsFragment extends Fragment {
         cameraPanel.addView(shotStrip);
         LinearLayout controls = row();
         controls.setPadding(0, dp(16), 0, dp(10));
-        albumButton = icon(R.drawable.ic_chat_gallery, "Chọn ảnh từ album", () -> album.launch("image/*"));
+        albumButton = icon(R.drawable.ic_chat_gallery, getString(R.string.tin_choose_photo), () -> album.launch("image/*"));
         setCaptureSide(controls, albumButton);
-        shutterButton = icon(0, "Chụp ảnh", this::capturePhoto);
+        shutterButton = icon(0, getString(R.string.message_take_photo), this::capturePhoto);
         GradientDrawable outer = rounded(requireContext().getColor(R.color.chat_canvas), 38);
         outer.setStroke(dp(3), 0xFF087AF0);
         GradientDrawable center = rounded(CONTROL_SURFACE, 31);
@@ -1028,7 +1028,7 @@ public final class MomentsFragment extends Fragment {
         shutter.setLayerInset(1, dp(7), dp(7), dp(7), dp(7));
         shutterButton.setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(0x3F087AF0), shutter, null));
         controls.addView(shutterButton, new LinearLayout.LayoutParams(dp(72), dp(72)));
-        setCaptureSide(controls, icon(R.drawable.ic_call_switch_camera, "Đổi camera trước/sau", () -> {
+        setCaptureSide(controls, icon(R.drawable.ic_call_switch_camera, getString(R.string.call_switch_camera), () -> {
             if (capturing) return;
             liveCamera.flip();
             liveCamera.release();
@@ -1042,7 +1042,7 @@ public final class MomentsFragment extends Fragment {
         cameraHint = text("", 14, true);
         cameraHint.setGravity(Gravity.CENTER);
         tools.addView(cameraHint, new LinearLayout.LayoutParams(0, -2, 1));
-        tools.addView(icon(R.drawable.ic_tin_grid, "Xem tất cả tin", this::showAllStories),
+        tools.addView(icon(R.drawable.ic_tin_grid, getString(R.string.tin_view_all), this::showAllStories),
                 new LinearLayout.LayoutParams(dp(46), dp(46)));
         cameraPanel.addView(tools);
         refreshCapture();
@@ -1060,12 +1060,12 @@ public final class MomentsFragment extends Fragment {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(12), dp(16), dp(18));
         panel.setBackground(rounded(CONTROL_SURFACE, 22));
-        TextView heading = text("Bộ lọc và khung ảnh", 19, true);
+        TextView heading = text(getString(R.string.tin_filters), 19, true);
         heading.setGravity(Gravity.CENTER);
         panel.addView(heading);
 
         String[] groups = {"booth", "trend", "funny"};
-        String[] labels = {"Khung & Photobooth", "Khung viền & Xu hướng", "Hài hước"};
+        String[] labels = {getString(R.string.tin_photobooth), getString(R.string.tin_trending), getString(R.string.tin_funny)};
         for (int group = 0; group < groups.length; group++) {
             LinearLayout ribbon = filterRibbon(panel, labels[group]);
             for (TinFilters.Filter option : filterCatalog.entries) {
@@ -1081,11 +1081,11 @@ public final class MomentsFragment extends Fragment {
         }
 
         int[] swatches = {0xFFB9CCE7, 0xFFFDAAB0, 0xFF91CEF3, 0xFF949FAC};
-        LinearLayout colors = filterRibbon(panel, "Màu ảnh");
+        LinearLayout colors = filterRibbon(panel, getString(R.string.tin_photo_tone));
         for (TinPhotos.Tone color : TinPhotos.Tone.values()) {
             View swatch = new View(requireContext());
             swatch.setBackground(rounded(swatches[color.ordinal()], 11));
-            filterChoice(colors, swatch, color.label, color == tone, () -> {
+            filterChoice(colors, swatch, getString(color.label), color == tone, () -> {
                 tone = color;
                 refreshCapture();
                 sheet.dismiss();
@@ -1151,8 +1151,8 @@ public final class MomentsFragment extends Fragment {
         if (storyAdapter != null) storyPager.setUserInputEnabled(!capturing && !busy);
         boolean permitted = requireContext().checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
         captureStatus.setVisibility(liveCamera.ready() ? View.GONE : View.VISIBLE);
-        captureStatus.setText(cameraUnavailable ? "Chưa mở được camera" : cameraOpening ? "Đang mở camera…"
-                : permitted ? "Máy ảnh đang tạm dừng" : "Nhấn chụp để mở camera");
+        captureStatus.setText(cameraUnavailable ? getString(R.string.tin_camera_unavailable) : cameraOpening ? getString(R.string.tin_camera_opening)
+                : permitted ? getString(R.string.tin_camera_paused) : getString(R.string.tin_camera_start));
         shutterButton.setEnabled(!capturing);
         albumButton.setEnabled(!capturing);
         filtersButton.setEnabled(!capturing && shots.isEmpty());
@@ -1171,7 +1171,7 @@ public final class MomentsFragment extends Fragment {
         }
         shotStrip.removeAllViews();
         if (frame.cells > 1) {
-            TextView progress = text(shots.size() + "/" + frame.cells + " ảnh", 14, true);
+            TextView progress = text(getString(R.string.tin_shot_count, shots.size(), frame.cells), 14, true);
             progress.setTextColor(CONTROL_COLOR);
             shotStrip.addView(progress, new LinearLayout.LayoutParams(0, -2, 1));
             for (File shot : shots) {
@@ -1182,7 +1182,7 @@ public final class MomentsFragment extends Fragment {
                 lp.setMargins(dp(2), 0, dp(2), 0);
                 shotStrip.addView(image, lp);
             }
-            if (!shots.isEmpty() && !capturing) shotStrip.addView(button("Bỏ bộ ảnh", false, () -> {
+            if (!shots.isEmpty() && !capturing) shotStrip.addView(button(getString(R.string.tin_clear_shots), false, () -> {
                 clearShots();
                 refreshCapture();
             }));
@@ -1247,13 +1247,13 @@ public final class MomentsFragment extends Fragment {
                     java.util.List<com.google.mlkit.vision.face.Face> detected;
                     try { detected = faces.detect(sample); }
                     finally { if (sample != raw) sample.recycle(); }
-                    if (detected.isEmpty()) hint = "Đưa khuôn mặt vào giữa khung";
+                    if (detected.isEmpty()) hint = getString(R.string.tin_center_face);
                     else TinFaces.place(paint, art, chosen, detected);
                 }
             } catch (Exception failure) {
                 if (preview != null) preview.recycle();
                 preview = null;
-                hint = "Chưa mở được hiệu ứng";
+                hint = getString(R.string.tin_effect_error);
             } finally { if (raw != null) raw.recycle(); }
             Bitmap result = preview;
             String status = hint;
@@ -1324,7 +1324,7 @@ public final class MomentsFragment extends Fragment {
         liveCamera.open(requireContext(), getViewLifecycleOwner(), cameraView, () -> {
             cameraOpening = false;
             flash = false;
-            flashButton.setContentDescription("Bật đèn");
+            flashButton.setContentDescription(getString(R.string.tin_flash_on));
             flashButton.setSelected(false);
             refreshCapture();
         }, () -> {
@@ -1335,9 +1335,9 @@ public final class MomentsFragment extends Fragment {
     }
 
     private void cameraHelp() {
-        new MaterialAlertDialogBuilder(requireContext()).setTitle("Cho phép sử dụng camera")
-                .setMessage("Bạn có thể bật quyền camera trong Cài đặt hoặc chọn ảnh từ Album.")
-                .setNegativeButton("Để sau", null).setPositiveButton("Mở cài đặt", (dialog, which) ->
+        new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_camera_permission))
+                .setMessage(getString(R.string.tin_camera_permission_help))
+                .setNegativeButton(getString(R.string.notifications_permission_skip), null).setPositiveButton(getString(R.string.tin_open_settings), (dialog, which) ->
                         startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                                 .setData(Uri.fromParts("package", requireContext().getPackageName(), null)))).show();
     }
@@ -1368,9 +1368,9 @@ public final class MomentsFragment extends Fragment {
                 captureFile = null;
                 capturing = false;
                 source.delete();
-                if (active(generation)) { refreshCapture(); toast("Chưa chụp được ảnh."); }
+                if (active(generation)) { refreshCapture(); toast(getString(R.string.tin_capture_error)); }
             });
-        } catch (IOException failure) { toast("Chưa lưu được ảnh vừa chụp."); }
+        } catch (IOException failure) { toast(getString(R.string.tin_capture_save_error)); }
     }
 
     private void albumResult(Uri uri) {
@@ -1399,11 +1399,11 @@ public final class MomentsFragment extends Fragment {
                     target.delete();
                     main.post(() -> {
                         capturing = false;
-                        if (active(generation)) { refreshCapture(); toast("Không mở được ảnh trong album."); }
+                        if (active(generation)) { refreshCapture(); toast(getString(R.string.tin_album_open_error)); }
                     });
                 }
             });
-        } catch (IOException error) { toast("Không mở được ảnh trong album."); }
+        } catch (IOException error) { toast(getString(R.string.tin_album_open_error)); }
     }
 
     private void acceptPhoto(File source) {
@@ -1449,8 +1449,8 @@ public final class MomentsFragment extends Fragment {
                     if (active(generation)) {
                         refreshCapture();
                         toast(failure instanceof TinFaces.NoFace
-                                ? "Chưa thấy khuôn mặt. Hãy đưa mặt vào giữa khung hoặc chọn ảnh chân dung."
-                                : "Không xử lý được ảnh. Hãy thử lại.");
+                                ? getString(R.string.tin_face_not_found)
+                                : getString(R.string.tin_photo_processing_error));
                     }
                 });
             }
@@ -1463,29 +1463,29 @@ public final class MomentsFragment extends Fragment {
     }
 
     private void showPreview() {
-        startPage(Page.PREVIEW, "Gửi đến");
-        setTitleTool("Gửi đến", this::showPicker);
+        startPage(Page.PREVIEW, getString(R.string.tin_send_to));
+        setTitleTool(getString(R.string.tin_send_to), this::showPicker);
         File saved = draftFile;
-        setToolbar(R.drawable.ic_tin_download, "Lưu ảnh về máy",
+        setToolbar(R.drawable.ic_tin_download, getString(R.string.tin_save_photo),
                 () -> { if (!busy) saveImage(() -> Files.readAllBytes(saved.toPath())); });
         FrameLayout frame = squareFrame();
         ImageView image = imageView();
         frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
         Glide.with(this).load(draftFile).diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
                 .skipMemoryCache(true).centerCrop().into(image);
-        TextView label = captionLabel(caption.isBlank() ? "Thêm chú thích" : caption, captionStyle);
+        TextView label = captionLabel(caption.isBlank() ? getString(R.string.tin_add_caption) : caption, captionStyle);
         label.setOnClickListener(v -> {
-            if (!busy) editCaption("Chú thích", "Thêm chú thích", caption, captionStyle.isBlank() ? "accent" : captionStyle);
+            if (!busy) editCaption(getString(R.string.tin_caption), getString(R.string.tin_add_caption), caption, captionStyle.isBlank() ? "accent" : captionStyle);
         });
         placeCaption(frame, label);
         body.addView(frame);
         LinearLayout controls = row();
         controls.setPadding(0, dp(16), 0, dp(12));
-        setCaptureSide(controls, icon(R.drawable.ic_tin_close, "Bỏ ảnh", this::back));
-        postButton = icon(R.drawable.ic_chat_send, "Đăng", this::send);
+        setCaptureSide(controls, icon(R.drawable.ic_tin_close, getString(R.string.tin_discard_photo), this::back));
+        postButton = icon(R.drawable.ic_chat_send, getString(R.string.tin_post), this::send);
         styleTool(postButton, 0xFF087AF0, Color.WHITE, 24, 21);
         controls.addView(postButton, new LinearLayout.LayoutParams(dp(70), dp(67)));
-        setCaptureSide(controls, icon(R.drawable.ic_tin_caption, "Chọn chú thích", () -> { if (!busy) showCaptions(); }));
+        setCaptureSide(controls, icon(R.drawable.ic_tin_caption, getString(R.string.tin_pick_caption), () -> { if (!busy) showCaptions(); }));
         body.addView(controls);
         var audienceScroll = new android.widget.HorizontalScrollView(requireContext());
         audienceScroll.setHorizontalScrollBarEnabled(false);
@@ -1503,16 +1503,16 @@ public final class MomentsFragment extends Fragment {
 
     private void showCaptions() {
         String[] styles = {"accent", "rose", "mint", "rating", "music", "place", "weather", "time", "rose", "mint", "accent"};
-        String[] labels = {"Văn bản", "Màu hồng", "Màu xanh", "Đánh giá", "Đang nghe", "Vị trí", "Thời tiết",
-                "Giờ hiện tại", "🤳 Hôm nay", "🌿 Một chút bình yên", "☀️ Chào ngày mới"};
+        String[] labels = {getString(R.string.tin_caption_text), getString(R.string.tin_caption_pink), getString(R.string.tin_caption_green), getString(R.string.tin_caption_review), getString(R.string.tin_caption_music), getString(R.string.tin_caption_location), getString(R.string.tin_caption_weather),
+                getString(R.string.tin_caption_time), getString(R.string.tin_caption_today), getString(R.string.tin_caption_peace), getString(R.string.tin_caption_morning)};
         String[] prefixes = {"", "", "", "⭐ ", "🎵 ", "📍 ", "☀️ "};
-        String[] hints = {"Nhập chú thích", "Nhập chú thích", "Nhập chú thích", "Ví dụ 5/5", "Tên bài hát",
-                "Tên địa điểm", "Ví dụ Trời nắng"};
+        String[] hints = {getString(R.string.tin_caption_hint), getString(R.string.tin_caption_hint), getString(R.string.tin_caption_hint), getString(R.string.tin_review_hint), getString(R.string.tin_song_hint),
+                getString(R.string.tin_location_hint), getString(R.string.tin_weather_hint)};
         var sheet = new com.google.android.material.bottomsheet.BottomSheetDialog(requireContext());
         LinearLayout panel = new LinearLayout(requireContext());
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(12), dp(16), dp(16));
-        panel.addView(text("Chú thích", 19, true));
+        panel.addView(text(getString(R.string.tin_caption), 19, true));
         for (int first = 0; first < labels.length; first += 2) {
             LinearLayout choices = row();
             for (int index = first; index < Math.min(first + 2, labels.length); index++) {
@@ -1528,7 +1528,7 @@ public final class MomentsFragment extends Fragment {
             }
             panel.addView(choices);
         }
-        panel.addView(button("Xóa chú thích", false, () -> { sheet.dismiss(); chooseCaption("", ""); }));
+        panel.addView(button(getString(R.string.tin_clear_caption), false, () -> { sheet.dismiss(); chooseCaption("", ""); }));
         ScrollView content = new ScrollView(requireContext());
         content.setBackground(rounded(CONTROL_SURFACE, 22));
         content.addView(panel);
@@ -1545,7 +1545,7 @@ public final class MomentsFragment extends Fragment {
         field.setText(value);
         field.setSelection(field.length());
         var dialog = new MaterialAlertDialogBuilder(requireContext()).setTitle(title).setView(field)
-                .setNegativeButton("Hủy", null).setPositiveButton("Xong", (window, which) ->
+                .setNegativeButton(getString(R.string.friends_cancel_button), null).setPositiveButton(getString(R.string.tin_done), (window, which) ->
                         chooseCaption(field.getText().toString().trim(), style)).create();
         dialog.setOnShowListener(window -> {
             field.requestFocus();
@@ -1574,7 +1574,7 @@ public final class MomentsFragment extends Fragment {
         if (previewAudience == null || page != Page.PREVIEW) return;
         int count = audience().size();
         previewAudience.removeAllViews();
-        addAudienceChoice("Tất cả", null, allViewers, () -> {
+        addAudienceChoice(getString(R.string.ui_all), null, allViewers, () -> {
             allViewers = true;
             selected.clear();
             nonce = null;
@@ -1595,9 +1595,9 @@ public final class MomentsFragment extends Fragment {
         }
         postButton.setEnabled(!busy && count > 0 && count <= 100);
         postButton.setAlpha(postButton.isEnabled() ? 1f : .53f);
-        postButton.setContentDescription(busy ? "Đang đăng…" : sendError.isEmpty() ? "Đăng" : "Đăng lại");
-        String message = !sendError.isEmpty() ? sendError : !friendsLoaded && !friendsFailed ? "Đang tải bạn bè…"
-                : count == 0 ? "Chọn ít nhất một bạn để đăng tin." : count > 100 ? "Chọn tối đa 100 bạn cho một tin." : "";
+        postButton.setContentDescription(busy ? getString(R.string.tin_posting) : sendError.isEmpty() ? getString(R.string.tin_post) : getString(R.string.tin_post_retry));
+        String message = !sendError.isEmpty() ? sendError : !friendsLoaded && !friendsFailed ? getString(R.string.tin_friends_loading)
+                : count == 0 ? getString(R.string.tin_audience_min) : count > 100 ? getString(R.string.tin_audience_max) : "";
         feedback.setText(message);
         feedback.setVisibility(message.isEmpty() ? View.GONE : View.VISIBLE);
     }
@@ -1629,10 +1629,10 @@ public final class MomentsFragment extends Fragment {
     }
 
     private void showPicker() {
-        startPage(Page.PICKER, "Chọn bạn");
+        startPage(Page.PICKER, getString(R.string.tin_pick_friends));
         EditText search = new EditText(requireContext());
         search.setSingleLine(true);
-        search.setHint("Tìm theo tên");
+        search.setHint(getString(R.string.tin_search_name));
         search.setText(friendQuery);
         body.addView(search);
         selectedCount = text("", 14, true);
@@ -1643,7 +1643,7 @@ public final class MomentsFragment extends Fragment {
         feedback = text(sendError, 14, false);
         feedback.setTextColor(0xFF9C2031);
         body.addView(feedback);
-        body.addView(button("Xong", true, () -> { hideKeyboard(); showPreview(); }));
+        body.addView(button(getString(R.string.tin_done), true, () -> { hideKeyboard(); showPreview(); }));
         onText(search, query -> { friendQuery = query; updatePicker(); });
         updatePicker();
     }
@@ -1651,7 +1651,7 @@ public final class MomentsFragment extends Fragment {
     private void updatePicker() {
         pickerRows.removeAllViews();
         MaterialCheckBox all = new MaterialCheckBox(requireContext());
-        all.setText("Tất cả bạn bè");
+        all.setText(getString(R.string.tin_all_friends));
         all.setMinHeight(dp(48));
         all.setChecked(allViewers);
         all.setOnCheckedChangeListener((v, checked) -> {
@@ -1661,7 +1661,7 @@ public final class MomentsFragment extends Fragment {
             updatePicker();
         });
         pickerRows.addView(all);
-        if (!friendsLoaded && !friendsFailed) pickerRows.addView(text("Đang tải bạn bè…", 14, false));
+        if (!friendsLoaded && !friendsFailed) pickerRows.addView(text(getString(R.string.tin_friends_loading), 14, false));
         String query = friendQuery.trim().toLowerCase(Locale.ROOT);
         int matching = 0;
         for (User user : friends.values()) {
@@ -1687,19 +1687,19 @@ public final class MomentsFragment extends Fragment {
             pickerRows.addView(box);
         }
         if (matching == 0 && (friendsLoaded || friendsFailed)) {
-            pickerRows.addView(text(friendsFailed ? "Chưa tải được bạn bè."
-                    : query.isEmpty() ? "Bạn chưa có bạn bè nhận ảnh." : "Không tìm thấy bạn phù hợp.", 14, false));
-            if (friendsFailed) pickerRows.addView(button("Thử lại", false, () -> {
+            pickerRows.addView(text(friendsFailed ? getString(R.string.tin_friends_error)
+                    : query.isEmpty() ? getString(R.string.tin_no_friends) : getString(R.string.tin_no_matching_friend), 14, false));
+            if (friendsFailed) pickerRows.addView(button(getString(R.string.btn_retry), false, () -> {
                 if (friendshipSubscription != null) friendshipSubscription.remove();
                 if (blockedSubscription != null) blockedSubscription.remove();
                 friendsFailed = false;
                 watchFriends();
                 updatePicker();
             }));
-            else if (query.isEmpty()) pickerRows.addView(button("Tìm bạn", false, () ->
+            else if (query.isEmpty()) pickerRows.addView(button(getString(R.string.tin_find_friends), false, () ->
                     startActivity(new Intent(requireContext(), com.example.utechat.feature.search.ui.SearchActivity.class))));
         }
-        selectedCount.setText("Đã chọn " + audience().size() + " bạn");
+        selectedCount.setText(getString(R.string.tin_audience_count, audience().size()));
         feedback.setText(sendError);
         feedback.setVisibility(sendError.isEmpty() ? View.GONE : View.VISIBLE);
     }
@@ -1724,12 +1724,12 @@ public final class MomentsFragment extends Fragment {
                         .put("image", Base64.encodeToString(Files.readAllBytes(draft.toPath()), Base64.NO_WRAP))),
                 result -> {
                     clearDraft();
-                    toast("Đã đăng tin.");
+                    toast(getString(R.string.tin_posted));
                     grid = false;
                     authorFilter = "";
                     showFeed("received");
                 }, failure -> {
-                    sendError = MomentApi.publishError(failure);
+                    sendError = MomentApi.publishError(requireContext(), failure);
                     updatePreviewAudience();
                 });
     }
@@ -1748,9 +1748,9 @@ public final class MomentsFragment extends Fragment {
             case PICKER: showPreview(); break;
             case DETAIL: showFeed(view); break;
             case PREVIEW:
-                new MaterialAlertDialogBuilder(requireContext()).setTitle("Bỏ ảnh này?")
-                        .setNegativeButton("Tiếp tục chỉnh sửa", null)
-                        .setPositiveButton("Bỏ ảnh", (dialog, choice) -> {
+                new MaterialAlertDialogBuilder(requireContext()).setTitle(getString(R.string.tin_discard_confirm))
+                        .setNegativeButton(getString(R.string.tin_keep_editing), null)
+                        .setPositiveButton(getString(R.string.tin_discard_photo), (dialog, choice) -> {
                             clearDraft();
                             grid = false; authorFilter = ""; showFeed("received");
                         }).show();
@@ -1773,13 +1773,13 @@ public final class MomentsFragment extends Fragment {
         author.setGravity(Gravity.CENTER);
         author.setMinimumHeight(dp(57));
         boolean own = item.optBoolean("own");
-        String name = own ? "Bạn" : item.optString("name");
+        String name = own ? getString(R.string.tin_you) : item.optString("name");
         User peer = friends.get(item.optString("owner"));
         ImageView avatar = avatarImage(own ? ownPhoto : peer == null ? null : peer.getPhotoUrl(), R.drawable.ic_nav_profile);
         author.addView(avatar, new LinearLayout.LayoutParams(dp(38), dp(38)));
         long date = item.optLong("createdAt");
         CharSequence time = DateUtils.getRelativeTimeSpanString(date, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS);
-        TextView label = text(name + "  ·  " + time + (item.optBoolean("seen") ? "" : "  ·  Chưa xem"), 14, true);
+        TextView label = text(name + "  ·  " + time + (item.optBoolean("seen") ? "" : "  ·  " + getString(R.string.tin_unseen)), 14, true);
         label.setPadding(dp(8), dp(9), 0, dp(9));
         label.setMaxLines(2);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -1817,7 +1817,7 @@ public final class MomentsFragment extends Fragment {
 
     private View photo(String id, boolean fullscreen, boolean lazy, Runnable open, Runnable loaded) {
         FrameLayout frame = squareFrame();
-        TextView status = text("Đang tải ảnh…", 14, false);
+        TextView status = text(getString(R.string.tin_photo_loading), 14, false);
         if (fullscreen) {
             frame.setBackground(rounded(requireContext().getColor(R.color.chat_canvas), 18));
         }
@@ -1827,7 +1827,7 @@ public final class MomentsFragment extends Fragment {
         Runnable load = new Runnable() {
             @Override public void run() {
                 status.setOnClickListener(null);
-                status.setText("Đang tải ảnh…");
+                status.setText(getString(R.string.tin_photo_loading));
                 photos.execute(() -> {
                     if (screen != generation || !sameUser()) return;
                     try {
@@ -1838,7 +1838,7 @@ public final class MomentsFragment extends Fragment {
                             if (fullscreen) image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                             image.setImageBitmap(bitmap);
                             if (open != null) {
-                                image.setContentDescription("Mở ảnh Khoảnh khắc");
+                                image.setContentDescription(getString(R.string.tin_open_photo));
                                 image.setOnClickListener(v -> open.run());
                             }
                             frame.removeAllViews();
@@ -1849,7 +1849,7 @@ public final class MomentsFragment extends Fragment {
                         main.post(() -> {
                             if (!active(generation)) return;
                             boolean gone = failure instanceof MomentApi.Failure && ((MomentApi.Failure) failure).status == 404;
-                            status.setText(gone ? "Ảnh không còn khả dụng" : "Chạm để thử tải ảnh lại");
+                            status.setText(gone ? getString(R.string.tin_photo_unavailable) : getString(R.string.tin_photo_retry));
                             if (!gone) status.setOnClickListener(v -> run());
                         });
                     }
@@ -1887,7 +1887,7 @@ public final class MomentsFragment extends Fragment {
     private ImageView imageView() {
         ImageView image = new ImageView(requireContext());
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setContentDescription("Ảnh Khoảnh khắc");
+        image.setContentDescription(getString(R.string.tin_photo));
         return image;
     }
 

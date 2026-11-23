@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import com.example.utechat.data.auth.AuthRepositoryProvider;
 import com.example.utechat.feature.auth.ui.LoginActivity;
-import com.example.utechat.feature.auth.ui.VerifyEmailActivity;
+import com.example.utechat.feature.auth.ui.PhoneAccountActivity;
 import com.example.utechat.feature.main.ui.MainActivity;
 
 /** Local navigation guard for signed-in-only activities. Backend authorization remains mandatory. */
@@ -20,9 +20,12 @@ public final class AuthGate {
 
     public static void openAfterAuth(Activity activity) {
         var repository = AuthRepositoryProvider.get(activity);
-        Class<?> screen = repository.pendingVerificationEmail() != null ? VerifyEmailActivity.class
-                : repository.getCurrentUser() != null ? MainActivity.class : LoginActivity.class;
+        Class<?> screen = repository.getCurrentUser() != null ? MainActivity.class : loginScreen(activity);
         replaceTask(activity, screen);
+    }
+
+    public static Class<?> loginScreen(Activity activity) {
+        return AuthRepositoryProvider.isMock(activity) ? LoginActivity.class : PhoneAccountActivity.class;
     }
 
     public static void replaceTask(Activity activity, Class<?> screen) {

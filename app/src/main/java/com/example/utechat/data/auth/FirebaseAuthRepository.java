@@ -1,15 +1,13 @@
 package com.example.utechat.data.auth;
 
 import android.content.Context;
-import androidx.annotation.NonNull;
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.User;
 import com.example.utechat.domain.repository.AuthRepository;
 import com.example.utechat.data.notifications.PushTokenRepository;
 import com.example.utechat.app.UteChatApplication;
 import com.google.android.gms.tasks.Tasks;
-import com.google.firebase.FirebaseNetworkException;
-import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.UserProfileChangeRequest;
@@ -32,12 +30,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
 
     @Override public User getCurrentUser() {
         FirebaseUser current = auth.getCurrentUser();
-        return current != null && current.isEmailVerified() ? authProfile(current) : null;
-    }
-
-    @Override public String pendingVerificationEmail() {
-        FirebaseUser current = auth.getCurrentUser();
-        return current != null && !current.isEmailVerified() ? current.getEmail() : null;
+        return PhoneAccountClient.hasVerifiedContact(current) ? authProfile(current) : null;
     }
 
     private User authProfile(FirebaseUser current) {
@@ -49,112 +42,28 @@ public final class FirebaseAuthRepository implements AuthRepository {
 
     @Override public void loadCurrentUser(Callback<User> callback) {
         FirebaseUser current = auth.getCurrentUser();
-        if (current == null || !current.isEmailVerified()) {
-            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
+        if (!PhoneAccountClient.hasVerifiedContact(current)) {
+            callback.onError(new AuthException(AppLanguage.text(context, R.string.auth_session_expired)));
             return;
         }
         loadProfile(current, callback);
     }
 
+    // These email methods are kept on the repository interface for the offline mock.
     @Override public void signIn(String email, String password, Callback<User> callback) {
-        auth.signInWithEmailAndPassword(email, password)
-                .addOnSuccessListener(result -> {
-                    FirebaseUser current = result.getUser();
-                    if (current == null) callback.onError(new AuthException(context.getString(R.string.auth_account_unavailable)));
-                    else if (current.isEmailVerified()) loadProfile(current, callback);
-                    else callback.onSuccess(authProfile(current));
-                })
-                .addOnFailureListener(error -> callback.onError(signInFailure(error)));
-    }
-
-    @Override public void sendVerificationEmail(Callback<Void> callback) {
-        FirebaseUser current = auth.getCurrentUser();
-        if (current == null) {
-            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
-            return;
-        }
-        auth.setLanguageCode("vi");
-        current.sendEmailVerification()
-                .addOnSuccessListener(unused -> callback.onSuccess(null))
-                .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
-    }
-
-    @Override public void confirmEmailVerification(Callback<User> callback) {
-        FirebaseUser current = auth.getCurrentUser();
-        if (current == null) {
-            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
-            return;
-        }
-        current.reload().addOnSuccessListener(unused -> {
-            FirebaseUser refreshed = auth.getCurrentUser();
-            if (refreshed == null || !current.getUid().equals(refreshed.getUid())) {
-                callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
-            } else if (!refreshed.isEmailVerified()) {
-                callback.onError(new AuthException(context.getString(R.string.verify_email_pending)));
-            } else {
-                refreshed.getIdToken(true).addOnSuccessListener(token -> {
-                    if (Boolean.TRUE.equals(token.getClaims().get("email_verified"))) loadProfile(refreshed, callback);
-                    else callback.onError(new AuthException(context.getString(R.string.verify_email_pending)));
-                }).addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
-            }
-        }).addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
+        callback.onError(phoneSignInRequired());
     }
 
     @Override public void resetPassword(String email, Callback<Void> callback) {
-        auth.setLanguageCode("vi");
-        auth.sendPasswordResetEmail(email)
-                .addOnSuccessListener(unused -> callback.onSuccess(null))
-                .addOnFailureListener(error -> {
-                    if (error instanceof com.google.firebase.auth.FirebaseAuthInvalidUserException)
-                        callback.onSuccess(null);
-                    else callback.onError(new AuthException(context.getString(isRateLimited(error)
-                            ? R.string.auth_rate_limited : R.string.reset_password_error)));
-                });
-    }
-
-    @Override public void changePassword(String current, String next, Callback<Void> callback) {
-        FirebaseUser user = auth.getCurrentUser();
-        if (user == null || user.getEmail() == null || !user.isEmailVerified()) {
-            callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
-            return;
-        }
-        if (next.equals(current)) {
-            callback.onError(new AuthException(context.getString(R.string.account_password_same)));
-            return;
-        }
-        user.reauthenticate(com.google.firebase.auth.EmailAuthProvider.getCredential(user.getEmail(), current))
-                .addOnFailureListener(error -> {
-                    AuthException failure = signInFailure(error);
-                    callback.onError(failure.getReason() == AuthException.Reason.INVALID_CREDENTIALS
-                            ? new AuthException(context.getString(R.string.account_wrong_password)) : failure);
-                })
-                .addOnSuccessListener(ignored -> user.updatePassword(next)
-                        .addOnSuccessListener(updated -> callback.onSuccess(null))
-                        .addOnFailureListener(error -> {
-                            boolean weak = error instanceof com.google.firebase.auth.FirebaseAuthWeakPasswordException;
-                            callback.onError(new AuthException(weak
-                                    ? context.getString(R.string.account_password_policy) : messageFor(error)));
-                        }));
+        callback.onError(phoneSignInRequired());
     }
 
     @Override public void register(String displayName, String email, String password, Callback<User> callback) {
-        auth.createUserWithEmailAndPassword(email, password)
-                .addOnSuccessListener(result -> {
-                    FirebaseUser current = result.getUser();
-                    if (current == null) {
-                        callback.onError(new AuthException(context.getString(R.string.auth_create_failed)));
-                        return;
-                    }
-                    UserProfileChangeRequest request = new UserProfileChangeRequest.Builder()
-                            .setDisplayName(displayName).build();
-                    current.updateProfile(request)
-                            .addOnSuccessListener(unused -> callback.onSuccess(authProfile(current)))
-                            .addOnFailureListener(error -> {
-                                auth.signOut();
-                                callback.onError(new AuthException(context.getString(R.string.auth_name_write_after_register)));
-                            });
-                })
-                .addOnFailureListener(error -> callback.onError(new AuthException(messageFor(error))));
+        callback.onError(phoneSignInRequired());
+    }
+
+    private AuthException phoneSignInRequired() {
+        return new AuthException(AppLanguage.text(context, R.string.phone_login));
     }
 
     @Override public void updateProfile(String displayName, String bio, Callback<User> callback) {
@@ -163,7 +72,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
 
     @Override public void updateProfile(String displayName, String bio, String photoUrl, Callback<User> callback) {
         FirebaseUser current = auth.getCurrentUser();
-        if (current == null || !current.isEmailVerified()) {
+        if (!PhoneAccountClient.hasVerifiedContact(current)) {
             callback.onError(new AuthException(context.getString(R.string.auth_session_expired)));
             return;
         }
@@ -172,7 +81,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
         firestore.runTransaction(transaction -> {
             DocumentSnapshot saved = transaction.get(own);
             String avatar = photoUrl != null ? photoUrl : fromSnapshot(current, saved).getPhotoUrl();
-            User updated = new User(current.getUid(), displayName, current.getEmail(), avatar, bio,
+            User updated = new User(current.getUid(), displayName, current.getEmail() == null ? "" : current.getEmail(), avatar, bio,
                     true, System.currentTimeMillis());
             transaction.set(own, profileData(updated), SetOptions.merge());
             transaction.set(publicCard, publicProfileData(updated), SetOptions.merge());
@@ -183,7 +92,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
             current.updateProfile(request.build());
             callback.onSuccess(updated);
         }).addOnFailureListener(error -> callback.onError(new AuthException(
-                context.getString(R.string.auth_profile_save_failed))));
+                AppLanguage.text(context, R.string.auth_profile_save_failed))));
     }
 
     @Override public void signOut(Runnable onComplete) {
@@ -219,7 +128,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
                 })
                 .addOnSuccessListener(callback::onSuccess)
                 .addOnFailureListener(error -> callback.onError(new AuthException(
-                        context.getString(R.string.auth_profile_load_failed))));
+                        AppLanguage.text(context, R.string.auth_profile_load_failed))));
     }
 
     private Map<String, Object> profileData(User user) {
@@ -249,7 +158,7 @@ public final class FirebaseAuthRepository implements AuthRepository {
         String bio = snapshot.getString("bio");
         String photo = snapshot.getString("photoUrl");
         if (name == null) name = firebaseUser.getDisplayName() == null ? "" : firebaseUser.getDisplayName();
-        if (name.trim().isEmpty()) name = context.getString(R.string.call_generic_peer);
+        if (name.trim().isEmpty()) name = AppLanguage.text(context, R.string.call_generic_peer);
         if (email == null) email = firebaseUser.getEmail() == null ? "" : firebaseUser.getEmail();
         User user = new User(firebaseUser.getUid(), name, email, photo, bio == null ? "" : bio,
                 true, System.currentTimeMillis());
@@ -265,41 +174,4 @@ public final class FirebaseAuthRepository implements AuthRepository {
         return 0L;
     }
 
-    private AuthException signInFailure(Exception error) {
-        if (isRateLimited(error)) {
-            return new AuthException(context.getString(R.string.auth_rate_limited), AuthException.Reason.RATE_LIMITED);
-        }
-        switch (errorCode(error)) {
-            case "ERROR_INVALID_EMAIL":
-            case "ERROR_USER_NOT_FOUND":
-            case "ERROR_USER_DISABLED":
-            case "ERROR_WRONG_PASSWORD":
-            case "ERROR_INVALID_LOGIN_CREDENTIALS":
-            case "ERROR_INVALID_CREDENTIAL":
-                return new AuthException(context.getString(R.string.auth_credential_invalid), AuthException.Reason.INVALID_CREDENTIALS);
-            default:
-                return new AuthException(messageFor(error));
-        }
-    }
-
-    private boolean isRateLimited(Exception error) {
-        return error instanceof FirebaseTooManyRequestsException || "ERROR_TOO_MANY_REQUESTS".equals(errorCode(error));
-    }
-
-    private String errorCode(Exception error) {
-        return error instanceof com.google.firebase.auth.FirebaseAuthException
-                ? ((com.google.firebase.auth.FirebaseAuthException) error).getErrorCode() : "";
-    }
-
-    private String messageFor(@NonNull Exception error) {
-        if (isRateLimited(error)) return context.getString(R.string.auth_rate_limited);
-        if (error instanceof FirebaseNetworkException) return context.getString(R.string.auth_network_failed);
-        switch (errorCode(error)) {
-            case "ERROR_INVALID_EMAIL": return context.getString(R.string.auth_email_invalid_backend);
-            case "ERROR_EMAIL_ALREADY_IN_USE": return context.getString(R.string.auth_email_in_use);
-            case "ERROR_WEAK_PASSWORD": return context.getString(R.string.auth_password_weak);
-            case "ERROR_NETWORK_REQUEST_FAILED": return context.getString(R.string.auth_network_failed);
-            default: return context.getString(R.string.auth_generic_error);
-        }
-    }
 }

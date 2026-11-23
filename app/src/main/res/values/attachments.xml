@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="attachment_invalid">Chọn tệp PDF, DOCX hoặc TXT hợp lệ, tối đa 8 MB.</string>
+    <string name="attachment_unavailable">Máy chủ chưa hỗ trợ tệp đính kèm.</string>
+    <string name="attachment_progress">Đang tải tệp lên · %1$d%%</string>
+    <string name="attachment_label">%1$s\n%2$s · Nhấn để mở hoặc lưu</string>
+    <string name="attachment_open">Mở tệp</string>
+    <string name="attachment_save">Lưu tệp về máy</string>
+    <string name="attachment_downloading">Đang tải tệp…</string>
+    <string name="attachment_send_error">Chưa gửi được tệp. Kiểm tra kết nối rồi thử lại.</string>
+    <string name="attachment_download_error">Chưa tải được tệp. Kiểm tra kết nối hoặc quyền truy cập.</string>
+    <string name="attachment_open_error">Không mở được tệp. Bạn có thể chọn lưu tệp về máy.</string>
+    <string name="attachment_saved">Đã lưu tệp.</string>
+    <string name="attachment_save_error">Chưa lưu được tệp. Hãy chọn vị trí khác hoặc thử lại.</string>
+</resources>

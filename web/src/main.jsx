@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, signOut, updatePassword } from 'firebase/auth'
+import { onIdTokenChanged, signOut } from 'firebase/auth'
 import {
   ArrowRight, BellOff, Check, CircleAlert, CircleDot, ContactRound, Image as ImageIcon,
   MessageCircle, MessageSquare, Pin, Plus, QrCode, Search, Settings, Star, UsersRound, UserRound, X
@@ -13,6 +13,7 @@ import {
 } from './chat-data'
 import { configureNotifications, disableNotifications, installWorker, notificationsEnabled, saveNotificationPreferences } from './notifications'
 import { AuthScreen } from './auth-screen'
+import { PhoneAccountForm, phoneAuthAvailable } from './phone-account'
 import { Moments, momentFromUrl } from './moments'
 import { BlockedList, Community, CreateGroup, Friends, GroupSettings, Profile, QrDialog, SearchDialog } from './people'
 import { CallOverlay, Chat, ChatOptions, ForwardDialog, Gallery, MessageActions, PeerProfile, PollDialog, ReportDialog } from './chat'
@@ -33,14 +34,25 @@ installWorker()
 
 function App() {
   const [identity, setIdentity] = useState(undefined)
-  const refresh = useCallback(() => {
+  const [phoneEnabled, setPhoneEnabled] = useState(null)
+  const refresh = useCallback(async () => {
     const user = auth.currentUser
-    setIdentity(user && { user, verified: user.emailVerified })
+    const token = await user?.getIdTokenResult().catch(() => null)
+    if (user !== auth.currentUser) return
+    const verified = token?.signInProvider === 'custom' && token.claims.utechatPhone === true &&
+      Boolean(user?.phoneNumber) && !user.email
+    setIdentity(verified ? user : null)
   }, [])
-  useEffect(() => onAuthStateChanged(auth, refresh), [refresh])
+  useEffect(() => onIdTokenChanged(auth, refresh), [refresh])
+  useEffect(() => {
+    const abort = new AbortController()
+    phoneAuthAvailable(abort.signal).then(setPhoneEnabled).catch(error => {
+      if (error.name !== 'AbortError') setPhoneEnabled(false)
+    })
+    return () => abort.abort()
+  }, [])
   if (identity === undefined) return <div className="splash" role="status"><Brand /><span className="spinner" /><span className="sr-only">Đang mở UTEChat</span></div>
-  return identity?.verified ? <Workspace key={identity.user.uid} user={identity.user} /> :
-    <AuthScreen user={identity?.user} verify={refresh} />
+  return identity ? <Workspace key={identity.uid} user={identity} /> : <AuthScreen phoneEnabled={phoneEnabled} />
 }
 
 function ChatList({ sorted, selected, choose, titleOf, uid, hidden, drafts, preferences, openSearch }) {
@@ -357,7 +369,9 @@ function Workspace({ user }) {
     {dialogs?.type === 'nickname' && <NicknameEditor data={dialogs} close={close} />}
     {dialogs?.type === 'wallpaper' && <WallpaperPicker data={dialogs.options} replace={setDialog} error={error} />}
     {dialogs?.type === 'info' && <Modal title={dialogs.title} onClose={close}><p>{dialogs.description}</p></Modal>}
-    {dialogs?.type === 'password' && <ChangePassword {...dialogProps} user={user} />}
+    {dialogs?.type === 'password' && <Modal title="Đổi mật khẩu" onClose={close}>
+      <PhoneAccountForm mode="change" user={user} onDone={() => { close(); notify('Đã đổi mật khẩu.') }} />
+    </Modal>}
     {dialogs?.type === 'blocked' && <BlockedList {...dialogProps} {...{ blocked, people }} />}
     {dialogs?.type === 'options' && <ChatOptions {...dialogProps} data={dialogs} replace={setDialog} confirm={setConfirmation}
       openCommunity={() => { close(); changeTab('community') }} />}
@@ -383,39 +397,6 @@ function Workspace({ user }) {
     <CallOverlay {...{ controller, uid: user.uid, error }} />
     <Toast toast={toast} clear={closeToast} />
   </div>
-}
-
-function ChangePassword({ user, close, notify }) {
-  const [busy, setBusy] = useState(false)
-  const [feedback, setFeedback] = useState('')
-  return <Modal title="Đổi mật khẩu" onClose={() => { if (!busy) close() }}>
-    <form className="stack" onSubmit={async event => {
-      event.preventDefault()
-      const fields = new FormData(event.currentTarget)
-      const current = fields.get('current')
-      const next = fields.get('next')
-      if (next !== fields.get('confirm')) { setFeedback('Hai mật khẩu mới chưa khớp.'); return }
-      if (next === current) { setFeedback('Mật khẩu mới phải khác mật khẩu hiện tại.'); return }
-      setBusy(true)
-      setFeedback('')
-      try {
-        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current))
-        await updatePassword(user, next)
-        close()
-        notify('Đã đổi mật khẩu.')
-      } catch (failure) {
-        setFeedback(['auth/invalid-credential', 'auth/wrong-password'].includes(failure.code)
-          ? 'Mật khẩu hiện tại chưa đúng.' : failure.code === 'auth/weak-password' || failure.code === 'auth/password-does-not-meet-requirements'
-            ? 'Mật khẩu mới chưa đáp ứng yêu cầu.' : errorText(failure))
-      } finally { setBusy(false) }
-    }}>
-      <label>Mật khẩu hiện tại<input type="password" name="current" autoComplete="current-password" required autoFocus disabled={busy} /></label>
-      <label>Mật khẩu mới<input type="password" name="next" autoComplete="new-password" minLength={6} required disabled={busy} /></label>
-      <label>Nhập lại mật khẩu mới<input type="password" name="confirm" autoComplete="new-password" required disabled={busy} /></label>
-      {feedback && <p className="feedback error" role="alert">{feedback}</p>}
-      <button className="primary wide" disabled={busy}>{busy ? 'Đang lưu…' : 'Đổi mật khẩu'}</button>
-    </form>
-  </Modal>
 }
 
 function NicknameEditor({ data, close }) {

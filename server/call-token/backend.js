@@ -1,6 +1,7 @@
 "use strict";
 const crypto = require("node:crypto");
 const { createMoments, MAX_PHOTO_BYTES } = require("./moments");
+const { MAX_ATTACHMENT_BYTES, attachmentType, validAttachment } = require("./attachments");
 const { createPhoneAuth, isEmailAccount, verifiedAccount } = require("./phone-auth");
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_VOICE_BYTES = 512 * 1024;
@@ -11,9 +12,11 @@ const API_METHODS = new Map([
   ["/api/rtc-token", ["POST"]], ["/api/call-invite", ["POST"]],
   ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
   ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]],
+  ["/api/attachment", ["GET", "PUT"]],
   ["/api/moments", ["GET", "PUT"]], ["/api/moment", ["GET", "POST", "DELETE"]], ["/api/moment-photo", ["GET"]]
 ]);
-for (const action of ["login", "register", "reset"]) API_METHODS.set(`/api/phone-auth/${action}`, ["POST"]);
+const PHONE_AUTH_METHODS = ["login", "register", "reset"];
+for (const action of PHONE_AUTH_METHODS) API_METHODS.set(`/api/phone-auth/${action}`, ["POST"]);
 API_METHODS.set("/api/phone-auth/status", ["GET"]);
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const segment = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -80,22 +83,23 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
   dailyUploadBytes = 32 * 1024 * 1024, phoneAuthEnabled = false, legacyEmailAccess = false }) {
   const windows = new Map(), expiryTimers = new Map(); let lastSweep = 0;
   const groupDeletions = new Map();
-  const moments = createMoments({ db, storage, now, dailyUploadBytes, hash, segment, validImage, requireValue, contactAllowed, pushOnce });
   const phoneAuth = createPhoneAuth({ auth, db, now, requireValue });
+  const moments = createMoments({ db, storage, now, dailyUploadBytes, hash, segment, validImage, requireValue, contactAllowed, pushOnce });
   async function contactAllowed(first, second, tx) {
     const refs = [db.doc(`users/${first}/blocked/${second}`), db.doc(`users/${second}/blocked/${first}`)];
     const blocks = await Promise.all(refs.map(ref => tx ? tx.get(ref) : ref.get()));
     return blocks.every(block => !block.exists);
   }
-  async function member(conversationId, uid) {
-    const parent = await db.doc(`conversations/${conversationId}`).get(), data = parent.data();
+  async function member(conversationId, uid, transaction) {
+    const read = path => transaction ? transaction.get(db.doc(path)) : db.doc(path).get();
+    const parent = await read(`conversations/${conversationId}`), data = parent.data();
     requireValue(parent.exists && Array.isArray(data.participantIds) && data.participantIds.includes(uid), 403, "forbidden");
     requireValue(!data.lifecycle || data.lifecycle === "active", 409, "group-deleting");
     if (data.type === "direct") {
       requireValue(data.participantIds.length === 2 && new Set(data.participantIds).size === 2, 403, "forbidden");
     } else {
       requireValue(data.type === "group", 403, "forbidden");
-      const snapshot = await db.doc(`conversations/${conversationId}/members/${uid}`).get();
+      const snapshot = await read(`conversations/${conversationId}/members/${uid}`);
       requireValue(snapshot.exists && snapshot.data().userId === uid, 403, "forbidden");
     }
     return data;
@@ -241,7 +245,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       const eligible = valid.filter((doc) => !muted(doc.data()) &&
         (data.eventType !== "moment-revoked" || doc.data().platform !== "web"));
       const webMessage = (doc) => message && doc.data().platform === "web";
-      const { preview, senderName, conversationTitle, ...generic } = data;
+      const { preview, senderName, conversationTitle, messageType, ...generic } = data;
       const deliveries = [
         { docs: eligible.filter((doc) => !webMessage(doc)), payload: data },
         { docs: eligible.filter((doc) => webMessage(doc) && doc.data().showPreview === true),
@@ -314,6 +318,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         eventType: "message", conversationId: body.conversationId, messageId: body.messageId,
         senderName: String(data.senderName || "UTEChat").slice(0, 80), conversationType: group ? "group" : "direct",
         conversationTitle: group ? String(parent.data().groupName || "Nhóm UTEChat").slice(0, 80) : "",
+        messageType: String(data.type || "text"),
         preview: data.type === "image" ? "[Hình ảnh]" : String(data.content || "Tin nhắn mới").slice(0, 300),
         }, 24 * 60 * 60_000);
       } catch (error) {
@@ -322,10 +327,11 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     }
     if (retryError) throw retryError;
   }
-  async function upload(path, uid, bytes, contentType) {
+  async function upload(path, uid, bytes, contentType, fileName) {
     requireValue(storage, 503, "media-not-configured"); const parts = mediaPath(path);
     requireValue(parts.ownerUid === uid, 403, "forbidden"); await member(parts.conversationId, uid);
-    requireValue(validImage(bytes, contentType), 400, "invalid-image");
+    if (fileName !== undefined) requireValue(attachmentType(fileName) === contentType && validAttachment(bytes, contentType), 400, "invalid-attachment");
+    else requireValue(validImage(bytes, contentType), 400, "invalid-image");
     const digest = hash(bytes), ref = db.doc(`backendMedia/${hash(path)}`);
     const quota = db.doc(`backendUsage/${hash(uid)}_${new Date(now()).toISOString().slice(0, 10)}`);
     const existing = await db.runTransaction(async (tx) => {
@@ -337,11 +343,14 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         requireValue(await contactAllowed(...parent.data().participantIds, tx), 403, "contact-unavailable");
       }
       if (saved.exists) {
-        requireValue(saved.data().sha256 === digest && saved.data().contentType === contentType, 409, "immutable-object"); return saved.data();
+        requireValue(saved.data().sha256 === digest && saved.data().contentType === contentType
+          && saved.data().fileName === fileName, 409, "immutable-object");
+        return saved.data();
       }
       const used = usage.data()?.bytes || 0;
       requireValue(used + bytes.length <= dailyUploadBytes, 429, "daily-upload-limit");
       const record = { path, contentType, size: bytes.length, sha256: digest, ready: false, createdAt: now() };
+      if (fileName !== undefined) record.fileName = fileName;
       tx.set(ref, record); tx.set(quota, { bytes: used + bytes.length }); return record;
     });
     if (!existing.ready) {
@@ -355,16 +364,43 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     }
     return { path, size: bytes.length, contentType };
   }
-  async function download(path, uid) {
+  async function publishAttachment(path, uid) {
+    const { conversationId, messageId } = mediaPath(path);
+    const conversation = db.doc(`conversations/${conversationId}`);
+    const message = conversation.collection("messages").doc(messageId);
+    return db.runTransaction(async tx => {
+      const parent = await member(conversationId, uid, tx);
+      if (parent.type === "direct") requireValue(await contactAllowed(...parent.participantIds, tx), 403, "contact-unavailable");
+      const [record, saved, profile] = await Promise.all([tx.get(db.doc(`backendMedia/${hash(path)}`)), tx.get(message),
+        tx.get(db.doc(`publicProfiles/${uid}`))]);
+      const attachment = record.data();
+      requireValue(attachment?.ready && attachment.path === path && attachmentType(attachment.fileName) === attachment.contentType, 409, "attachment-not-ready");
+      if (saved.exists) {
+        requireValue(saved.data().senderId === uid && saved.data().type === "file" && saved.data().mediaPath === path,
+          409, "immutable-message");
+      } else {
+        requireValue(typeof profile.data()?.displayName === "string", 403, "profile-required");
+        const sentAt = Math.max(now(), (parent.lastMessageAt || 0) + 1);
+        tx.set(message, { senderId: uid, senderName: profile.data().displayName, type: "file",
+          content: attachment.fileName, fileName: attachment.fileName, fileSize: attachment.size,
+          mediaPath: path, contentType: attachment.contentType, createdAt: sentAt, sentAt, readBy: [uid] });
+        tx.update(conversation, { lastMessage: attachment.fileName, lastMessageType: "file",
+          lastMessageId: messageId, lastMessageSenderId: uid, lastMessageAt: sentAt, updatedAt: sentAt });
+      }
+      return { path, size: attachment.size, contentType: attachment.contentType };
+    });
+  }
+  async function download(path, uid, type = "image") {
     requireValue(storage, 503, "media-not-configured"); const parts = mediaPath(path); await member(parts.conversationId, uid);
     const [record, message] = await Promise.all([db.doc(`backendMedia/${hash(path)}`).get(),
       db.doc(`conversations/${parts.conversationId}/messages/${parts.messageId}`).get()]);
-    requireValue(record.exists && record.data().ready, 404, "not-found");
+    requireValue(record.exists && record.data().ready && (type === "file") === !!record.data().fileName, 404, "not-found");
     requireValue(message.data()?.type !== "recalled", 404, "not-found");
-    requireValue(uid === parts.ownerUid || (message.exists && message.data().type === "image"
+    requireValue((type === "image" && uid === parts.ownerUid) || (message.exists && message.data().type === type
       && message.data().mediaPath === path && message.data().senderId === parts.ownerUid), 403, "forbidden");
     const bytes = await storage.download(path), metadata = record.data();
-    requireValue(bytes.length === metadata.size && hash(bytes) === metadata.sha256 && validImage(bytes, metadata.contentType), 502, "invalid-media");
+    requireValue(bytes.length === metadata.size && hash(bytes) === metadata.sha256
+      && (type === "file" ? validAttachment(bytes, metadata.contentType) : validImage(bytes, metadata.contentType)), 502, "invalid-media");
     return { bytes, contentType: metadata.contentType };
   }
   // Short voice notes fit inside one private Firestore document. The client can
@@ -463,6 +499,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         { status: "configured", apiVersion: 1, media: !!storage, voice: true, moments: !!storage });
       if (req.method === "GET" && url.pathname === "/api/phone-auth/status") return send(res, 200, { enabled: phoneAuthEnabled });
       const voice = url.pathname === "/api/voice";
+      const attachment = url.pathname === "/api/attachment";
       const avatar = url.pathname === "/api/avatar";
       if (avatar && req.method === "GET") {
         return send(res, 200, await downloadAvatar(url.searchParams.get("uid")), "image/jpeg", "public, max-age=300");
@@ -489,7 +526,7 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       const legacyAccount = legacyEmailAccess && user.email_verified === true && user.firebase?.sign_in_provider !== "phone";
       requireValue(verifiedAccount(user) || legacyAccount, 403, "phone-session-required");
       const momentImage = url.pathname === "/api/moment-photo" || (url.pathname === "/api/moments" && req.method === "PUT");
-      rateLimit(user.uid, url.pathname === "/api/media" || voice || avatar || momentImage ? "media" : "api");
+      rateLimit(user.uid, url.pathname === "/api/media" || voice || attachment || avatar || momentImage ? "media" : "api");
       if (url.pathname === "/api/moments") {
         if (req.method === "GET") return send(res, 200,
           await moments.list(user.uid, url.searchParams.get("view") || "received", url.searchParams.get("before")));
@@ -532,6 +569,20 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
         if (req.method === "GET") { const result = await download(path, user.uid); return send(res, 200, result.bytes, result.contentType); }
         requireValue(parts.ownerUid === user.uid, 403, "forbidden"); await member(parts.conversationId, user.uid);
         return send(res, 200, await upload(path, user.uid, await readBody(req, MAX_IMAGE_BYTES), req.headers["content-type"]));
+      }
+      if (attachment) {
+        const path = url.searchParams.get("path"), parts = mediaPath(path);
+        if (req.method === "GET") {
+          const result = await download(path, user.uid, "file");
+          res.setHeader("Content-Disposition", "attachment");
+          return send(res, 200, result.bytes, result.contentType);
+        }
+        requireValue(parts.ownerUid === user.uid && !parts.messageId.startsWith("call_"), 403, "forbidden");
+        const name = url.searchParams.get("name"), type = req.headers["content-type"];
+        requireValue(type && type === attachmentType(name), 400, "invalid-attachment");
+        await member(parts.conversationId, user.uid);
+        await upload(path, user.uid, await readBody(req, MAX_ATTACHMENT_BYTES), type, name);
+        return send(res, 200, await publishAttachment(path, user.uid));
       }
       const body = await readJson(req); requireValue(body && typeof body === "object" && !Array.isArray(body));
       if (url.pathname === "/api/rtc-token") return send(res, 200, mintToken(await acceptedCall(body.callId, user.uid), user.uid));

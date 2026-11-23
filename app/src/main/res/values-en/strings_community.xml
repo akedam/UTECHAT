@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="community_subtitle">Connect and chat with your groups</string>
+    <string name="community_create_title">Create a new group</string>
+    <string name="community_create_hint">Groups have 3 to 5 members including you. Select 2 to 4 friends to begin.</string>
+    <string name="community_choose_members">Select members</string>
+    <string name="community_your_groups">Your groups</string>
+    <string name="community_group_count">%1$d groups</string>
+    <string name="community_empty_title">No groups yet</string>
+    <string name="community_empty_hint">Create a group with friends to share and chat.</string>
+    <string name="community_no_messages">Start a conversation with everyone</string>
+    <string name="community_friends_action">Go to Friends</string>
+    <string name="community_friends_title">Add friends to create a group</string>
+    <string name="community_create_count">Create group (%1$d people)</string>
+    <string name="community_created">Group created</string>
+    <string name="community_you">%1$s (You)</string>
+    <string name="community_leave_title">Leave group?</string>
+    <string name="community_remove_title">Remove member?</string>
+    <string name="community_transfer_title">Transfer group ownership?</string>
+    <string name="community_close">Close</string>
+</resources>

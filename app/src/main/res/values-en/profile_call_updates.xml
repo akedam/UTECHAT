@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_choose_photo">Choose profile photo</string>
+    <string name="profile_photo_upload_error">Could not upload your profile photo. Choose another photo or try again.</string>
+    <string name="profile_view_friend">View profile</string>
+    <string name="profile_send_message">Message</string>
+    <string name="profile_remove_friend">Remove friend</string>
+    <string name="profile_remove_friend_confirm">This person will be removed from your friends list.</string>
+    <string name="profile_removed_friend">Friend removed.</string>
+    <string name="profile_not_friend">This person is not in your friends list.</string>
+    <string name="chat_blocked_by_peer">You were blocked</string>
+    <string name="call_full_screen_setting">Allow full-screen incoming calls</string>
+    <string name="friend_qr_save">Save QR image</string>
+    <string name="friend_qr_saved">QR image saved.</string>
+</resources>

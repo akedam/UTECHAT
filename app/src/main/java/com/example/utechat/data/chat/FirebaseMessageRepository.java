@@ -3,6 +3,7 @@ package com.example.utechat.data.chat;
 import android.content.Context;
 
 import com.example.utechat.R;
+import com.example.utechat.core.common.AppLanguage;
 import com.example.utechat.domain.model.Message;
 import com.example.utechat.domain.model.MessagePage;
 import com.example.utechat.domain.repository.MessageRepository;
@@ -41,7 +42,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
                 .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE,
                         (snapshot, error) -> {
                             if (error != null) {
-                                listener.onError(context.getString(R.string.chat_load_error));
+                                listener.onError(AppLanguage.text(context, R.string.chat_load_error));
                                 return;
                             }
                             if (snapshot != null) listener.onMessages(map(snapshot, currentUserId, currentUserName,
@@ -61,7 +62,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         messages(conversationId).document(beforeMessageId).get()
                 .addOnSuccessListener(cursor -> {
                     if (!cursor.exists()) {
-                        callback.onError(context.getString(R.string.chat_history_error));
+                        callback.onError(AppLanguage.text(context, R.string.chat_history_error));
                         return;
                     }
                     messages(conversationId).orderBy("sentAt", Query.Direction.DESCENDING)
@@ -82,9 +83,9 @@ public final class FirebaseMessageRepository implements MessageRepository {
                                 callback.onSuccess(new MessagePage(older, hasMore));
                             })
                             .addOnFailureListener(error -> callback.onError(
-                                    context.getString(R.string.chat_history_error)));
+                                    AppLanguage.text(context, R.string.chat_history_error)));
                 })
-                .addOnFailureListener(error -> callback.onError(context.getString(R.string.chat_history_error)));
+                .addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.chat_history_error)));
     }
 
     @Override
@@ -129,7 +130,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
             }
             return null;
         }).addOnSuccessListener(unused -> callback.onSuccess())
-                .addOnFailureListener(error -> callback.onError(context.getString(R.string.message_action_error)));
+                .addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.message_action_error)));
     }
 
     @Override public void react(String conversationId, String messageId, String uid, String emoji, SendCallback callback) {
@@ -171,7 +172,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
                 || (poll && !validPoll(message))
                 || ((image || voice) && (message.getMediaUrl() == null || message.getContentType() == null
                     || message.getFileSize() <= 0 || message.getFileSize() > 8L * 1024L * 1024L))) {
-            callback.onError(context.getString(R.string.chat_send_error));
+            callback.onError(AppLanguage.text(context, R.string.chat_send_error));
             return;
         }
 
@@ -237,7 +238,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
     @Override public void votePoll(String conversationId, String messageId, String voterUid,
                                    int optionIndex, SendCallback callback) {
         if (conversationId == null || messageId == null || voterUid == null || optionIndex < 0) {
-            callback.onError(context.getString(R.string.poll_vote_error)); return;
+            callback.onError(AppLanguage.text(context, R.string.poll_vote_error)); return;
         }
         var reference = messages(conversationId).document(messageId);
         firestore.runTransaction(transaction -> {
@@ -254,7 +255,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
             transaction.update(reference, "pollVotes", votes);
             return null;
         }).addOnSuccessListener(unused -> callback.onSuccess())
-                .addOnFailureListener(error -> callback.onError(context.getString(R.string.poll_vote_error)));
+                .addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.poll_vote_error)));
     }
 
     private void verifyIdempotentWrite(com.google.firebase.firestore.DocumentReference reference,
@@ -271,9 +272,9 @@ public final class FirebaseMessageRepository implements MessageRepository {
                         reference.getParent().getParent().getId(), message.getId());
                 callback.onSuccess();
             } else {
-                callback.onError(context.getString(R.string.chat_send_error));
+                callback.onError(AppLanguage.text(context, R.string.chat_send_error));
             }
-        }).addOnFailureListener(error -> callback.onError(context.getString(R.string.chat_send_error)));
+        }).addOnFailureListener(error -> callback.onError(AppLanguage.text(context, R.string.chat_send_error)));
     }
 
     private com.google.firebase.firestore.CollectionReference messages(String conversationId) {
@@ -310,6 +311,7 @@ public final class FirebaseMessageRepository implements MessageRepository {
         }
         message.setMediaUrl(document.getString("mediaPath"));
         message.setContentType(document.getString("contentType"));
+        message.setFileName(document.getString("fileName"));
         message.setDurationMs(epochMillis(document.get("durationMs")));
         Object rawReactions = document.get("reactions");
         if (rawReactions instanceof Map) {

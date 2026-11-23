@@ -1,5 +1,7 @@
 package com.example.utechat.feature.moments;
 
+import com.example.utechat.data.auth.PhoneAccountClient;
+
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
@@ -70,7 +72,7 @@ public final class MomentWidget extends AppWidgetProvider {
     private static String currentUid() {
         try {
             FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-            return user != null && user.isEmailVerified() ? user.getUid() : null;
+            return PhoneAccountClient.hasVerifiedContact(user) ? user.getUid() : null;
         } catch (IllegalStateException missing) { return null; }
     }
 

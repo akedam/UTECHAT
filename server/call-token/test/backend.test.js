@@ -111,6 +111,7 @@ test("browser preflight permits UTEChat origins and leaves API authentication in
   assert.equal(anonymous.status,401);
   assert.equal(anonymous.headers.get("access-control-allow-origin"),trusted);
 });
+
 test("phone authentication is disabled unless the server explicitly enables it", async t => {
   const { request } = await fixture(t);
   assert.deepEqual(await request("/api/phone-auth/status", null, null, "GET"),
@@ -183,6 +184,79 @@ test("OTP proofs can set or reset phone passwords without unlocking chat", async
   assert.equal((await login(next)).status, 200);
 });
 
+test("attachments publish once and downloads require current conversation access", async t => {
+  const f = await fixture(t);
+  const path = "conversations/chat/alice/attachment1";
+  const route = `/api/attachment?path=${encodeURIComponent(path)}`;
+  const upload = (uid, bytes, name = "Bài tập.pdf", type = "application/pdf") =>
+    f.request(`${route}&name=${encodeURIComponent(name)}`, uid, bytes, "PUT", type);
+  const pdf = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+  assert.equal((await upload("bob", pdf)).status, 403);
+  assert.equal((await upload("alice", PNG)).status, 400);
+  assert.equal((await upload("alice", pdf, "../file.pdf")).status, 400);
+  assert.equal((await upload("alice", pdf, "file.exe")).status, 400);
+  assert.equal((await f.request(route, "bob", null, "GET")).status, 404);
+  const results = await Promise.all([upload("alice", pdf), upload("alice", pdf)]);
+  for (const result of results) assert.deepEqual(result, { status: 200,
+    body: { path, size: pdf.length, contentType: "application/pdf" } });
+  assert.equal(f.objects.size, 1);
+  const message = f.db.rows.get("conversations/chat/messages/attachment1");
+  assert.equal(message.fileName, "Bài tập.pdf");
+  assert.equal(message.type, "file");
+  assert.equal(message.fileSize, pdf.length);
+  assert.equal(f.db.rows.get("conversations/chat").lastMessageType, "file");
+  assert.equal((await upload("alice", pdf, "renamed.pdf")).status, 409);
+  assert.deepEqual((await f.request(route, "bob", null, "GET")).body, pdf);
+  assert.equal((await f.request(route, "mallory", null, "GET")).status, 403);
+  assert.equal((await f.request(`/api/media?path=${path}`, "bob", null, "GET")).status, 404);
+  f.db.rows.set("conversations/chat/messages/attachment1", { ...message, type: "recalled" });
+  assert.equal((await f.request(route, "alice", null, "GET")).status, 404);
+  assert.equal((await upload("alice", pdf)).status, 409);
+});
+
+test("attachments reject blocked senders and removed group members", async t => {
+  const f = await fixture(t, { rows: {
+    "conversations/group": { type: "group", participantIds: ["alice", "bob"] },
+    "conversations/group/members/alice": { userId: "alice" },
+    "conversations/group/members/bob": { userId: "bob" },
+    "users/bob/blocked/alice": {},
+  } });
+  const direct = "/api/attachment?path=conversations/chat/alice/attachment1&name=notes.txt";
+  const group = "/api/attachment?path=conversations/group/alice/attachment1";
+  const notes = Buffer.from("Ghi chú nhóm", "utf8");
+  assert.equal((await f.request(direct, "alice", notes, "PUT", "text/plain")).status, 403);
+  assert.equal((await f.request(`${group}&name=notes.txt`, "alice", notes, "PUT", "text/plain")).status, 200);
+  f.db.rows.delete("conversations/group/members/bob");
+  assert.equal((await f.request(group, "bob", null, "GET")).status, 403);
+});
+
+test("Word attachments preserve the original OOXML file and reject an unrelated ZIP", async t => {
+  const f = await fixture(t);
+  const route = "/api/attachment?path=conversations/chat/alice/word1";
+  const type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  // Minimal OOXML document containing the word UTEChat.
+  const word = Buffer.from(
+    "UEsDBBQAAAAIAAAAISh0JJxTxQAAAD4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbJSQMU7EQAxFrxJNi3a8oqBASRqgBQou" +
+    "YE2cZMTYHo29S7g9ygJb0FH7/f++3L99VrJu4yI2hNW93gNYWonRolaSjcusjdEtalugYnrHheD2eLyDpOIkfvC9I4z9I814" +
+    "Kt49bU5iWWUIjYqF7uEb3F1DwFpLTuhZBc4y/bEcfgyxUbkwtuZqNxuXAGP/cqbW8kTdKzZ/RqYhwIe2CSZNJybxuIP/8uk8" +
+    "50TX/N5WmyYyy7JwidcLY5bfHXB52/gFAAD//wMAUEsDBBQAAAAIAAAAIShhey9DkAAAAPIAAAALAAAAX3JlbHMvLnJlbHOM" +
+    "zzEOAiEQBdCrkDnAzmphYYDKZluzFyAwuxCBIYBxvb2NxWosbH9+3s+XV4qmB87Nh9LElmJuCnzv5YzYrKdk2sCF8pbiwjWZ" +
+    "3gauKxZjb2YlPI7jCeveAC33ppicgjq5A4j5Wegfm5clWLqwvSfK/cfEVwPEbOpKXcGDq0P3joctRUAt8eOifgEAAP//AwBQ" +
+    "SwMEFAAAAAgAAAAhKFyOFPt/AAAAmQAAABEAAAB3b3JkL2RvY3VtZW50LnhtbETOMQ7CMAwF0KugHqCuGBiikAVxAzhASENT" +
+    "KY4j21XK7VHKwPK+/vClb5uZKWwYi552zEVMuw5JtRoACSmil5FqLDvmNzF6lZF4gUY8V6YQRdayYIbzNF0A/VoGZ5t50fzp" +
+    "WTvcUfd83G/Jq4VeunxYD38D+J9xXwAAAP//AwBQSwECFAAUAAAACAAAACEodCScU8UAAAA+AQAAEwAAAAAAAAAAAAAAAAAA" +
+    "AAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUABQAAAAIAAAAIShhey9DkAAAAPIAAAALAAAAAAAAAAAAAAAAAPYAAABfcmVs" +
+    "cy8ucmVsc1BLAQIUABQAAAAIAAAAIShcjhT7fwAAAJkAAAARAAAAAAAAAAAAAAAAAK8BAAB3b3JkL2RvY3VtZW50LnhtbFBL" +
+    "BQYAAAAAAwADALkAAABdAgAAAAA=", "base64");
+  const zip = Buffer.from(word);
+  const entry = Buffer.from("word/document.xml");
+  for (let offset = zip.indexOf(entry); offset >= 0; offset = zip.indexOf(entry, offset + entry.length)) {
+    Buffer.from("word/different.xml".slice(0, entry.length)).copy(zip, offset);
+  }
+  assert.equal((await f.request(route + "&name=test.docx", "alice", zip, "PUT", type)).status, 400);
+  assert.equal((await f.request(route + "&name=test.docx", "alice", word, "PUT", type)).status, 200);
+  assert.deepEqual((await f.request(route, "bob", null, "GET")).body, word);
+});
 test("Moments are private, deduplicated, and removable only by their author", async t => {
   const f = await fixture(t, { rows: {
     "friendships/alice_bob": { fromUid: "alice", toUid: "bob", status: "accepted" }
@@ -301,6 +375,13 @@ test("verified email alone gives no chat API access and receives no notification
   assert.equal((await f.request("/api/voice?path=conversations/chat/alice/v1", "legacy-alice", null, "GET")).status, 403);
   assert.equal((await f.request("/api/message-notify", "alice", {conversationId:"chat",messageId:"msg1"})).status, 200);
   assert.equal(f.pushes.length, 0);
+});
+test("cutover verification can preserve old email sessions without granting access to an OTP proof", async t => {
+  const f = await fixture(t, { backend: { phoneAuthEnabled: true, legacyEmailAccess: true }, unverifiedRecipients: ["bob"] });
+  assert.equal((await f.request("/api/rtc-token", "legacy-alice", {callId:"call1"})).status, 200);
+  assert.equal((await f.request("/api/rtc-token", "legacy-otp-alice", {callId:"call1"})).status, 403);
+  assert.equal((await f.request("/api/message-notify", "alice", {conversationId:"chat",messageId:"msg1"})).status, 200);
+  assert.equal(f.pushes.length, 1);
 });
 test("token authorization rejects absent/revoked/outsider credentials; RTC UIDs stay stable",async(t)=>{
   const f=await fixture(t);
