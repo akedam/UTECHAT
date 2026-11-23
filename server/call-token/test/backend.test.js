@@ -74,6 +74,11 @@ async function fixture(t,options={}) {
       async getUser(uid){return (options.unverifiedRecipients || []).includes(uid)
         ? { email: "legacy@example.test", emailVerified: true }
         : { phoneNumber: "+16505550101", customClaims: { utechatPhone: true } };},
+      async getUserByPhoneNumber(phone) {
+        const account = options.phoneAccounts?.[phone];
+        if (!account) throw Object.assign(new Error("unknown phone"), { code: "auth/user-not-found" });
+        return account;
+      },
     },
     messaging:{async sendEachForMulticast(data){pushes.push(data);return{responses:data.tokens.map(()=>({success:true}))};}},
     mintToken(call,uid){tokenCalls++;return{token:"test-rtc-token",uid:call.rtcUidByUser[uid]};},
@@ -110,6 +115,41 @@ test("browser preflight permits UTEChat origins and leaves API authentication in
   const anonymous=await fetch(base+"/api/rtc-token",{method:"POST",headers:{Origin:trusted}});
   assert.equal(anonymous.status,401);
   assert.equal(anonymous.headers.get("access-control-allow-origin"),trusted);
+});
+
+test("phone lookup requires a verified session, returns only public fields and limits repeated searches", async t => {
+  const { request } = await fixture(t, {
+    rows: { "publicProfiles/bob": { displayName: "Bob", photoUrl: "avatar", phone: "private" } },
+    phoneAccounts: {
+      "+84900000001": { uid: "bob", customClaims: { utechatPhone: true } },
+      "+84900000002": { uid: "alice", customClaims: { utechatPhone: true } },
+      "+84900000003": { uid: "bob" },
+      "+84900000004": { uid: "bob", disabled: true, customClaims: { utechatPhone: true } },
+    },
+  });
+  const route = "/api/friends/lookup";
+  assert.equal((await request(route, null, { phone: "+84900000001" })).status, 401);
+  assert.equal((await request(route, "legacy-alice", { phone: "+84900000001" })).status, 403);
+  assert.equal((await request(route, "alice", { phone: "+8490" })).status, 400);
+  assert.deepEqual(await request(route, "alice", { phone: "+84900000001" }),
+    { status: 200, body: { user: { id: "bob", displayName: "Bob", photoUrl: "avatar" } } });
+  for (const phone of ["+84900000002", "+84900000003", "+84900000004", "+84900000005", "+84900000006"]) {
+    assert.deepEqual(await request(route, "alice", { phone }), { status: 200, body: { user: null } });
+  }
+  assert.equal((await request(route, "alice", { phone: "+84900000001" })).status, 429);
+});
+
+test("phone lookup conceals targets blocked in either direction", async t => {
+  const { request, db } = await fixture(t, {
+    rows: { "publicProfiles/bob": { displayName: "Bob" } },
+    phoneAccounts: { "+84900000001": { uid: "bob", customClaims: { utechatPhone: true } } },
+  });
+  for (const path of ["users/alice/blocked/bob", "users/bob/blocked/alice"]) {
+    db.rows.set(path, {});
+    assert.deepEqual(await request("/api/friends/lookup", "alice", { phone: "+84900000001" }),
+      { status: 200, body: { user: null } });
+    db.rows.delete(path);
+  }
 });
 
 test("phone authentication is disabled unless the server explicitly enables it", async t => {

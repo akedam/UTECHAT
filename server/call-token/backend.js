@@ -13,6 +13,7 @@ const API_METHODS = new Map([
   ["/api/message-notify", ["POST"]], ["/api/group-delete", ["POST"]],
   ["/api/media", ["GET", "PUT"]], ["/api/voice", ["GET", "PUT"]], ["/api/avatar", ["GET", "PUT"]],
   ["/api/attachment", ["GET", "PUT"]],
+  ["/api/friends/lookup", ["POST"]],
   ["/api/moments", ["GET", "PUT"]], ["/api/moment", ["GET", "POST", "DELETE"]], ["/api/moment-photo", ["GET"]]
 ]);
 const PHONE_AUTH_METHODS = ["login", "register", "reset"];
@@ -159,7 +160,26 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
     if (windows.size > 5000) for (const [id, window] of windows) if (window.until < time) windows.delete(id);
     const window = windows.get(key);
     if (!window || time >= window.until) { windows.set(key, { until: time + 60_000, count: 1 }); return; }
-    requireValue(++window.count <= (kind === "media" ? 30 : 120), 429, "rate-limited");
+    const limit = kind === "friend-lookup" ? 6 : kind === "media" ? 30 : 120;
+    requireValue(++window.count <= limit, 429, "rate-limited");
+  }
+  async function lookupFriend(uid, phone) {
+    requireValue(typeof phone === "string" && /^\+[1-9][0-9]{7,14}$/.test(phone), 400, "invalid-phone");
+    rateLimit(uid, "friend-lookup");
+    let account;
+    try { account = await auth.getUserByPhoneNumber(phone); }
+    catch (error) {
+      if (error.code === "auth/user-not-found") return { user: null };
+      throw error;
+    }
+    if (account.uid === uid || account.disabled || isEmailAccount(account)
+        || account.customClaims?.utechatPhone !== true) return { user: null };
+    const [profile, allowed] = await Promise.all([
+      db.doc(`publicProfiles/${account.uid}`).get(), contactAllowed(uid, account.uid)
+    ]);
+    const data = profile.data();
+    if (!allowed || typeof data?.displayName !== "string") return { user: null };
+    return { user: { id: account.uid, displayName: data.displayName, photoUrl: data.photoUrl || null } };
   }
   async function acceptedCall(callId, uid) {
     requireValue(segment(callId));
@@ -525,6 +545,11 @@ function createBackend({ auth, db, messaging, mintToken, storage = null, now = D
       }
       const legacyAccount = legacyEmailAccess && user.email_verified === true && user.firebase?.sign_in_provider !== "phone";
       requireValue(verifiedAccount(user) || legacyAccount, 403, "phone-session-required");
+      if (url.pathname === "/api/friends/lookup") {
+        requireValue(verifiedAccount(user), 403, "phone-session-required");
+        const input = await readJson(req, 256);
+        return send(res, 200, await lookupFriend(user.uid, input?.phone));
+      }
       const momentImage = url.pathname === "/api/moment-photo" || (url.pathname === "/api/moments" && req.method === "PUT");
       rateLimit(user.uid, url.pathname === "/api/media" || voice || attachment || avatar || momentImage ? "media" : "api");
       if (url.pathname === "/api/moments") {
